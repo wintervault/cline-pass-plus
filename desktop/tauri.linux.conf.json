@@ -1,0 +1,27 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "targets": ["deb", "rpm"],
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.png"],
+    "linux": {
+      "deb": {
+        "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0", "libayatana-appindicator3-1", "xdg-utils"],
+        "recommends": ["gnome-shell-extension-appindicator"],
+        "section": "utils",
+        "priority": "optional",
+        "postInstallScript": "linux/postinst.sh"
+      },
+      "rpm": {
+        "depends": [
+          "libwebkit2gtk-4.1.so.0()(64bit)",
+          "libgtk-3.so.0()(64bit)",
+          "libayatana-appindicator3.so.1()(64bit)",
+          "xdg-utils"
+        ],
+        "recommends": ["gnome-shell-extension-appindicator"],
+        "postInstallScript": "linux/postinst.sh",
+        "compression": { "type": "zstd", "level": 3 }
+      }
+    }
+  }
+}

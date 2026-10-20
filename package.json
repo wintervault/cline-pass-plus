@@ -1,0 +1,38 @@
+{
+  "name": "cline-pass-plus",
+  "version": "2.0.1",
+  "private": true,
+  "description": "Cline Pass+ 上游控制台：枚举/校验/钉住订阅模型背后的上游渠道，账号池轮询，OpenAI 兼容代理",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=server & npm run dev --workspace=web",
+    "build": "npm run build --workspace=server && npm run build --workspace=web",
+    "start": "npm run start --workspace=server",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit -p server/tsconfig.json && tsc --noEmit -p web/tsconfig.json",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "desktop:dev": "node scripts/prepare-runtime.mjs && cd desktop && npx tauri dev",
+    "dev:isolated": "node scripts/dev-server.mjs",
+    "desktop:build": "npm run build && node scripts/prepare-runtime.mjs --with-node && cd desktop && npx tauri build && cd .. && node scripts/package-portable.mjs",
+    "desktop:build:linux": "npm run build && node scripts/prepare-runtime.mjs --with-node && cd desktop && npx tauri build --bundles deb,rpm",
+    "desktop:portable": "node scripts/package-portable.mjs"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.15",
+    "@resvg/resvg-js": "^2.6.2",
+    "@tauri-apps/cli": "^2.12.3",
+    "@types/node": "^26.6.5",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "cline-pass-plus",
+  "version": "2.0.1",
+  "identifier": "com.wintervault.clinepass",
+  "build": {
+    "frontendDist": "../web/dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "category": "DeveloperTool",
+    "shortDescription": "Cline Pass+ upstream console and OpenAI-compatible proxy",
+    "longDescription": "Cline Pass+ enumerates, validates and pins the upstream channels behind Cline Pass subscription models. Includes multi-channel failover, account pools and an OpenAI-compatible endpoint.",
+    "copyright": "Copyright (c) 2026 Cline Pass+ contributors",
+    "license": "MIT",
+    "publisher": "Cline Pass+ contributors",
+    "icon": ["icons/icon.ico"],
+    "resources": ["runtime/**/*"],
+    "windows": {}
+  }
+}

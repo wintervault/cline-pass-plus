@@ -1,0 +1,155 @@
+name: linux-packages
+
+# Linux（Ubuntu / Fedora）安装包：在 ubuntu-22.04 上构建，保证 glibc 下限最低。
+# 手动触发或打 v* tag 时运行；tag 时把 deb/rpm 附加到 GitHub Release。
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl wget file \
+            libxdo-dev libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf xz-utils rpm
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop -> target
+
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build
+
+      - name: Prepare runtime (with bundled Node)
+        run: node scripts/prepare-runtime.mjs --with-node
+
+      - name: Build deb + rpm
+        working-directory: desktop
+        run: npx tauri build --bundles deb,rpm
+
+      - name: Inspect packages
+        run: |
+          set -e
+          ls -lh desktop/target/release/bundle/deb desktop/target/release/bundle/rpm
+          DEB=$(ls desktop/target/release/bundle/deb/*.deb)
+          RPM=$(ls desktop/target/release/bundle/rpm/*.rpm)
+
+          echo "--- deb control"
+          dpkg-deb -I "$DEB"
+          echo "--- deb: node + desktop entry"
+          dpkg-deb -c "$DEB" | grep -E 'runtime/node$|\.desktop$|runtime/server/dist/index\.js$'
+          echo "--- rpm requires"
+          rpm -qpR "$RPM"
+          echo "--- rpm: node + desktop entry"
+          rpm -qpl "$RPM" | grep -E 'runtime/node$|\.desktop$|runtime/server/dist/index\.js$'
+
+          echo "--- ldd"
+          ldd desktop/target/release/cline-pass-plus | tee /tmp/ldd.txt
+          if grep -q 'not found' /tmp/ldd.txt; then
+            echo '::error::binary has unresolved shared libraries'
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: linux-packages
+          if-no-files-found: error
+          path: |
+            desktop/target/release/bundle/deb/*.deb
+            desktop/target/release/bundle/rpm/*.rpm
+
+      - name: Attach packages to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            desktop/target/release/bundle/deb/*.deb
+            desktop/target/release/bundle/rpm/*.rpm
+
+  smoke:
+    needs: build
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: ubuntu:22.04
+            install: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y /pkgs/*/*.deb curl
+          - image: ubuntu:24.04
+            install: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y /pkgs/*/*.deb curl
+          - image: fedora:43
+            install: dnf install -y /pkgs/*/*.rpm curl
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: linux-packages
+          path: linux-packages
+
+      - name: Install package and inspect files
+        run: |
+          set -e
+          docker run --rm -v "$PWD/linux-packages:/pkgs:ro" "${{ matrix.image }}" bash -lc '
+            set -e
+            ${{ matrix.install }}
+            test -x /usr/bin/cline-pass-plus
+            test -x /usr/lib/cline-pass-plus/runtime/node
+            /usr/lib/cline-pass-plus/runtime/node --version
+            test -f /usr/lib/cline-pass-plus/runtime/server/dist/index.js
+            test -f /usr/share/applications/cline-pass-plus.desktop
+            if ldd /usr/bin/cline-pass-plus | grep -q "not found"; then
+              echo "unresolved shared libraries"; exit 1
+            fi
+
+            echo "--- bundled runtime smoke test"
+            mkdir -p /tmp/cps-data
+            DATA_DIR=/tmp/cps-data PORT=3123 \
+              /usr/lib/cline-pass-plus/runtime/node \
+              /usr/lib/cline-pass-plus/runtime/server/dist/index.js \
+              >/tmp/cps-server.log 2>&1 &
+            SERVER_PID=$!
+            READY=0
+            for i in $(seq 1 40); do
+              if curl -fsS http://127.0.0.1:3123/healthz >/tmp/health.json 2>/dev/null; then
+                READY=1
+                break
+              fi
+              sleep 0.25
+            done
+            if [ "$READY" != "1" ]; then
+              echo "server did not start"; cat /tmp/cps-server.log; exit 1
+            fi
+            grep -q "\"ok\":true" /tmp/health.json
+            curl -fsS -D /tmp/headers.txt -o /dev/null http://127.0.0.1:3123/
+            grep -qi "^content-security-policy:" /tmp/headers.txt
+            kill "$SERVER_PID"
+            wait "$SERVER_PID" 2>/dev/null || true
+          '

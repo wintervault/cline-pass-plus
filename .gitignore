@@ -1,0 +1,43 @@
+# 密钥与运行数据 —— 绝不要提交到仓库
+config.json
+metadata.json
+# 配置损坏时自动生成的备份（含明文密钥）
+*.broken-*
+data/
+_testenv/
+
+# 环境变量（可能含密钥）
+.env
+.env.*
+config.local.json
+
+# 日志
+logs/
+*.log
+
+# 依赖与构建产物
+node_modules/
+dist/
+*.tsbuildinfo
+
+# 编辑器 / 系统文件
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# AI 会话与工具链产物（impeccable 设计工具 / Playwright 截图 / Serena）
+.claude/
+.playwright-mcp/
+.serena/
+.wintertemp/
+
+# 桌面壳构建产物
+desktop/target/
+desktop/runtime/
+desktop/gen/
+
+# 内部资料（不随公开仓库发布）
+docs/
+CLAUDE.md
+CHANGELOG.md

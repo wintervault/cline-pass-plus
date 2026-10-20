@@ -1,0 +1,585 @@
+/**
+ * 「浏览器表面」的主题化：滚动条 / 文本选中 / 焦点环 / 原生列表项反馈。
+ * 这些默认值不属于任何设计系统，是「被设计过而非拼装出来」的最便宜信号。
+ * 颜色优先走 antd CSS 变量（antd 6 默认注入，亮暗自动跟随），
+ * 带亮暗通用的半透明兜底，避免元素落在变量作用域之外时样式失效。
+ */
+
+/* 全局 reset：浏览器默认给 body 8px 外边距，会让整个布局超出视口 16px
+   （页面能上下滚一点点，固定底部的状态栏跟着浮动）。应用型布局统一
+   由 Layout.Content 内部滚动，body 不滚。 */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+body {
+  overflow: hidden;
+}
+
+/* 浏览器对 <code>/<pre> 的 UA 默认是 monospace——中文会落到宋体（SimSun）。
+   --cps-font-mono 由 main.tsx 从 theme.ts 写入，带 CJK 回退。 */
+code,
+kbd,
+pre,
+samp {
+  font-family: var(--cps-font-mono);
+}
+
+:root {
+  /* 滚动条：一条低对比度的细线，不抢视线（苹果那种「安静存在」的做法）。
+     比原值更淡，悬停才提亮。 */
+  --cps-thumb: rgba(127, 127, 127, 0.26);
+  --cps-thumb-hover: rgba(127, 127, 127, 0.48);
+}
+
+/*
+ * 细滚动条。
+ *
+ * 注意：**不要**在这里写标准的 `scrollbar-width` / `scrollbar-color`——
+ * 一旦设了它们，Chromium 会忽略下面全部 `::-webkit-scrollbar` 规则，
+ * 退回系统原生滚动条（带两端的箭头按钮、还压不住轨道底色）。
+ * 这正是「双滚动条 + 箭头」那种粗糙观感的来源。标准的两个属性只留给
+ * 不支持 webkit 伪元素的浏览器（Firefox），见文件末尾的 @supports。
+ */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+  background: transparent;
+}
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+/* 两端不加箭头按钮 */
+*::-webkit-scrollbar-button {
+  display: none;
+}
+/* 滑块：3px 透明边 + content-box，视觉上只剩中间 4px 的一条线 */
+*::-webkit-scrollbar-thumb {
+  background: var(--cps-thumb);
+  background-clip: content-box;
+  border: 3px solid transparent;
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--cps-thumb-hover);
+  background-clip: content-box;
+}
+
+/* ---------- 区块容器（全站唯一的「区域」原语，见 panel.tsx） ----------
+   区域划分靠三件事：高一层底色 + 1px 描边 + 带分隔线的标题栏。
+   只靠留白和标题分级做不到（2.9.2 试过，结果是「零件散落」）。 */
+.cps-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: var(--ant-border-radius-lg);
+  overflow: hidden;
+}
+.cps-panel-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  flex: 0 0 auto;
+  min-height: 48px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+}
+.cps-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ant-color-text);
+  min-width: 0;
+}
+.cps-panel-extra {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+  min-width: 0;
+}
+.cps-panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 16px;
+}
+.cps-panel-body-flush {
+  padding: 0;
+}
+/* 内容自己滚（表格/长列表），配合外层给的高度约束 */
+.cps-panel-body-scroll {
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+/* 区块内的行（账号名单等）：靠分隔线成行，而不是每行再加一层边框卡片
+   （面板里套卡片 = 两层边框，视觉噪音） */
+.cps-list-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  transition: background-color 0.15s ease;
+}
+.cps-list-row:last-child {
+  border-bottom: none;
+}
+.cps-list-row:hover {
+  background: var(--ant-color-fill-quaternary);
+}
+/* 当前生效的那一行：左侧一道主色标记 */
+.cps-list-row-active {
+  position: relative;
+  background: var(--ant-color-primary-bg);
+}
+.cps-list-row-active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--ant-color-primary);
+}
+
+/* ---------- 表格里的文字与对齐 ----------
+   表格一行里只该有「等宽标识 / 纯文本 / 标签」三类，且各自样式固定。
+   以前同一列混用 code 芯片、内联标签、普通文本，扫读时互相抢。 */
+.cps-mono {
+  /* 等宽字体来自 theme.ts 的 FONT_MONO（带 CJK 回退），别再在这里写死 mono 栈：
+     Windows 上 monospace 的中文回退是宋体。 */
+  font-family: var(--cps-font-mono);
+  font-size: 12px;
+  line-height: 20px;
+}
+/* 单元格里的一行文字：超出省略，完整值走悬停（不再让复制图标与文字挤在一起） */
+.cps-cell-ellipsis {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cps-cell-text {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 20px;
+}
+/* 数字：等宽数字字形，右对齐时位数才对得齐 */
+.cps-num {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+/* 尝试链：强制单行。折行会把这一行撑高（43 → 72），整张表就不平整了 */
+.cps-trace {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  /* 尝试序列放不下时用右缘淡出提示「还有更多」，完整内容在悬停里。
+     纯 overflow:hidden 会在词中间直接切断（"› a" 这种半截），看起来像渲染错误。 */
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent);
+}
+.cps-trace-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+/* 数据表：单元格内容**水平 + 垂直居中**（用户要求）。
+   用类而不是全局改 .ant-table —— 只作用于我们标记过的数据表。
+   注意：列上如果写了 align，antd 会打内联 style，比这条规则优先；
+   标记了本类的表格就不要再给列写 align。 */
+.cps-table-center .ant-table-thead > tr > th,
+.cps-table-center .ant-table-tbody > tr > td {
+  text-align: center;
+  vertical-align: middle;
+}
+
+/* ---------- 自绘标题栏（桌面壳） ---------- */
+.cps-titlebar {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 36px;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  background: var(--ant-color-bg-container);
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  user-select: none;
+}
+.cps-titlebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  /* 标题栏是应用名唯一的落点（侧栏那块重复的已删），所以用正文字色 + 中等字重，
+     不再压成次要色——压下去会让整个窗口看起来没有名字。 */
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ant-color-text);
+  white-space: nowrap;
+}
+.cps-titlebar-gap {
+  flex: 1;
+  height: 100%;
+}
+.cps-titlebar-actions {
+  display: flex;
+  align-items: center;
+  height: 100%;
+}
+.cps-wbtn {
+  width: 46px;
+  height: 100%;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+  padding: 0;
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+.cps-wbtn:hover {
+  background: var(--ant-color-fill-secondary);
+  color: var(--ant-color-text);
+}
+.cps-wbtn-close:hover {
+  background: #e81123;
+  color: #fff;
+}
+
+/* ---------- 设置行（访问与安全等表单页的统一栅格） ----------
+   左标签固定列宽、右控件铺满剩余；**说明文字挂在控件下方**（整行宽度，不会
+   因为标签列窄而折成四行）。窄窗口下改为上下堆叠。 */
+.cps-field {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.cps-field-label {
+  padding-top: 6px;
+}
+.cps-field-body {
+  min-width: 0;
+}
+@media (max-width: 860px) {
+  .cps-field {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+  .cps-field-label {
+    padding-top: 0;
+  }
+}
+
+/* 一行式提示（比 Alert 紧凑得多）：用于「状态已知但需要提醒」的场合，
+   例如网关忽略钉住参数——它不该占掉四行高度把主内容挤出首屏。 */
+.cps-notice {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 20px;
+  padding: 5px 12px;
+  border-radius: var(--ant-border-radius);
+  cursor: default;
+  width: fit-content;
+}
+/* 整行提示：内容居中（订阅模型的「钉住被忽略」用） */
+.cps-notice-center {
+  width: 100%;
+  justify-content: center;
+  text-align: center;
+}
+.cps-notice-warn {
+  color: var(--ant-color-warning-text);
+  background: var(--ant-color-warning-bg);
+  border: 1px solid var(--ant-color-warning-border);
+}
+
+/* 表格：模型名 / 账号 / 渠道这类标识列不允许折行（折了行高参差，扫读变慢） */
+.cps-nowrap {
+  white-space: nowrap;
+}
+
+/* 响应内容预览（测试台）：固定高度内滚，别把整页撑长 */
+.cps-pre {
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--ant-color-fill-quaternary);
+  border-radius: var(--ant-border-radius);
+  font-size: 12px;
+  line-height: 1.6;
+  max-height: 200px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 侧栏底部：最近打开（除导航与钉住外的第三条到达路径） */
+.cps-recent {
+  padding: 0 12px;
+  display: grid;
+  gap: 2px;
+}
+.cps-recent-title {
+  font-size: 11px;
+  color: var(--ant-color-text-quaternary);
+  padding: 0 8px 4px;
+  letter-spacing: 0.04em;
+}
+
+::selection {
+  background: var(--ant-color-primary-bg-hover, rgba(79, 140, 255, 0.25));
+}
+
+/* 幽灵列表项（模型列表）：默认安静无面，悬停浮现浅底，选中态由内联样式接管 */
+.cps-ghost {
+  border: 1px solid transparent;
+  background: transparent;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+.cps-ghost:hover {
+  background: var(--ant-color-fill-quaternary);
+}
+.cps-ghost:focus-visible {
+  outline: 2px solid var(--ant-color-primary);
+  outline-offset: 1px;
+}
+
+/* 无边框列表行（渠道清单）：悬停浅底；选中行的内联背景不受影响 */
+.cps-row {
+  transition: background-color 0.15s ease;
+}
+.cps-row:hover {
+  background: var(--ant-color-fill-quaternary);
+}
+
+/* 侧栏导航：选中项在栏左缘显示指示条 */
+.cps-nav {
+  position: relative;
+}
+.cps-nav-active::before {
+  content: "";
+  position: absolute;
+  left: -10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 22px;
+  border-radius: 2px;
+  background: var(--ant-color-primary);
+}
+
+/* 导航钉住（展开态）：悬停浮现的 pin 按钮；已钉项常显主色 */
+.cps-nav-item {
+  position: relative;
+}
+.cps-pin {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--ant-color-text-quaternary);
+  opacity: 0;
+  transition:
+    opacity 0.15s ease,
+    color 0.15s ease,
+    background-color 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+}
+.cps-nav-item:hover .cps-pin {
+  opacity: 1;
+}
+.cps-pin:hover {
+  background: var(--ant-color-fill-secondary);
+  color: var(--ant-color-text);
+}
+.cps-pin.cps-pinned {
+  opacity: 1;
+  color: var(--ant-color-primary);
+}
+/* 窄栏（收起态）：已钉项在图标右上角显示小圆点 */
+.cps-nav-pinned-dot::after {
+  content: "";
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ant-color-primary);
+}
+
+/* 模型列表：窄窗口下收窄，避免挤压右侧详情区 */
+.cps-model-list {
+  width: 292px;
+  flex: 0 0 292px;
+  /* 这一列**自己不做滚动容器**：滚动交给内部的列表（这样搜索框始终钉在顶部）。
+     这里再设 overflow 会和外层形成嵌套滚动 → 并排出现两条滚动条（v2.9.2 的回归）。 */
+}
+.cps-model-list-scroll {
+  /* 唯一的滚动容器 */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+@media (max-width: 1200px) {
+  .cps-model-list {
+    width: 244px;
+    flex-basis: 244px;
+  }
+}
+
+/* ---------- 路由管线（渠道尝试链） ----------
+   产品的灵魂是「请求沿有序渠道链流动、命中钉住目标」——把它画出来：
+   使用中的渠道串成一条纵向链（序号节点 + 连接线），未使用的离线在链尾。 */
+.cps-chain {
+  position: relative;
+  display: grid;
+  gap: 2px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.cps-chain-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: 30px;
+  padding: 9px 12px;
+  border-radius: var(--ant-border-radius);
+  transition: background-color 0.15s ease;
+}
+.cps-chain-row:hover {
+  background: var(--ant-color-fill-quaternary);
+}
+.cps-chain-row[data-state="on"] {
+  background: var(--ant-color-primary-bg);
+}
+.cps-chain-row[data-state="on"]:hover {
+  background: var(--ant-color-primary-bg-hover);
+}
+/* 选中 = 加粗高亮；位置不许变（视觉焦点靠字重与颜色，不靠位移） */
+.cps-chain-row[data-state="on"] code {
+  font-weight: 600;
+  color: var(--ant-color-primary);
+}
+.cps-chain-row[data-state="excluded"] {
+  opacity: 0.5;
+}
+/* 节点：链上 = 实心主色带序号；离线 = 空心 */
+.cps-chain-node {
+  position: absolute;
+  left: -30px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  z-index: 1;
+}
+.cps-chain-row[data-state="on"] .cps-chain-node {
+  background: var(--ant-color-primary);
+  color: #fff;
+}
+.cps-chain-row[data-state="off"] .cps-chain-node,
+.cps-chain-row[data-state="excluded"] .cps-chain-node {
+  background: var(--ant-color-bg-container);
+  border: 2px solid var(--ant-color-border);
+}
+/* 拖拽排序：手柄 / 被拖行 / 落点指示 */
+.cps-grip {
+  cursor: grab;
+  color: var(--ant-color-text-quaternary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  transition: color 0.15s ease;
+}
+.cps-grip:hover {
+  color: var(--ant-color-text-secondary);
+}
+.cps-grip:active {
+  cursor: grabbing;
+}
+.cps-chain-row.cps-dragging {
+  opacity: 0.4;
+}
+.cps-chain-row.cps-drop-target {
+  box-shadow: inset 0 3px 0 0 var(--ant-color-primary);
+}
+
+/* 连接线：相邻两个链上节点之间的实线（含行距补偿，视觉连续） */
+.cps-chain-row[data-state="on"] + .cps-chain-row[data-state="on"]::before {
+  content: "";
+  position: absolute;
+  left: -21px;
+  top: calc(-50% - 3px);
+  height: calc(100% + 6px);
+  width: 2px;
+  background: var(--ant-color-primary);
+  opacity: 0.45;
+}
+
+/*
+ * 标准滚动条属性只留给不支持 ::-webkit-scrollbar 的浏览器（Firefox）。
+ * 放到 @supports 里是为了不让 Chromium 看到它们——它对这两个属性最敏感，
+ * 一见就退回原生滚动条（见文件上方注释）。
+ */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--cps-thumb) transparent;
+  }
+}
