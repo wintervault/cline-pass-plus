@@ -626,7 +626,7 @@ const enUS: Record<keyof typeof zhCN, string> = {
   'settings.console.saved': 'Console settings saved',
   'settings.console.cleared': 'Console access key cleared',
   'settings.console.note':
-    'Local console access never needs a key. Only remote access does, and a non-loopback bind requires one.',
+    'Local console access never needs a key. Only remote access does, and a non-loopback bind requires one. Changing the port disconnects this page; reopen the console at the new address.',
   'settings.data.title': 'Data',
   'settings.data.dir': 'Data directory',
   'settings.data.logs': 'Log directory',

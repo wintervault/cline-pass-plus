@@ -591,7 +591,8 @@ const zhCN = {
   'settings.console.clearKey': '清除密钥',
   'settings.console.saved': '控制台设置已保存',
   'settings.console.cleared': '控制台访问密钥已清除',
-  'settings.console.note': '本机访问控制台永远免密钥。只有远端访问才需要这个密钥；绑定非回环地址时必须设置。',
+  'settings.console.note':
+    '本机访问控制台永远免密钥。只有远端访问才需要这个密钥；绑定非回环地址时必须设置。改端口后当前页面会断开，请用新地址重新打开。',
   'settings.data.title': '数据',
   'settings.data.dir': '数据目录',
   'settings.data.logs': '日志目录',

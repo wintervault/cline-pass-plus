@@ -59,7 +59,12 @@ export function applyEnvOverrides(config: Config, env: NodeJS.ProcessEnv = proce
   const port = Number(env.PORT);
   if (env.PORT && Number.isInteger(port) && port > 0 && port < 65536) {
     config.console.port = port;
-    notes.push(`PORT 已覆盖控制台端口为 ${port}`);
+    const clash = config.gateways.find((g) => g.port === port);
+    notes.push(
+      clash
+        ? `PORT 已覆盖控制台端口为 ${port}，但该端口已被网关「${clash.name}」占用（控制台会绑定失败）`
+        : `PORT 已覆盖控制台端口为 ${port}`,
+    );
   }
 
   const bindHost = env.BIND_HOST?.trim();
