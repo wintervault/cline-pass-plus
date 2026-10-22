@@ -14,22 +14,24 @@ import {
   SyncOutlined,
   TranslationOutlined,
 } from '@ant-design/icons';
-import { Button, Dropdown, Select, Space, Tooltip, Typography, theme } from 'antd';
+import { Button, Dropdown, Select, Space, Tag, Tooltip, Typography, theme } from 'antd';
 import { useState } from 'react';
 
 import { useGateways } from './api/hooks.ts';
+import type { GatewayView } from './api/types.ts';
 import type { HostControl } from './hostBridge.ts';
 import { type Lang, type MsgKey, useI18n } from './i18n/index.tsx';
 
 /**
- * 常驻状态栏。三个分区，各司其职（左→右 = 从「服务活着吗」到「我怎么连它」到「这个应用本身」）：
+ * 常驻状态栏。2.1 起以**左侧选中的网关**为主线（左→右 = 同一个网关的完整状态）：
  *
- * ① 服务：状态点 + 状态词 + 启停控制。每个动作都有回执（失败一定看得见）。
- * ② 接入：控制台网关的 BASE URL 与它的密钥。地址和密钥放在一起，且都写明标签。
- * ③ 应用：版本、语言、主题、刷新。
+ * ① 接入：网关选择 + 该网关的 BASE URL（选中谁，这一行就是谁）。
+ * ② 该网关的状态：监听状态、账号范围是否有可用账号、密钥是否已设置。
+ * ③ 服务：Node 服务的启停（**明确标注「服务」**，不再与网关状态混在一起）。
+ * ④ 应用：版本、语言、主题、刷新。
  *
- * 3.0 P4：「清除本机保存的访问密钥」从状态栏移除，换成语言切换——远端用户忘了密钥时
- * 的恢复路径写在访问面板里（清站点数据 / 换一把密钥），不需要一个反直觉的「登出」按钮。
+ * 旧版把「服务运行中 + 停止/重启」放在最左，紧挨着网关选择器——用户会以为
+ * 那是在说选中的网关；而它其实是整个进程。现在两者用分隔线明确分开。
  */
 
 const STATE_COLOR: Record<string, string> = {
@@ -66,6 +68,65 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+const GATEWAY_STATE_TAG: Record<GatewayView['status']['state'], { color: string; key: MsgKey }> = {
+  running: { color: 'green', key: 'statusbar.gateway.running' },
+  error: { color: 'red', key: 'statusbar.gateway.error' },
+  stopped: { color: 'default', key: 'statusbar.gateway.stopped' },
+  disabled: { color: 'default', key: 'statusbar.gateway.disabled' },
+};
+
+function GatewayCluster({ gateway, onOpenGateways }: { gateway: GatewayView | undefined; onOpenGateways: () => void }) {
+  const { t } = useI18n();
+  if (!gateway) {
+    return (
+      <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+        {t('statusbar.notReady')}
+      </Typography.Text>
+    );
+  }
+  const state = GATEWAY_STATE_TAG[gateway.status.state];
+  const account = gateway.accountState;
+  return (
+    <>
+      <Tooltip title={gateway.status.error ?? undefined}>
+        <Tag color={state.color} style={{ margin: 0 }}>
+          {t(state.key)}
+        </Tag>
+      </Tooltip>
+      {account.code === 'no_accounts' && (
+        <Tooltip title={t('statusbar.accountState.no_accounts.tip')}>
+          <Tag color="warning" style={{ margin: 0 }}>
+            {t('statusbar.accountState.no_accounts')}
+          </Tag>
+        </Tooltip>
+      )}
+      {account.code === 'empty_scope' && gateway.status.state !== 'disabled' && (
+        <Tooltip
+          title={t('statusbar.accountState.empty_scope.tip', {
+            inScope: account.inScope,
+            total: account.usableTotal,
+          })}
+        >
+          <Tag color="warning" style={{ margin: 0 }}>
+            {t('statusbar.accountState.empty_scope')}
+          </Tag>
+        </Tooltip>
+      )}
+      <Tooltip title={gateway.hasProxyKey ? t('statusbar.key.tip.set') : t('statusbar.key.tip.unset')}>
+        <Button
+          size="small"
+          type="link"
+          icon={gateway.hasProxyKey ? <LockOutlined /> : <KeyOutlined />}
+          style={{ fontSize: 13, padding: 0, height: 'auto' }}
+          onClick={onOpenGateways}
+        >
+          {gateway.hasProxyKey ? t('statusbar.key.set') : t('statusbar.key.unset')}
+        </Button>
+      </Tooltip>
+    </>
+  );
+}
+
 function ServiceCluster({ control }: { control: HostControl }) {
   const { token } = theme.useToken();
   const { t } = useI18n();
@@ -77,7 +138,10 @@ function ServiceCluster({ control }: { control: HostControl }) {
   const label = t(STATE_KEY[status.state] ?? 'service.state.stopped');
 
   return (
-    <Space size={10} align="center">
+    <Space size={8} align="center">
+      <Typography.Text style={{ fontSize: 12, color: 'var(--ant-color-text-quaternary)' }}>
+        {t('statusbar.service')}
+      </Typography.Text>
       <Tooltip
         title={
           status.port ? t('service.channel.title', { addr: `127.0.0.1:${status.port}` }) : t('service.channel.missing')
@@ -89,38 +153,36 @@ function ServiceCluster({ control }: { control: HostControl }) {
         </Space>
       </Tooltip>
       {status.state === 'stopped' || status.state === 'error' ? (
-        <Tooltip title={t('service.action.start')}>
-          <Button
-            size="small"
-            type="primary"
-            ghost
-            icon={<PlayCircleOutlined />}
-            loading={busy}
-            onClick={() => void control.start()}
-          >
-            {t('service.action.start')}
-          </Button>
-        </Tooltip>
+        <Button
+          size="small"
+          type="primary"
+          ghost
+          icon={<PlayCircleOutlined />}
+          loading={busy}
+          onClick={() => void control.start()}
+        >
+          {t('service.action.startShort')}
+        </Button>
       ) : (
         <Space size={2}>
-          <Tooltip title={t('service.action.stop')}>
-            <Button
-              size="small"
-              type="text"
-              icon={<PauseCircleOutlined />}
-              loading={busy}
-              onClick={() => void control.stop()}
-            />
-          </Tooltip>
-          <Tooltip title={t('service.action.restart')}>
-            <Button
-              size="small"
-              type="text"
-              icon={<SyncOutlined />}
-              loading={busy}
-              onClick={() => void control.restart()}
-            />
-          </Tooltip>
+          <Button
+            size="small"
+            type="text"
+            icon={<PauseCircleOutlined />}
+            loading={busy}
+            onClick={() => void control.stop()}
+          >
+            {t('service.action.stopShort')}
+          </Button>
+          <Button
+            size="small"
+            type="text"
+            icon={<SyncOutlined />}
+            loading={busy}
+            onClick={() => void control.restart()}
+          >
+            {t('service.action.restartShort')}
+          </Button>
         </Space>
       )}
       <Tooltip title={t('service.action.logs')}>
@@ -132,8 +194,6 @@ function ServiceCluster({ control }: { control: HostControl }) {
 
 export function StatusBar({
   control,
-  proxyBase,
-  authRequired,
   version,
   onOpenGateways,
   mode,
@@ -143,8 +203,6 @@ export function StatusBar({
   onRefresh,
 }: {
   control: HostControl;
-  proxyBase?: string;
-  authRequired?: boolean;
   version?: string;
   onOpenGateways: () => void;
   mode: 'light' | 'dark';
@@ -155,14 +213,12 @@ export function StatusBar({
 }) {
   const { token } = theme.useToken();
   const { t } = useI18n();
-  // 多网关：状态栏可以查看任意网关的接入地址与密钥状态（默认控制台网关）。
+  // 多网关：状态栏可以查看任意网关的接入地址、状态与密钥（与控制台监听无关）。
   const gatewaysQuery = useGateways({ poll: false });
   const gateways = gatewaysQuery.data?.gateways ?? [];
   const [pickedId, setPickedId] = useState(() => localStorage.getItem('cps_status_gateway') ?? '');
-  const consoleId = gatewaysQuery.data?.consoleGatewayId;
-  const picked = gateways.find((g) => g.id === pickedId) ?? gateways.find((g) => g.id === consoleId) ?? gateways[0];
-  const shownBase = picked?.proxyBase ?? proxyBase;
-  const shownKey = picked ? picked.hasProxyKey : authRequired;
+  const picked = gateways.find((g) => g.id === pickedId) ?? gateways[0];
+
   return (
     <div
       style={{
@@ -170,61 +226,59 @@ export function StatusBar({
         flex: '0 0 auto',
         display: 'flex',
         alignItems: 'center',
-        gap: 22,
-        padding: '0 18px',
+        gap: 14,
+        padding: '0 16px',
         background: token.colorBgContainer,
         borderTop: `1px solid ${token.colorBorderSecondary}`,
         overflowX: 'auto',
       }}
     >
-      <ServiceCluster control={control} />
+      {/* ① 左侧选中的网关 = 这一行的主语 */}
+      <Field label={t('statusbar.gateway')}>
+        {gateways.length > 1 ? (
+          <Select
+            size="small"
+            variant="borderless"
+            style={{ minWidth: 88 }}
+            value={picked?.id}
+            popupMatchSelectWidth={false}
+            onChange={(id: string) => {
+              setPickedId(id);
+              localStorage.setItem('cps_status_gateway', id);
+            }}
+            options={gateways.map((g) => ({ value: g.id, label: g.name }))}
+          />
+        ) : (
+          <Typography.Text style={{ fontSize: 13 }}>{picked?.name ?? t('statusbar.notReady')}</Typography.Text>
+        )}
+      </Field>
 
-      {/* 接入信息：地址与密钥同区，各自带标签 */}
-      <Space size={18} align="center" style={{ minWidth: 0 }}>
-        <Field label={t('statusbar.address')}>
-          {gateways.length > 1 && (
-            <Select
-              size="small"
-              variant="borderless"
-              style={{ minWidth: 88 }}
-              value={picked?.id}
-              popupMatchSelectWidth={false}
-              onChange={(id: string) => {
-                setPickedId(id);
-                localStorage.setItem('cps_status_gateway', id);
-              }}
-              options={gateways.map((g) => ({ value: g.id, label: g.name }))}
-            />
-          )}
-          {shownBase ? (
-            <Typography.Text
-              copyable={{ text: shownBase, tooltips: [t('statusbar.address.copy'), t('common.copied')] }}
-              style={{ fontSize: 13, fontFamily: 'var(--cps-font-mono)' }}
-            >
-              {shownBase}
-            </Typography.Text>
-          ) : (
-            <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-              {t('statusbar.notReady')}
-            </Typography.Text>
-          )}
-        </Field>
-        <Field label={t('statusbar.key')}>
-          <Tooltip title={shownKey ? t('statusbar.key.tip.set') : t('statusbar.key.tip.unset')}>
-            <Button
-              size="small"
-              type="link"
-              icon={shownKey ? <LockOutlined /> : <KeyOutlined />}
-              style={{ fontSize: 13, padding: 0, height: 'auto' }}
-              onClick={onOpenGateways}
-            >
-              {shownKey ? t('statusbar.key.set') : t('statusbar.key.unset')}
-            </Button>
-          </Tooltip>
-        </Field>
+      <Field label={t('statusbar.address')}>
+        {picked?.proxyBase ? (
+          <Typography.Text
+            copyable={{ text: picked.proxyBase, tooltips: [t('statusbar.address.copy'), t('common.copied')] }}
+            style={{ fontSize: 13, fontFamily: 'var(--cps-font-mono)' }}
+          >
+            {picked.proxyBase}
+          </Typography.Text>
+        ) : (
+          <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+            {t('statusbar.notReady')}
+          </Typography.Text>
+        )}
+      </Field>
+
+      {/* ② 同一个网关的状态 / 账号 / 密钥，紧挨着左侧选择 */}
+      <Space size={8} align="center">
+        <GatewayCluster gateway={picked} onOpenGateways={onOpenGateways} />
       </Space>
 
-      <Space size={2} style={{ marginLeft: 'auto' }}>
+      <div style={{ width: 1, height: 20, background: token.colorBorderSecondary, flex: '0 0 auto' }} />
+
+      {/* ③ 服务是进程级动作，明确标注，避免与上面的网关状态混淆 */}
+      <ServiceCluster control={control} />
+
+      <Space size={2} style={{ marginLeft: 'auto', flex: '0 0 auto' }}>
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
           v{version ?? '…'}
         </Typography.Text>

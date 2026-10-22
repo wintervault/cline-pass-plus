@@ -6,7 +6,6 @@ import { shutdownServer } from '../http/server.ts';
 import { logger } from '../log/logger.ts';
 import type { ChatChain } from '../proxy/chain.ts';
 import type { ChannelHealth } from '../proxy/health.ts';
-import type { ProbeService } from '../upstream/probe.ts';
 
 /** 网关运行状态。`error` 必须是可见的：绑定失败不能让用户以为它起来了。 */
 export type GatewayState = 'running' | 'error' | 'stopped' | 'disabled';
@@ -24,16 +23,16 @@ export interface GatewayStatus {
 /**
  * 一个网关的运行时。
  *
- * `pool` / `health` / `chain` / `probe` 都是**按网关隔离**的：
- * 粘性位置、渠道冷却、探针结论都不能跨网关共享——同一个账号在不同网关里
+ * `pool` / `health` / `chain` 都是**按网关隔离**的：
+ * 粘性位置、渠道冷却都不能跨网关共享——同一个账号在不同网关里
  * 可能是完全不同的路由结果（风控按账号而不是按端口）。
+ * 渠道检测（ProbeService）是账号级的，放在 AppContext 里全局共享。
  */
 export interface GatewayRuntime {
   readonly id: string;
   readonly pool: AccountPool;
   readonly health: ChannelHealth;
   readonly chain: ChatChain;
-  readonly probe: ProbeService;
   server: http.Server | null;
   /** 上一次成功监听的目标（用于判断配置里的端口/地址是否变了）。 */
   bound: { port: number; bindHost: string } | null;
@@ -64,8 +63,6 @@ const bindKey = (port: number, host: string): string => `${host}:${port}`;
 export class GatewayManager {
   readonly #runtimes = new Map<string, GatewayRuntime>();
   readonly #deps: GatewayManagerDeps;
-  /** 上一轮生效的控制台网关 id：换了网关就要重挂 handler（/api 只在控制台上）。 */
-  #consoleId: string | null = null;
   /** reconcile 串行队列（见 reconcile 的注释）。 */
   #queue: Promise<void> = Promise.resolve();
 
@@ -117,18 +114,6 @@ export class GatewayManager {
     for (const id of wanted.keys()) {
       if (!this.#runtimes.has(id)) this.#runtimes.set(id, this.#deps.createRuntime(id));
     }
-
-    // 控制台网关换了：两端都要重建 listener（/api 与静态页挂在哪不一样）
-    const consoleId = config.console.gatewayId;
-    const consoleChanged = this.#consoleId !== null && this.#consoleId !== consoleId;
-    if (consoleChanged) {
-      for (const id of [this.#consoleId, consoleId]) {
-        const runtime = id ? this.#runtimes.get(id) : null;
-        if (runtime) await this.#close(runtime, 3_000);
-      }
-      logger.info({ from: this.#consoleId, to: consoleId }, '控制台已切换到另一个网关');
-    }
-    this.#consoleId = consoleId;
 
     // 按需绑定 / 重绑
     for (const [id, gateway] of wanted) {

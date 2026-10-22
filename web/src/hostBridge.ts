@@ -22,6 +22,13 @@ export interface HostStatus {
   error?: string;
 }
 
+export interface HostInfo {
+  /** 壳的版本（与服务版本一致，来自打包时的应用版本）。 */
+  version?: string;
+  dataDir: string;
+  logDir: string;
+}
+
 export interface HostBridge extends HostWindow {
   hosted: true;
   port: number;
@@ -31,6 +38,11 @@ export interface HostBridge extends HostWindow {
   restart: () => Promise<HostStatus>;
   log: () => Promise<{ lines: string[] }>;
   openLogs: () => Promise<void>;
+  /** 开机自启状态（操作系统级，由桌面壳管理）。 */
+  autostart: () => Promise<{ enabled: boolean }>;
+  setAutostart: (enabled: boolean) => Promise<{ enabled: boolean }>;
+  /** 本机路径等信息（设置页的「数据」与「关于」用）。 */
+  info: () => Promise<HostInfo>;
 }
 
 /**

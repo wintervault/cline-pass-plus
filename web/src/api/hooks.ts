@@ -9,6 +9,7 @@ import type {
   AccountsResponse,
   AccountTestResult,
   ClassifyResponse,
+  ConsoleInfo,
   GatewaysResponse,
   HistoryEntry,
   MetaInfo,
@@ -21,18 +22,31 @@ import type {
 
 export const qk = {
   meta: ['meta'] as const,
-  /** 模型观测与路由配置是**按网关**的：不同网关可以有完全不同的结论。 */
-  models: (gatewayId: string) => ['models', gatewayId] as const,
+  /** 模型检测按**账号**：同一模型在不同账号上的结论可能完全不同。 */
+  models: (gatewayId: string, account: string) => ['models', gatewayId, account] as const,
   accounts: ['accounts'] as const,
   gateways: ['gateways'] as const,
   history: ['history'] as const,
+  console: ['console'] as const,
 };
 
-export function useModels(gatewayId: string): ReturnType<typeof useQuery<ModelsResponse>> {
+/**
+ * 订阅模型 + 路由配置 + 检测记录。
+ * - `gatewayId` 决定路由配置（钉住/排除）来自哪个网关；
+ * - `account` 决定检测记录来自哪个账号。
+ */
+export function useModels(
+  params: { gatewayId?: string; account?: string } = {},
+): ReturnType<typeof useQuery<ModelsResponse>> {
   return useQuery({
-    queryKey: qk.models(gatewayId),
-    queryFn: () => api<ModelsResponse>('/api/models', { query: { gateway: gatewayId } }),
-    enabled: !!gatewayId,
+    queryKey: qk.models(params.gatewayId ?? '', params.account ?? ''),
+    queryFn: () =>
+      api<ModelsResponse>('/api/models', {
+        query: {
+          ...(params.gatewayId ? { gateway: params.gatewayId } : {}),
+          ...(params.account ? { account: params.account } : {}),
+        },
+      }),
   });
 }
 export function useAccounts(): ReturnType<typeof useQuery<AccountsResponse>> {
@@ -61,6 +75,7 @@ export function useRefresh(): () => void {
     void qc.invalidateQueries({ queryKey: qk.accounts });
     void qc.invalidateQueries({ queryKey: qk.gateways });
     void qc.invalidateQueries({ queryKey: qk.history });
+    void qc.invalidateQueries({ queryKey: qk.console });
   };
 }
 
@@ -95,13 +110,12 @@ export function useSaveModelConfig(gatewayId: string) {
   });
 }
 
-export function useProbe(gatewayId: string) {
+export function useProbe(account: string) {
   const refresh = useRefresh();
   const fb = useFeedback();
   const { t } = useI18n();
   return useMutation({
-    mutationFn: (modelId: string) =>
-      api<ProbeResult>('/api/probe', { query: { gateway: gatewayId }, json: { model: modelId } }),
+    mutationFn: (modelId: string) => api<ProbeResult>('/api/probe', { json: { model: modelId, account } }),
     onSuccess: (r) => {
       refresh();
       if (r.ok) fb.ok(t('toast.probe.done', { count: r.upstreams.length }));
@@ -111,13 +125,13 @@ export function useProbe(gatewayId: string) {
   });
 }
 
-export function useValidate(gatewayId: string) {
+export function useValidate(account: string) {
   const refresh = useRefresh();
   const fb = useFeedback();
   const { t } = useI18n();
   return useMutation({
     mutationFn: (modelId: string) =>
-      api<ValidationResult>('/api/validate-upstreams', { query: { gateway: gatewayId }, json: { model: modelId } }),
+      api<ValidationResult>('/api/validate-upstreams', { json: { model: modelId, account } }),
     onSuccess: (r) => {
       refresh();
       const s = r.summary;
@@ -134,13 +148,13 @@ export function useValidate(gatewayId: string) {
   });
 }
 
-export function useTest(gatewayId: string) {
+export function useTest(gatewayId: string, account: string) {
   const refresh = useRefresh();
   const fb = useFeedback();
   const { t } = useI18n();
   return useMutation({
     mutationFn: (vars: { model: string; upstreams: string[]; exclude: string[] }) =>
-      api<TestResult>('/api/test', { query: { gateway: gatewayId }, json: vars }),
+      api<TestResult>('/api/test', { query: { gateway: gatewayId }, json: { ...vars, account } }),
     onSuccess: (r) => {
       refresh();
       if (r.ok)
@@ -277,27 +291,27 @@ export function useDeleteGateway() {
   });
 }
 
-export function useSetConsoleGateway() {
+export function useConsole(): ReturnType<typeof useQuery<ConsoleInfo & { ok: boolean }>> {
+  return useQuery({
+    queryKey: qk.console,
+    queryFn: () => api<ConsoleInfo & { ok: boolean }>('/api/console'),
+    refetchInterval: 3000,
+  });
+}
+
+/** 保存控制台监听设置。绑定目标变化时服务端会延迟重建 listener。 */
+export function useSaveConsole() {
   const refresh = useRefresh();
   const fb = useFeedback();
   const { t } = useI18n();
   return useMutation({
-    mutationFn: (vars: { id: string; name: string; url?: string }) =>
-      api<{ ok: boolean; deferred: boolean; consoleUrl?: string }>('/api/gateways/console', {
-        json: { id: vars.id },
-      }),
-    onSuccess: (data, vars) => {
+    mutationFn: (vars: { port?: number; bindHost?: string; proxyKey?: string | null; note?: string }) =>
+      api<ConsoleInfo & { ok: boolean; deferred: boolean }>('/api/console/save', { json: { ...vars } }),
+    onSuccess: (_data, vars) => {
       refresh();
-      // 回执必须带上真实的新地址：桌面壳会交换端口（新控制台接管 3123），
-      // 旧端口的控制台可能马上就没了——地址以服务端返回为准。
-      const url = data.consoleUrl || vars.url;
-      fb.ok(
-        url
-          ? t('toast.gateway.consoleSwitchedUrl', { name: vars.name, url })
-          : t('toast.gateway.consoleSwitched', { name: vars.name }),
-      );
+      fb.ok(vars.note ?? t('toast.console.saved'));
     },
-    onError: (err) => fb.fail(t('toast.gateway.consoleFailed'), err),
+    onError: (err) => fb.fail(t('toast.console.failed'), err),
   });
 }
 

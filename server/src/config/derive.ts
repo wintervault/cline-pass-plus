@@ -54,22 +54,49 @@ export function gatewayUsableAccounts(config: Config, gateway: Gateway, classOf?
   return gatewayAccounts(config, gateway, classOf).filter((a) => a.key);
 }
 
-/** 该网关是否至少有一个可用账号。 */
-export function gatewayConfigured(config: Config, gateway: Gateway, classOf?: AccountClassLookup): boolean {
-  return gatewayUsableAccounts(config, gateway, classOf).length > 0;
-}
-
 /** 按 id 找网关；不存在返回 null。 */
 export function gatewayById(config: Config, id: string): Gateway | null {
   return config.gateways.find((g) => g.id === id) ?? null;
 }
 
 /**
- * 控制台网关。加载时已保证 `console.gatewayId` 指向存在的网关；
- * 这里的兜底只为「保存过程中瞬态不一致」不崩。
+ * 第一个网关。控制台 API 在没带 `?gateway=` 时用它作为默认目标
+ * （控制台本身已独立监听，不再有「控制台网关」这个概念）。
  */
-export function consoleGateway(config: Config): Gateway {
-  return gatewayById(config, config.console.gatewayId) ?? config.gateways[0] ?? defaultGateway();
+export function primaryGateway(config: Config): Gateway {
+  return config.gateways[0] ?? defaultGateway();
+}
+
+/**
+ * 网关的账号可用状态。
+ *
+ * 必须把「一个账号都没有」和「有账号、但都不在该网关的范围内」分开：
+ * 后者（例如两个号都被风控，而网关范围是「全部正常号」）以前会被误报成
+ * 「尚未配置上游 API Key」，用户去账号池看却发现账号明明在。
+ */
+export type GatewayAccountStateCode = 'ok' | 'no_accounts' | 'empty_scope' | 'disabled';
+
+export interface GatewayAccountState {
+  code: GatewayAccountStateCode;
+  /** 该网关范围内、key 非空的账号数。 */
+  inScope: number;
+  /** 全局 key 非空的账号数。 */
+  usableTotal: number;
+  scope: Gateway['accountScope'];
+}
+
+export function gatewayAccountState(
+  config: Config,
+  gateway: Gateway,
+  classOf?: AccountClassLookup,
+): GatewayAccountState {
+  const usableTotal = usableAccounts(config).length;
+  const inScope = gatewayUsableAccounts(config, gateway, classOf).length;
+  const scope = gateway.accountScope;
+  if (gateway.enabled === false) return { code: 'disabled', inScope, usableTotal, scope };
+  if (usableTotal === 0) return { code: 'no_accounts', inScope, usableTotal, scope };
+  if (inScope === 0) return { code: 'empty_scope', inScope, usableTotal, scope };
+  return { code: 'ok', inScope, usableTotal, scope };
 }
 
 /**

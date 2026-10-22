@@ -6,15 +6,17 @@ import { AccountPool } from './accounts/pool.ts';
 import type { AppContext } from './appContext.ts';
 import {
   type AccountClassLookup,
-  consoleGateway,
+  gatewayAccountState,
   gatewayAccounts,
   gatewayById,
-  gatewayConfigured,
   gatewayProxyBase,
+  primaryGateway,
+  usableAccounts,
 } from './config/derive.ts';
 import { applyEnvOverrides } from './config/env.ts';
 import { loadConfig, persistConfigMigration, writeConfig } from './config/load.ts';
 import { type Config, FailoverSchema } from './config/schema.ts';
+import { ConsoleManager } from './console/manager.ts';
 import { GatewayManager, type GatewayRuntime } from './gateways/manager.ts';
 import { sendError, sendJSON } from './http/respond.ts';
 import { type Handler, Router } from './http/router.ts';
@@ -34,7 +36,14 @@ import { loadMetaStore } from './store/metaStore.ts';
 import { CatalogService } from './upstream/catalog.ts';
 import { classifyChannelStatus } from './upstream/errors.ts';
 import { mergeLearnedProviders, ProbeService } from './upstream/probe.ts';
-import { blankModelMeta, ensureGatewayModels, gatewayModels, type MetaFile } from './upstream/types.ts';
+import {
+  accountModels,
+  blankModelMeta,
+  ensureAccountModels,
+  ensureGatewayModels,
+  gatewayModels,
+  type MetaFile,
+} from './upstream/types.ts';
 
 const VERSION = PACKAGE_VERSION;
 const startedAt = Date.now();
@@ -51,16 +60,24 @@ const FALLBACK_FAILOVER = FailoverSchema.parse({});
  * 必须按网关隔离：同一个渠道在两个网关里可能一个可用一个不可用（账号不同）。
  */
 function learnFromFailure(configStore: JsonStore<Config>, metaStore: JsonStore<MetaFile>, gatewayId: string) {
-  return (modelId: string, upstream: string | null, message: string): void => {
+  return (modelId: string, upstream: string | null, message: string, accountName: string): void => {
     if (upstream) {
       const status = classifyChannelStatus(message);
       if (status === 'unknown') return; // 无把握的不记录，避免误标
       const entry = { status, note: message.slice(0, 160), checkedAt: Date.now() };
       metaStore.update((meta) => {
+        // 网关聚合（实际流量）与该账号的检测记录同时更新：前者供路由兜底，
+        // 后者是检测页看到的「这个号在该渠道上的真实状态」。
         const models = ensureGatewayModels(meta, gatewayId);
         const model = models[modelId] ?? blankModelMeta();
         model.upstreamStatus = { ...model.upstreamStatus, [upstream]: entry };
         models[modelId] = model;
+        if (accountName) {
+          const byAccount = ensureAccountModels(meta, accountName);
+          const accountModel = byAccount[modelId] ?? blankModelMeta();
+          accountModel.upstreamStatus = { ...accountModel.upstreamStatus, [upstream]: entry };
+          byAccount[modelId] = accountModel;
+        }
       });
       return;
     }
@@ -139,6 +156,22 @@ async function main(): Promise<void> {
       }),
   }));
 
+  /**
+   * 渠道检测（探测 / 校验）是**账号级**的：结论按账号名存进 `accountModels`，
+   * 与网关无关。同一个模型在正常号与风控号上的可钉性和渠道清单可能完全不同。
+   */
+  const probe = new ProbeService({
+    get upstreamBase() {
+      return configStore.value.upstreamBase;
+    },
+    getMeta: (account, modelId) => accountModels(metaStore.value, account)[modelId],
+    setMeta: (account, modelId, model) =>
+      metaStore.update((meta) => {
+        ensureAccountModels(meta, account)[modelId] = model;
+      }),
+    orEndpoints: (slug) => catalog.orEndpoints(slug),
+  });
+
   // ---- 网关运行时 ----
   // ctx 在 makeServer 里按需取（listener 要等 reconcile 时才创建，那时 ctx 已就绪）
   let ctx: AppContext | null = null;
@@ -169,24 +202,11 @@ async function main(): Promise<void> {
       health,
     });
     chain.onChannelFailure(learnFromFailure(configStore, metaStore, id));
-    const probe = new ProbeService({
-      get upstreamBase() {
-        return configStore.value.upstreamBase;
-      },
-      pool,
-      getMeta: (modelId) => gatewayModels(metaStore.value, id)[modelId],
-      setMeta: (modelId, model) =>
-        metaStore.update((meta) => {
-          ensureGatewayModels(meta, id)[modelId] = model;
-        }),
-      orEndpoints: (slug) => catalog.orEndpoints(slug),
-    });
     return {
       id,
       pool,
       health,
       chain,
-      probe,
       server: null,
       bound: null,
       status: { id, state: 'stopped', boundPort: null, boundHost: null },
@@ -196,31 +216,28 @@ async function main(): Promise<void> {
   const router = new Router();
 
   /**
-   * 每个网关一个 listener。
-   * - 所有网关：`/healthz`（可探活）+ OpenAI 兼容端点（按该网关的账号/模型/策略）
-   * - 只有控制台网关：`/api/*` 与静态页面
+   * 网关 listener：只有接入面（`/healthz` + OpenAI 兼容端点）。
+   * 控制台 API 与静态页在独立的控制台 listener 上，网关绑不上不会连带控制台。
    */
   const makeServer = (gatewayId: string): http.Server => {
     const handler: Handler = (c) => {
       const cfg = configStore.value;
       if (c.path === '/healthz' && c.method === 'GET') {
         const gateway = gatewayById(cfg, gatewayId);
+        const state = gateway ? gatewayAccountState(cfg, gateway, classOf) : null;
         sendJSON(c.res, 200, {
           ok: true,
           gateway: gatewayId,
           version: VERSION,
           uptime: Math.round((Date.now() - startedAt) / 1000),
-          configured: gateway ? gatewayConfigured(cfg, gateway, classOf) : false,
+          configured: state?.code === 'ok',
+          accountState: state?.code ?? 'no_accounts',
         });
         return;
       }
       if (isModelsPath(c.path) && c.method === 'GET') return modelsHandler(requireCtx(), gatewayId)(c);
       if (isChatPath(c.path) && c.method === 'POST') return chatHandler(requireCtx(), gatewayId)(c);
-      // 控制台（API + 静态页面）只挂在控制台网关上
-      if (cfg.console.gatewayId !== gatewayId) return sendError(c.res, 404, 'not found', 'not_found');
-      const route = router.resolve(c.method, c.path);
-      if (route) return route(c);
-      return staticHandler()(c);
+      return sendError(c.res, 404, 'not found', 'not_found');
     };
 
     return createHttpServer({
@@ -231,14 +248,9 @@ async function main(): Promise<void> {
         corsResponseHeaders((c) => gatewayById(configStore.value, c.gatewayId)?.corsOrigins ?? []),
         originCheckMiddleware((c) => gatewayById(configStore.value, c.gatewayId)?.corsOrigins ?? []),
         authMiddleware((c) => gatewayById(configStore.value, c.gatewayId)?.proxyKey ?? '', {
-          // 只保护 API 与 OpenAI 兼容端点；静态页面保持开放（见 middleware 注释）；
-          // /api/shutdown 不走密钥（壳不应依赖下游密钥配置），由「回环来源 +
-          // 无 Origin/Referer」三重放行保护（见 routes/api.ts 的注释）
-          needsAuth: (path) =>
-            path !== '/api/shutdown' && (isChatPath(path) || isModelsPath(path) || path.startsWith('/api/')),
-          // 控制台 API 允许本机免密钥；下游代理端点（/v1/*）不在此列 ——
-          // 客户端无论从哪来都要带密钥，那正是密钥的用途（见 middleware 注释）
-          consolePath: (path) => configStore.value.console.gatewayId === gatewayId && path.startsWith('/api/'),
+          // 网关只保护接入面；`/v1/*` 的密钥是下发给客户端的凭据，本机也不例外
+          needsAuth: (path) => isChatPath(path) || isModelsPath(path),
+          consolePath: () => false,
         }),
       ],
     });
@@ -250,19 +262,55 @@ async function main(): Promise<void> {
     createServer: makeServer,
   });
 
+  /**
+   * 控制台 listener：API + 静态页，监听目标独立于任何网关。
+   * `/api/shutdown` 不走密钥（壳不应依赖控制台密钥配置），由「回环来源 +
+   * 无 Origin/Referer」三重放行保护（见 routes/api.ts 的注释）。
+   */
+  const consoleHandler: Handler = (c) => {
+    if (c.path === '/healthz' && c.method === 'GET') {
+      sendJSON(c.res, 200, {
+        ok: true,
+        console: true,
+        version: VERSION,
+        uptime: Math.round((Date.now() - startedAt) / 1000),
+        accounts: usableAccounts(configStore.value).length,
+      });
+      return;
+    }
+    const route = router.resolve(c.method, c.path);
+    if (route) return route(c);
+    return staticHandler()(c);
+  };
+
+  const consoleManager = new ConsoleManager({
+    target: () => configStore.value.console,
+    handler: consoleHandler,
+    middleware: [
+      originCheckMiddleware(() => []),
+      authMiddleware(() => configStore.value.console.proxyKey, {
+        needsAuth: (path) => path !== '/api/shutdown' && path.startsWith('/api/'),
+        consolePath: (path) => path.startsWith('/api/'),
+      }),
+    ],
+  });
+
   ctx = {
     version: VERSION,
     startedAt,
     configStore,
     metaStore,
     gateways: manager,
+    console: consoleManager,
     catalog,
+    probe,
     classify,
   };
   registerApiRoutes(ctx, router);
 
-  // ---- 启动监听（逐网关；某个失败不影响其它） ----
+  // ---- 启动监听（逐网关 + 控制台；任一失败不影响其它） ----
   await manager.reconcile();
+  await consoleManager.reconcile();
 
   logger.info(
     {
@@ -271,10 +319,19 @@ async function main(): Promise<void> {
       configFile: CONFIG_PATH,
       accounts: configStore.value.accounts.length,
       gateways: configStore.value.gateways.length,
-      consoleGateway: configStore.value.console.gatewayId,
+      console: `${configStore.value.console.bindHost}:${configStore.value.console.port}`,
     },
     '服务已启动',
   );
+  const consoleStatus = consoleManager.status();
+  if (consoleStatus.state === 'running') {
+    logger.info(
+      { port: consoleStatus.boundPort, host: consoleStatus.boundHost },
+      `控制台: http://${consoleStatus.boundHost ?? '127.0.0.1'}:${consoleStatus.boundPort}/`,
+    );
+  } else if (consoleStatus.state === 'error') {
+    logger.error({ error: consoleStatus.error }, '控制台未能监听（网关不受影响；可修复后重启）');
+  }
   for (const status of manager.statuses()) {
     const gateway = gatewayById(configStore.value, status.id);
     if (!gateway) continue;
@@ -290,7 +347,7 @@ async function main(): Promise<void> {
       );
     }
   }
-  if (!gatewayConfigured(configStore.value, consoleGateway(configStore.value), classOf)) {
+  if (usableAccounts(configStore.value).length === 0) {
     logger.warn('尚未配置上游 API Key：在控制台「账号池」添加账号，或设置 CLINE_PASS_KEY 环境变量');
   }
 
@@ -305,7 +362,7 @@ async function main(): Promise<void> {
     shuttingDown = true;
     logger.info({ reason }, '开始优雅退出');
     void (async () => {
-      await manager.closeAll(30_000);
+      await Promise.all([manager.closeAll(30_000), consoleManager.close(30_000)]);
       configStore.close();
       metaStore.close();
       await Promise.all([configStore.flush(), metaStore.flush()]);

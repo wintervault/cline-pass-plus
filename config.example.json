@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "upstreamBase": "https://api.cline.bot/api/v1",
   "accounts": [
     {
@@ -13,7 +13,8 @@
     {
       "id": "main",
       "name": "主网关",
-      "port": 3123,
+      "enabled": true,
+      "port": 3126,
       "bindHost": "0.0.0.0",
       "proxyKey": "换成一串你自己的下游密钥",
       "publicBaseUrl": "",
@@ -45,7 +46,8 @@
     {
       "id": "risk",
       "name": "风控号专用",
-      "port": 3124,
+      "enabled": true,
+      "port": 3127,
       "bindHost": "127.0.0.1",
       "proxyKey": "换成一串你自己的下游密钥",
       "publicBaseUrl": "",
@@ -69,7 +71,9 @@
     }
   ],
   "console": {
-    "gatewayId": "main"
+    "port": 3125,
+    "bindHost": "0.0.0.0",
+    "proxyKey": "换成一串你自己的控制台访问密钥"
   },
   "historyLimit": 500
 }

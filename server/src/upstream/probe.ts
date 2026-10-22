@@ -1,4 +1,4 @@
-import type { AccountPool } from '../accounts/pool.ts';
+import type { Account } from '../config/schema.ts';
 import { fetchJSON } from './client.ts';
 import { classifyChannelStatus } from './errors.ts';
 import { parsePlannedChain, parseRouting } from './routing.ts';
@@ -7,10 +7,9 @@ import { blankModelMeta, type ModelMeta, type PinState, type UpstreamStatusKind 
 /** 探测与校验共用的上游访问依赖。 */
 export interface ProbeDeps {
   upstreamBase: string;
-  pool: AccountPool;
-  /** 读写模型观测记录。 */
-  getMeta: (modelId: string) => ModelMeta | undefined;
-  setMeta: (modelId: string, meta: ModelMeta) => void;
+  /** 读写**指定账号**的模型检测记录（检测结论只对该账号成立）。 */
+  getMeta: (account: string, modelId: string) => ModelMeta | undefined;
+  setMeta: (account: string, modelId: string, meta: ModelMeta) => void;
   /** OpenRouter endpoints 查询（直连管道参考）。 */
   orEndpoints?: (
     slug: string,
@@ -161,14 +160,14 @@ export class ProbeService {
 
   /**
    * 探测单个模型：真实小请求回读管道类型与执行链，再用钉住探针判定参数是否被读取。
-   * 可钉性与账号风控相关（换个账号结果可能不同），结果只代表探测时刻、所用账号的状态。
+   * 可钉性与账号风控相关（换个账号结果可能不同），所以**必须显式传入账号**，
+   * 结果只代表探测时刻、该账号的状态。
    */
-  async probeModel(modelId: string, signal?: AbortSignal): Promise<ProbeResult> {
-    const account = this.#deps.pool.pick();
+  async probeModel(modelId: string, account: Account | null, signal?: AbortSignal): Promise<ProbeResult> {
     // 没有账号不要在本地发一个无鉴权请求：既拿不到有效结论，也白白暴露一次访问。
     if (!account) {
       return {
-        ...this.#blank(modelId),
+        ...this.#blank(modelId, ''),
         ok: false,
         ms: 0,
         error: 'No upstream account is configured. Add one under Accounts.',
@@ -178,14 +177,19 @@ export class ProbeService {
     const body = { model: modelId, messages: [{ role: 'user', content: 'Reply with the word OK' }], max_tokens: 256 };
     const { json } = await fetchJSON(
       `${this.#deps.upstreamBase}${CHAT}`,
-      { method: 'POST', headers: authHeaders(account?.key ?? ''), body: JSON.stringify(body), signal },
+      { method: 'POST', headers: authHeaders(account.key), body: JSON.stringify(body), signal },
       180_000,
     );
 
     const shaped = json as { error?: unknown; data?: { error?: unknown; choices?: unknown } } | null;
     const probeError = extractErrorText(shaped);
     if (probeError !== null && !shaped?.data?.choices) {
-      return { ...this.#blank(modelId), ok: false, ms: Date.now() - started, error: probeError.slice(0, 400) };
+      return {
+        ...this.#blank(modelId, account.name),
+        ok: false,
+        ms: Date.now() - started,
+        error: probeError.slice(0, 400),
+      };
     }
 
     const routing = parseRouting(json);
@@ -193,7 +197,7 @@ export class ProbeService {
     // 钉住探针（D1）：判定 providerOptions/provider 是否还被网关读取
     let probe: PinProbeOutcome = { pinState: 'unknown', providers: null, routedTo: null };
     if (routing.pipeline) {
-      probe = await pinProbe(this.#deps, modelId, routing.pipeline, account?.key ?? '', signal);
+      probe = await pinProbe(this.#deps, modelId, routing.pipeline, account.key, signal);
     }
 
     let endpoints: Array<{ slug: string; name?: string; endpoints?: number; context?: number; uptime?: number }> = [];
@@ -209,7 +213,7 @@ export class ProbeService {
       }
     }
 
-    const prev = this.#deps.getMeta(modelId);
+    const prev = this.#deps.getMeta(account.name, modelId);
     const detail: ModelMeta['upstreamDetail'] = { ...(prev?.upstreamDetail ?? {}) };
     for (const e of endpoints) detail[e.slug] = e;
 
@@ -253,7 +257,7 @@ export class ProbeService {
       probedAt: Date.now(),
       validatedAt: prev?.validatedAt ?? null,
     };
-    this.#deps.setMeta(modelId, meta);
+    this.#deps.setMeta(account.name, modelId, meta);
     return { ...meta, ok: true, ms: meta.lastMs ?? 0 };
   }
 
@@ -265,6 +269,7 @@ export class ProbeService {
    */
   async validateUpstreams(
     modelId: string,
+    account: Account | null,
     signal?: AbortSignal,
   ): Promise<
     | {
@@ -280,7 +285,15 @@ export class ProbeService {
         pinState: PinState;
       }
   > {
-    const meta = this.#deps.getMeta(modelId);
+    if (!account) {
+      return {
+        ok: false,
+        pinState: 'unknown',
+        code: 'validate.noAccount',
+        reason: 'No upstream account is configured. Add one under Accounts.',
+      };
+    }
+    const meta = this.#deps.getMeta(account.name, modelId);
     const list = meta?.upstreams ?? [];
     const pipeline = meta?.pipeline;
     const pinState: PinState = meta?.pinState ?? 'unknown';
@@ -301,15 +314,6 @@ export class ProbeService {
       };
     }
 
-    const account = this.#deps.pool.pick();
-    if (!account) {
-      return {
-        ok: false,
-        pinState,
-        code: 'validate.noAccount',
-        reason: 'No upstream account is configured. Add one under Accounts.',
-      };
-    }
     const results: Record<string, { status: UpstreamStatusKind; ms: number; note: string }> = {};
 
     const batch = 5;
@@ -326,7 +330,7 @@ export class ProbeService {
           try {
             const res = await fetchJSON(
               `${this.#deps.upstreamBase}${CHAT}`,
-              { method: 'POST', headers: authHeaders(account?.key ?? ''), body: JSON.stringify(body), signal },
+              { method: 'POST', headers: authHeaders(account.key), body: JSON.stringify(body), signal },
               60_000,
             );
             json = res.json;
@@ -349,24 +353,24 @@ export class ProbeService {
       );
       // 渐进式：每批完成就把中间结果写入观测数据——前端在校验期间轮询，
       // 渠道状态逐个亮起，长清单的等待从黑盒变可见
-      const progressive = this.#deps.getMeta(modelId);
+      const progressive = this.#deps.getMeta(account.name, modelId);
       if (progressive) {
         progressive.upstreamStatus = { ...progressive.upstreamStatus, ...results };
-        this.#deps.setMeta(modelId, progressive);
+        this.#deps.setMeta(account.name, modelId, progressive);
       }
     }
 
-    const updated = this.#deps.getMeta(modelId);
+    const updated = this.#deps.getMeta(account.name, modelId);
     if (updated) {
       updated.upstreamStatus = { ...updated.upstreamStatus, ...results };
       updated.validatedAt = Date.now();
-      this.#deps.setMeta(modelId, updated);
+      this.#deps.setMeta(account.name, modelId, updated);
     }
     return { ok: true, results, upstreams: list, pinState };
   }
 
-  #blank(modelId: string): ModelMeta {
-    return this.#deps.getMeta(modelId) ?? blankModelMeta();
+  #blank(modelId: string, account: string): ModelMeta {
+    return (account ? this.#deps.getMeta(account, modelId) : undefined) ?? blankModelMeta();
   }
 }
 

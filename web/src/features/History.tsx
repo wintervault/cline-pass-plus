@@ -16,10 +16,9 @@ import {
 } from 'antd';
 import { useEffect, useState } from 'react';
 
-import { useHistory } from '../api/hooks.ts';
+import { useGateways, useHistory } from '../api/hooks.ts';
 import type { HistoryEntry, TraceEntry } from '../api/types.ts';
 import { useFeedback } from '../feedback.ts';
-import { useGatewayScope } from '../gatewayScope.tsx';
 import { diagnosticText } from '../i18n/codes.ts';
 import { type MsgKey, useI18n } from '../i18n/index.tsx';
 import { PageHeader } from '../pageHeader.tsx';
@@ -141,7 +140,8 @@ export default function History() {
   /** 排查场景的快捷筛选：全部 / 成功 / 失败。 */
   const [view, setView] = useState<'all' | 'ok' | 'fail'>('all');
   /** 网关筛选：所有网关 / 某一个（多网关下排查必须能分开看）。 */
-  const { gateways } = useGatewayScope();
+  const gatewaysQuery = useGateways({ poll: false });
+  const gateways = gatewaysQuery.data?.gateways ?? [];
   const [gatewayFilter, setGatewayFilter] = useState<string>('all');
   const gatewayName = (id: string): string => gateways.find((g) => g.id === id)?.name ?? id;
   /**

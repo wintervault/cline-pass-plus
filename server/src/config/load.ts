@@ -158,24 +158,14 @@ export async function loadConfig(file: string): Promise<LoadResult> {
     notes.push('没有可用的网关，已创建默认「主网关」');
   }
 
-  // 控制台必须挂在一个存在的网关上
-  let consoleGatewayId = base.console.gatewayId;
-  if (!gateways.some((g) => g.id === consoleGatewayId)) {
-    notes.push(`控制台网关「${consoleGatewayId}」不存在，已改为「${gateways[0]?.id ?? 'main'}」`);
-    consoleGatewayId = gateways[0]?.id ?? 'main';
-  }
-
-  // 控制台网关不能是停用状态（否则控制台无从访问）：优先切到另一个启用的网关
-  const consoleGw = gateways.find((g) => g.id === consoleGatewayId);
-  if (consoleGw && consoleGw.enabled === false) {
-    const fallback = gateways.find((g) => g.enabled !== false);
-    if (fallback) {
-      notes.push(`控制台网关「${consoleGw.name}」已停用，控制台改为「${fallback.name}」`);
-      consoleGatewayId = fallback.id;
-    } else {
-      consoleGw.enabled = true;
-      notes.push('所有网关都已停用，控制台网关已重新启用');
-    }
+  // 控制台是独立监听（2.1 起），不再依附于某个网关。端口/绑定地址由 schema 兜底；
+  // 这里只提示与网关抢端口的情况（真正绑不上时 reconcile 会把原因显示在设置页）。
+  const consolePort = base.console.port;
+  if (gateways.some((g) => g.port === consolePort)) {
+    const same = gateways.find((g) => g.port === consolePort);
+    notes.push(
+      `控制台端口 ${consolePort} 与网关「${same?.name ?? ''}」相同：两者只能有一个监听成功，请在「设置 → 控制台访问」改端口`,
+    );
   }
 
   const unknownKeys = Object.keys(migrated).filter((k) => !KNOWN_KEYS.has(k));
@@ -188,7 +178,7 @@ export async function loadConfig(file: string): Promise<LoadResult> {
       ...base,
       accounts: namedAccounts,
       gateways,
-      console: { gatewayId: consoleGatewayId },
+      console: base.console,
     },
     notes,
     backupPath: null,

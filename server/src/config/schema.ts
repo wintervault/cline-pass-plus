@@ -3,7 +3,21 @@ import { z } from 'zod';
 import { isIsoDate } from './date.ts';
 
 /** 当前配置格式版本。加载到更低版本会触发迁移，更高版本拒绝启动（避免新版写的配置被旧版改坏）。 */
-export const CONFIG_VERSION = 4;
+export const CONFIG_VERSION = 5;
+
+/**
+ * 控制台监听默认端口（2.1 起独立于网关）。
+ *
+ * 为什么不再跟网关共用：控制台是「本机管理界面」，网关是「给客户端用的接入面」。
+ * 绑在一起时，网关绑不上就等于控制台也进不去，而且控制台所在网关永远不能停用/删除。
+ * 拆开后两边各自监听、各自失败，互不连带。
+ *
+ * 端口布局：3122 = 桌面壳控制通道，3125 = 控制台，3126 起 = 网关。
+ */
+export const DEFAULT_CONSOLE_PORT = 3125;
+
+/** 网关默认端口的起点（新建网关从这里往后找空位）。 */
+export const DEFAULT_GATEWAY_PORT = 3126;
 
 /**
  * 账号风控体检用的默认判定模型。
@@ -125,7 +139,7 @@ export const MAX_GATEWAYS = 8;
  * - **账号池是全局的**，网关只引用账号名（子集），不复制密钥；
  * - 账号策略、失败转移、模型清单与路由配置都是**网关级**——不同网关可以走完全不同的策略；
  * - `upstreamBase` 保持全局（所有网关连同一个 Cline 网关）；
- * - 控制台只挂在 `console.gatewayId` 指向的那个网关上，其余网关只提供 `/v1`。
+ * - 控制台是**独立监听**（见 `ConsoleSchema`），网关只管 `/v1`。
  */
 export const GatewaySchema = z.object({
   id: GatewayIdSchema,
@@ -133,7 +147,7 @@ export const GatewaySchema = z.object({
   name: z.string().min(1).max(50).catch('网关'),
   /** 启用开关：停用的网关不监听端口、不服务 /v1（配置保留）。 */
   enabled: z.boolean().catch(true).default(true),
-  port: z.number().int().min(1).max(65535).catch(3123),
+  port: z.number().int().min(1).max(65535).catch(DEFAULT_GATEWAY_PORT),
   bindHost: z.string().min(1).catch('127.0.0.1'),
   /** 下游代理密钥。为空 = 不鉴权；绑定非回环地址时为空会拒绝启动（启动闸门按网关判定）。 */
   proxyKey: z.string().catch('').default(''),
@@ -178,6 +192,21 @@ export type Gateway = Omit<z.infer<typeof GatewaySchema>, 'perModel'> & {
 /** 只过了 schema、尚未做 perModel 收敛的网关。 */
 export type GatewayInput = z.infer<typeof GatewaySchema>;
 
+/**
+ * 控制台监听（2.1 起独立于网关）。
+ *
+ * - `port` / `bindHost`：控制台自己的监听目标；桌面壳用 `PORT` 环境变量固定为 3125。
+ * - `proxyKey`：远端访问控制台时的密钥。**本机访问永远免密钥**（见 security/local.ts），
+ *   与网关的 `proxyKey` 是两把独立的钥匙：下发给客户端的那把不该顺带管住控制台。
+ */
+export const ConsoleSchema = z.object({
+  port: z.number().int().min(1).max(65535).catch(DEFAULT_CONSOLE_PORT).default(DEFAULT_CONSOLE_PORT),
+  bindHost: z.string().min(1).catch('127.0.0.1').default('127.0.0.1'),
+  /** 为空 = 不鉴权；绑定非回环地址时为空会拒绝启动（启动闸门按监听目标判定）。 */
+  proxyKey: z.string().catch('').default(''),
+});
+export type ConsoleConfig = z.infer<typeof ConsoleSchema>;
+
 export const ConfigSchema = z.object({
   version: z.number().int().catch(CONFIG_VERSION).default(CONFIG_VERSION),
 
@@ -191,11 +220,8 @@ export const ConfigSchema = z.object({
 
   // ---- 网关（接入面） ----
   gateways: z.array(z.unknown()).catch([]).default([]),
-  /** 控制台挂在哪个网关上（该网关额外提供 /api 与静态页面）。 */
-  console: z
-    .object({ gatewayId: z.string().catch('main').default('main') })
-    .catch(() => ({ gatewayId: 'main' }))
-    .prefault({}),
+  /** 控制台自己的监听目标（与网关解耦）。 */
+  console: ConsoleSchema.catch(() => ConsoleSchema.parse({})).prefault({}),
 
   // ---- 观测 ----
   historyLimit: z.number().int().min(1).max(10000).catch(500).default(500),
@@ -213,7 +239,7 @@ export function defaultGateway(overrides: Partial<Gateway> = {}): Gateway {
     id: 'main',
     name: '主网关',
     enabled: true,
-    port: 3123,
+    port: DEFAULT_GATEWAY_PORT,
     bindHost: '127.0.0.1',
     proxyKey: '',
     publicBaseUrl: '',
@@ -239,7 +265,7 @@ export function defaultConfig(): Config {
     accounts: [],
     classifyModel: DEFAULT_CLASSIFY_MODEL,
     gateways: [defaultGateway()],
-    console: { gatewayId: 'main' },
+    console: ConsoleSchema.parse({}),
     historyLimit: 500,
   };
 }

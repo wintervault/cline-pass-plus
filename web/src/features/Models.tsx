@@ -8,9 +8,32 @@ import {
   StopOutlined,
 } from '@ant-design/icons';
 import { useQueryClient } from '@tanstack/react-query';
-import { Alert, Button, Card, Checkbox, Empty, Input, Skeleton, Space, Tag, Tooltip, Typography, theme } from 'antd';
+import {
+  Alert,
+  Button,
+  Card,
+  Checkbox,
+  Empty,
+  Input,
+  Select,
+  Skeleton,
+  Space,
+  Tag,
+  Tooltip,
+  Typography,
+  theme,
+} from 'antd';
 import { useEffect, useState } from 'react';
-import { qk, useFetchOfficial, useModels, useProbe, useSaveModelConfig, useTest, useValidate } from '../api/hooks.ts';
+import {
+  qk,
+  useAccounts,
+  useFetchOfficial,
+  useModels,
+  useProbe,
+  useSaveModelConfig,
+  useTest,
+  useValidate,
+} from '../api/hooks.ts';
 import {
   EMPTY_PER_MODEL,
   type ModelMeta,
@@ -20,11 +43,12 @@ import {
   type SubscriptionRow,
   type UpstreamStatusKind,
 } from '../api/types.ts';
-import { GatewaySwitcher, useGatewayScope } from '../gatewayScope.tsx';
+import { diagnosticText } from '../i18n/codes.ts';
 import { type Lang, type MsgKey, useI18n, useT } from '../i18n/index.tsx';
 import { STATUS_TAG } from '../labels.ts';
 import { PageHeader } from '../pageHeader.tsx';
 import { Panel, PanelHint } from '../panel.tsx';
+import { RoutingGatewayPicker, useRoutingGateway } from '../routingGateway.tsx';
 import { RoutingFields } from './routingFields.tsx';
 
 /** 按校验状态排序的渠道列表（可用优先），供详情面板与测试台共用。 */
@@ -292,20 +316,35 @@ function UpstreamRow({
 }
 
 export default function Models() {
-  const { gatewayId } = useGatewayScope();
+  /** 检测属于账号；路由配置属于网关（底部「路由策略」区块里的选择器）。 */
+  const { gatewayId } = useRoutingGateway();
   const { t, lang } = useI18n();
-  const models = useModels(gatewayId);
+  const accountsQuery = useAccounts();
+  const accounts = accountsQuery.data?.accounts ?? [];
+  const [pickedAccount, setPickedAccount] = useState(() => localStorage.getItem('cps_detect_account') ?? '');
+  const activeAccount = accounts.some((a) => a.name === pickedAccount) ? pickedAccount : (accounts[0]?.name ?? '');
+  const accountInfo = accounts.find((a) => a.name === activeAccount) ?? null;
+
+  const models = useModels({ gatewayId, account: activeAccount });
   const qc = useQueryClient();
   const save = useSaveModelConfig(gatewayId);
-  const probe = useProbe(gatewayId);
-  const validate = useValidate(gatewayId);
-  const test = useTest(gatewayId);
+  const probe = useProbe(activeAccount);
+  const validate = useValidate(activeAccount);
+  const test = useTest(gatewayId, activeAccount);
   const fetchOfficial = useFetchOfficial(gatewayId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [modelFilter, setModelFilter] = useState('');
   /** 管线拖拽排序：源行/落点行的 upstreams 索引（null = 未拖拽）。 */
   const [dragFrom, setDragFrom] = useState<number | null>(null);
   const [dragTo, setDragTo] = useState<number | null>(null);
+
+  // 账号被删/改名后把选择收敛到仍然存在的账号
+  useEffect(() => {
+    if (activeAccount && activeAccount !== pickedAccount) {
+      setPickedAccount(activeAccount);
+      localStorage.setItem('cps_detect_account', activeAccount);
+    }
+  }, [activeAccount, pickedAccount]);
 
   const rows = models.data?.subscription ?? [];
   const official = models.data?.officialFetch ?? null;
@@ -330,7 +369,7 @@ export default function Models() {
     const currentCfg = rows.find((r) => r.id === modelId)?.config ?? EMPTY_PER_MODEL;
     const merged: PerModelConfig = { ...currentCfg, ...patch };
     // 乐观更新：面板立刻反映，onSuccess 的失效会拉回服务端真实状态
-    qc.setQueryData<ModelsResponse>(qk.models(gatewayId), (old) =>
+    qc.setQueryData<ModelsResponse>(qk.models(gatewayId, activeAccount), (old) =>
       old
         ? { ...old, subscription: old.subscription.map((s) => (s.id === modelId ? { ...s, config: merged } : s)) }
         : old,
@@ -338,12 +377,12 @@ export default function Models() {
     save.mutate({ modelId, config: merged, note });
   };
 
-  // 校验进行中时轮询：服务端每批校验会渐进写入渠道状态，2 秒一拉让进度可见
+  // 校验进行中时轮询：服务端每批校验会渐进写入**该账号**的检测记录，2 秒一拉让进度可见
   useEffect(() => {
     if (!validate.isPending) return;
-    const timer = setInterval(() => void qc.invalidateQueries({ queryKey: qk.models(gatewayId) }), 2000);
+    const timer = setInterval(() => void qc.invalidateQueries({ queryKey: qk.models(gatewayId, activeAccount) }), 2000);
     return () => clearInterval(timer);
-  }, [validate.isPending, qc, gatewayId]);
+  }, [validate.isPending, qc, gatewayId, activeAccount]);
 
   const cfg = current?.config ?? EMPTY_PER_MODEL;
   const meta = current?.meta ?? null;
@@ -353,17 +392,18 @@ export default function Models() {
   const pinIgnored = meta?.pinState === 'ignored';
   /** 只有明确确认钉住生效才允许校验——ignored 与 unknown 都会产出不可信的结果。 */
   const pinUnverified = meta?.pinState !== 'enforced';
+  const canAct = !!activeAccount;
 
   const runProbe = (): void => {
-    if (!current) return;
+    if (!current || !activeAccount) return;
     probe.mutate(current.id);
   };
   const runTest = (): void => {
-    if (!current) return;
+    if (!current || !activeAccount) return;
     test.mutate({ model: current.id, upstreams: cfg.upstreams, exclude: cfg.exclude });
   };
   const runValidate = (): void => {
-    if (!current) return;
+    if (!current || !activeAccount) return;
     validate.mutate(current.id);
   };
 
@@ -372,19 +412,42 @@ export default function Models() {
     fetchOfficial.mutate(undefined);
   };
 
+  /** 账号体检结论标签：检测结果要跟着账号走，页头必须能看见「现在用的是哪个号」。 */
+  const classTag = (() => {
+    const kind = accountInfo?.classify?.class ?? 'unknown';
+    if (!activeAccount) return null;
+    if (kind === 'normal') return <Tag color="green">{t('models.account.normal')}</Tag>;
+    if (kind === 'private') return <Tag color="orange">{t('models.account.private')}</Tag>;
+    return <Tag>{t('models.account.unknown')}</Tag>;
+  })();
+
   return (
-    /* 填满内容列：两栏吃满剩余高度，路由策略贴底，底部只留内容区内边距。
-       之前用 calc(100vh - 448px) 的魔法数字，默认窗口下会空出 97px（实测）。 */
+    /* 填满内容列：两栏吃满剩余高度，路由策略贴底，底部只留内容区内边距。 */
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, height: '100%' }}>
       <PageHeader
         title={t('models.title')}
         desc={t('models.desc')}
         actions={
-          /* 页头只放主操作。上次拉取的时间与来源塞进悬停——
-             原来它们是一长串内联文字，会把页头挤成两行，于是本页的区块比别的页
-             低 40px（切页时「布局偏移」的一部分）。 */
           <Space size={8}>
-            <GatewaySwitcher />
+            <Space size={6} align="center">
+              <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+                {t('models.account.label')}
+              </Typography.Text>
+              <Select
+                size="small"
+                showSearch
+                style={{ minWidth: 180, maxWidth: 240 }}
+                value={activeAccount || undefined}
+                placeholder={t('models.account.placeholder')}
+                options={accounts.map((a) => ({ value: a.name, label: a.name }))}
+                onChange={(name: string) => {
+                  setPickedAccount(name);
+                  localStorage.setItem('cps_detect_account', name);
+                  setSelectedId(null);
+                }}
+              />
+              {classTag}
+            </Space>
             <Tooltip
               title={
                 official
@@ -403,6 +466,23 @@ export default function Models() {
           </Space>
         }
       />
+
+      {accounts.length === 0 && (
+        <Alert
+          type="warning"
+          showIcon
+          message={t('models.noAccount.title')}
+          description={t('models.noAccount.desc')}
+          action={
+            <Button
+              size="small"
+              onClick={() => window.dispatchEvent(new CustomEvent('cps:navigate', { detail: 'accounts' }))}
+            >
+              {t('models.noAccount.action')}
+            </Button>
+          }
+        />
+      )}
 
       {models.isError ? (
         <Alert
@@ -448,18 +528,10 @@ export default function Models() {
           </div>
         </Card>
       ) : (
-        /* 用 Fragment 而不是再包一层 div：页面根已经是 flex 列容器，
-           多一层不带 flex 的 div 会把「剩余高度」截断在那里，两栏就只涨到
-           minHeight（实测 300，底部空 185px）。区块直接作为页面根的子元素。 */
         <>
-          {/*
-            两列主体：**吃满剩余高度、各自内部滚动**。
-            页面本身不滚（右侧那条多余的滚动条随之消失），路由策略贴底整行。
-            高度不再用「扣掉固定件」的魔法数字——页头/路由策略的尺寸一变它就失准；
-            现在由父级 flex 分配，底部只剩内容区的内边距。
-          */}
+          {/* 两列主体：吃满剩余高度、各自内部滚动（页面本身不滚） */}
           <div style={{ display: 'flex', gap: 16, flex: '1 1 0', minHeight: 300 }}>
-            {/* 左：模型列表（区域一） */}
+            {/* 左：模型列表 */}
             <Panel
               title={t('models.list.title')}
               extra={<PanelHint>{t('common.count', { count: filteredRows.length })}</PanelHint>}
@@ -473,7 +545,6 @@ export default function Models() {
                   value={modelFilter}
                   onChange={(e) => setModelFilter(e.target.value)}
                 />
-                {/* 唯一的滚动容器：只有列表滚，搜索框钉在上面 */}
                 <div
                   className="cps-model-list-scroll"
                   style={{ flex: 1, minHeight: 0, display: 'grid', gap: 6, alignContent: 'start' }}
@@ -496,7 +567,7 @@ export default function Models() {
               </div>
             </Panel>
 
-            {/* 右：所选模型的渠道清单（区域二） */}
+            {/* 右：所选账号在该模型上的真实渠道观测（只读；路由在下方区块编辑） */}
             {current && (
               <Panel
                 style={{ flex: 1, minWidth: 0 }}
@@ -525,12 +596,18 @@ export default function Models() {
                 extra={
                   <Space size={8}>
                     <Tooltip title={t('models.action.probe.tip')}>
-                      <Button size="small" type="primary" loading={probe.isPending} onClick={runProbe}>
+                      <Button
+                        size="small"
+                        type="primary"
+                        disabled={!canAct}
+                        loading={probe.isPending}
+                        onClick={runProbe}
+                      >
                         {t('models.action.probe')}
                       </Button>
                     </Tooltip>
                     <Tooltip title={t('models.action.test.tip')}>
-                      <Button size="small" loading={test.isPending} onClick={runTest}>
+                      <Button size="small" disabled={!canAct} loading={test.isPending} onClick={runTest}>
                         {t('models.action.test')}
                       </Button>
                     </Tooltip>
@@ -547,7 +624,7 @@ export default function Models() {
                     >
                       <Button
                         size="small"
-                        disabled={pinUnverified || ups.length === 0}
+                        disabled={!canAct || pinUnverified || ups.length === 0}
                         loading={validate.isPending}
                         onClick={runValidate}
                       >
@@ -558,10 +635,6 @@ export default function Models() {
                 }
               >
                 <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, gap: 12 }}>
-                  {/*
-                钉住被网关忽略：一行紧凑提示（此前用 Alert，占掉四行高度，
-                把「渠道优先级」挤到首屏之外）。原因放进悬停，需要时再看。
-              */}
                   {pinIgnored && (
                     <Tooltip
                       title={
@@ -620,83 +693,84 @@ export default function Models() {
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' }}>
                     <Typography.Text strong style={{ fontSize: 13 }}>
-                      {t('models.chain.title')}
+                      {t('models.observe.title')}
                     </Typography.Text>
                     <PanelHint>{t('models.chain.count', { count: ups.length })}</PanelHint>
-                    <Space size={8} style={{ marginLeft: 'auto' }}>
-                      <Button
-                        size="small"
-                        onClick={() => {
-                          const list = ups.filter((u) => !cfg.exclude.includes(u));
-                          saveConfig(
-                            current.id,
-                            { upstreams: list, exclude: cfg.exclude },
-                            t('models.note.allAdded', { count: list.length }),
-                          );
-                        }}
-                      >
-                        {t('models.chain.all')}
-                      </Button>
-                      <Button
-                        size="small"
-                        onClick={() => saveConfig(current.id, { upstreams: [], exclude: [] }, t('models.note.cleared'))}
-                      >
-                        {t('models.chain.clear')}
-                      </Button>
-                    </Space>
+                    {activeAccount && <PanelHint>{t('models.observe.forAccount', { name: activeAccount })}</PanelHint>}
                   </div>
-                  {/* 渠道链自己滚：右栏唯一的滚动条（列表长，但不该带着整页一起滚） */}
+
                   <div style={{ flex: 1, minHeight: 0, overflow: 'auto', overscrollBehavior: 'contain' }}>
                     {ups.length ? (
                       <>
                         <ul className="cps-chain">
-                          {chainRows.map((u) => {
-                            const rowOrder = cfg.upstreams.indexOf(u);
+                          {ups.map((u) => {
+                            const s = meta?.upstreamStatus[u];
+                            const detail = meta?.upstreamDetail[u];
+                            const order = cfg.upstreams.indexOf(u);
+                            const excluded = cfg.exclude.includes(u);
+                            const state = excluded ? 'excluded' : order >= 0 ? 'on' : 'off';
                             return (
-                              <UpstreamRow
-                                key={u}
-                                upstream={u}
-                                cfg={cfg}
-                                meta={meta}
-                                onSave={(patch, note) => saveConfig(current.id, patch, note)}
-                                drag={{
-                                  isDragging: dragFrom !== null && dragFrom === rowOrder,
-                                  isDropTarget: dragTo !== null && dragTo === rowOrder && dragFrom !== rowOrder,
-                                  onDragStartRow: (o) => setDragFrom(o),
-                                  onDragOverRow: (o) => setDragTo((cur) => (cur === o ? cur : o)),
-                                  onDropRow: (o) => {
-                                    if (dragFrom !== null && dragFrom !== o) {
-                                      const list = [...cfg.upstreams];
-                                      const [item] = list.splice(dragFrom, 1);
-                                      if (item) {
-                                        list.splice(o, 0, item);
-                                        saveConfig(
-                                          current.id,
-                                          { upstreams: list },
-                                          t('models.note.dragged', { name: item, index: o + 1 }),
-                                        );
-                                      }
-                                    }
-                                    setDragFrom(null);
-                                    setDragTo(null);
-                                  },
-                                  onDragEndRow: () => {
-                                    setDragFrom(null);
-                                    setDragTo(null);
-                                  },
-                                }}
-                              />
+                              <li key={u} className="cps-chain-row" data-state={state}>
+                                <span className="cps-chain-node">{order >= 0 ? order + 1 : null}</span>
+                                <span style={{ width: 16 }} />
+                                <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                                  <Typography.Text code style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+                                    {u}
+                                  </Typography.Text>
+                                  {detail?.name && (
+                                    <Typography.Text type="secondary" style={{ fontSize: 12 }} ellipsis>
+                                      {detail.name}
+                                      {detail.endpoints !== undefined && detail.endpoints > 1
+                                        ? ` ×${detail.endpoints}`
+                                        : ''}
+                                    </Typography.Text>
+                                  )}
+                                  {detail?.context ? (
+                                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                      {t('playground.channel.context', { k: Math.round(detail.context / 1000) })}
+                                    </Typography.Text>
+                                  ) : null}
+                                </div>
+                                {s ? (
+                                  <Tooltip title={diagnosticText(lang, s.note) || undefined}>
+                                    {statusTag(s.status, t)}
+                                  </Tooltip>
+                                ) : (
+                                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                    {t('labels.upstream.unknown')}
+                                  </Typography.Text>
+                                )}
+                                <Typography.Text
+                                  type="secondary"
+                                  style={{ width: 64, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
+                                >
+                                  {s?.ms != null ? `${s.ms} ms` : '—'}
+                                </Typography.Text>
+                                <Typography.Text type="secondary" style={{ fontSize: 12, width: 76 }}>
+                                  {state === 'on'
+                                    ? t('models.observe.inRoute')
+                                    : state === 'excluded'
+                                      ? t('models.observe.excluded')
+                                      : t('models.observe.notUsed')}
+                                </Typography.Text>
+                              </li>
                             );
                           })}
                         </ul>
                         <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 12 }}>
-                          {t('models.chain.footer')}
+                          {t('models.observe.footer')}
                         </Typography.Text>
                       </>
                     ) : (
                       <Empty
                         image={Empty.PRESENTED_IMAGE_SIMPLE}
-                        description={pinIgnored ? t('models.chain.emptyIgnored') : t('models.chain.empty')}
+                        description={
+                          !activeAccount
+                            ? t('models.observe.noAccount')
+                            : pinIgnored
+                              ? t('models.chain.emptyIgnored')
+                              : t('models.observe.empty')
+                        }
                       />
                     )}
                   </div>
@@ -705,10 +779,105 @@ export default function Models() {
             )}
           </div>
 
-          {/* 路由策略：整行放在两列之下 —— 右侧那一列因此不再需要任何外层滚动条 */}
+          {/*
+            路由策略：属于网关，不属于账号。通道编辑器与「所属网关」选择器放在同一块，
+            避免用户在账号视图里误以为钉住是账号级配置。
+          */}
           {current && (
-            <Panel title={t('models.routing.title')} extra={<PanelHint>{t('models.routing.hint')}</PanelHint>}>
-              <RoutingFields cfg={cfg} onChange={(patch, note) => saveConfig(current.id, patch, note)} />
+            <Panel
+              title={t('models.routing.title')}
+              extra={
+                <Space size={8} align="center">
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    {t('models.routing.gateway')}
+                  </Typography.Text>
+                  <RoutingGatewayPicker />
+                  <PanelHint>{t('models.routing.hint')}</PanelHint>
+                </Space>
+              }
+            >
+              <div style={{ display: 'grid', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <Typography.Text strong style={{ fontSize: 13 }}>
+                    {t('models.chain.title')}
+                  </Typography.Text>
+                  <PanelHint>{t('models.chain.count', { count: ups.length })}</PanelHint>
+                  <Space size={8} style={{ marginLeft: 'auto' }}>
+                    <Button
+                      size="small"
+                      onClick={() => {
+                        const list = ups.filter((u) => !cfg.exclude.includes(u));
+                        saveConfig(
+                          current.id,
+                          { upstreams: list, exclude: cfg.exclude },
+                          t('models.note.allAdded', { count: list.length }),
+                        );
+                      }}
+                    >
+                      {t('models.chain.all')}
+                    </Button>
+                    <Button
+                      size="small"
+                      onClick={() => saveConfig(current.id, { upstreams: [], exclude: [] }, t('models.note.cleared'))}
+                    >
+                      {t('models.chain.clear')}
+                    </Button>
+                  </Space>
+                </div>
+
+                <div style={{ maxHeight: 240, overflow: 'auto', overscrollBehavior: 'contain' }}>
+                  {chainRows.length ? (
+                    <ul className="cps-chain">
+                      {chainRows.map((u) => {
+                        const rowOrder = cfg.upstreams.indexOf(u);
+                        return (
+                          <UpstreamRow
+                            key={u}
+                            upstream={u}
+                            cfg={cfg}
+                            meta={meta}
+                            onSave={(patch, note) => saveConfig(current.id, patch, note)}
+                            drag={{
+                              isDragging: dragFrom !== null && dragFrom === rowOrder,
+                              isDropTarget: dragTo !== null && dragTo === rowOrder && dragFrom !== rowOrder,
+                              onDragStartRow: (o) => setDragFrom(o),
+                              onDragOverRow: (o) => setDragTo((cur) => (cur === o ? cur : o)),
+                              onDropRow: (o) => {
+                                if (dragFrom !== null && dragFrom !== o) {
+                                  const list = [...cfg.upstreams];
+                                  const [item] = list.splice(dragFrom, 1);
+                                  if (item) {
+                                    list.splice(o, 0, item);
+                                    saveConfig(
+                                      current.id,
+                                      { upstreams: list },
+                                      t('models.note.dragged', { name: item, index: o + 1 }),
+                                    );
+                                  }
+                                }
+                                setDragFrom(null);
+                                setDragTo(null);
+                              },
+                              onDragEndRow: () => {
+                                setDragFrom(null);
+                                setDragTo(null);
+                              },
+                            }}
+                          />
+                        );
+                      })}
+                    </ul>
+                  ) : (
+                    <div className="cps-notice">
+                      <span>{pinIgnored ? t('models.chain.emptyIgnored') : t('models.chain.empty')}</span>
+                    </div>
+                  )}
+                </div>
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  {t('models.chain.footer')}
+                </Typography.Text>
+                <RoutingFields cfg={cfg} onChange={(patch, note) => saveConfig(current.id, patch, note)} />
+              </div>
             </Panel>
           )}
         </>

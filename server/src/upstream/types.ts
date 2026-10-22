@@ -105,11 +105,19 @@ export interface MetaFile {
   /**
    * 网关 → 模型 → 观测记录。
    *
-   * 3.0 起按网关隔离：探针结论（pinState）与渠道状态都依赖**该网关的账号**——
-   * 同一个模型在主网关（正常号）与风控网关（风控号）上的可钉性完全不同，
-   * 混在一张表里会让两边互相覆盖。
+   * 这是**真实流量与渠道失败学习**留下的聚合观测（请求实际命中了哪个渠道、
+   * 哪个渠道报错），不区分账号。检测页不再读它——探测/校验的结论只对执行
+   * 探测的那个账号成立，见 `accountModels`。
    */
   models: Record<string, Record<string, ModelMeta>>;
+  /**
+   * 账号 → 模型 → 检测记录（2.1 起）。
+   *
+   * 为什么按账号而不是按网关：账号风控状态决定终端路由——同一个模型在正常号与
+   * 风控号上的可钉性、真实渠道清单完全不同。按网关混存会让两个账号的结论互相
+   * 覆盖（用户实际反馈的就是「两个号都风控时结果串在一起」）。
+   */
+  accountModels: Record<string, Record<string, ModelMeta>>;
   history: HistoryEntry[];
   catalog: string[] | null;
   catalogFetchedAt: number;
@@ -124,6 +132,7 @@ export interface MetaFile {
 export function defaultMeta(): MetaFile {
   return {
     models: {},
+    accountModels: {},
     history: [],
     catalog: null,
     catalogFetchedAt: 0,
@@ -146,6 +155,20 @@ export function ensureGatewayModels(meta: MetaFile, gatewayId: string): Record<s
   if (existing) return existing;
   const created: Record<string, ModelMeta> = {};
   meta.models[gatewayId] = created;
+  return created;
+}
+
+/** 某账号的模型检测表（没有则返回空表，调用方只读时用）。 */
+export function accountModels(meta: MetaFile, account: string): Record<string, ModelMeta> {
+  return meta.accountModels[account] ?? {};
+}
+
+/** 某账号的模型检测表（没有则创建，写入前用）。 */
+export function ensureAccountModels(meta: MetaFile, account: string): Record<string, ModelMeta> {
+  const existing = meta.accountModels[account];
+  if (existing) return existing;
+  const created: Record<string, ModelMeta> = {};
+  meta.accountModels[account] = created;
   return created;
 }
 

@@ -24,7 +24,16 @@ export interface ChainInput {
   modelId: string;
   body: Record<string, unknown>;
   cfg?: PerModelConfig;
+  /** 网关聚合观测（真实流量学习所得）；实际注入/审计优先用 `accountMeta`。 */
   meta?: ModelMeta;
+  /** 指定账号（测试台）：固定用它、不做账号轮转；不存在时本地失败。 */
+  forcedAccount?: string;
+  /** 指定账号对象（测试台直接从账号池解析；不受网关账号范围限制）。 */
+  forcedAccountInfo?: Account;
+  /** 按账号取检测记录（探测/校验结论只对执行它的账号成立）。 */
+  accountMeta?: (name: string) => ModelMeta | undefined;
+  /** 没有可用账号时的错误码（区分「一个账号都没有」与「范围内没有账号」）。 */
+  emptyAccountsCode?: 'accounts.none' | 'accounts.emptyScope';
   stream: boolean;
   /** 客户端断开信号——断开后整条链立即停止，不再尝试后续候选。 */
   clientSignal?: AbortSignal;
@@ -143,23 +152,23 @@ function pinMismatchNote(
  */
 export class ChatChain {
   readonly #deps: ChainDeps;
-  #onChannelFailure: ((modelId: string, upstream: string | null, message: string) => void) | null = null;
+  #onChannelFailure: ((modelId: string, upstream: string | null, message: string, account: string) => void) | null =
+    null;
 
   constructor(deps: ChainDeps) {
     this.#deps = deps;
   }
 
   /** 渠道失败回调（调用方用于把状态学习进 metadata）。传 null 取消。 */
-  onChannelFailure(listener: ((modelId: string, upstream: string | null, message: string) => void) | null): this {
+  onChannelFailure(
+    listener: ((modelId: string, upstream: string | null, message: string, account: string) => void) | null,
+  ): this {
     this.#onChannelFailure = listener;
     return this;
   }
 
   async run(input: ChainInput): Promise<ChainResult> {
     const { modelId } = input;
-    const plan = buildCandidates({ modelId, cfg: input.cfg, meta: input.meta, health: this.#deps.health });
-    const known = input.meta?.upstreams ?? [];
-    const pipeline = input.meta?.pipeline ?? null;
 
     const startedAt = Date.now();
     const deadline = startedAt + this.#deps.failover.budgetMs;
@@ -167,29 +176,36 @@ export class ChatChain {
     const trace: TraceEntry[] = [];
     const rotations: AccountRotateInfo[] = [];
     const failedEarlier: string[] = [];
-    const maxRotations = this.#deps.pool.usable().length;
+    // 测试台固定一个账号：账号级错误直接返回，不再换号（否则测的就不是这个号了）
+    const forcedInput = input.forcedAccount || input.forcedAccountInfo;
+    const maxRotations = forcedInput ? 0 : this.#deps.pool.usable().length;
 
-    let account = this.#deps.pool.pick();
+    const forced =
+      input.forcedAccountInfo ??
+      (input.forcedAccount ? (this.#deps.pool.usable().find((a) => a.name === input.forcedAccount) ?? null) : null);
+    let account = forcedInput ? forced : this.#deps.pool.pick();
+    /** 当前账号的检测记录；没有就回退到网关聚合观测（至少保留历史渠道清单）。 */
+    let activeMeta = account ? (input.accountMeta?.(account.name) ?? input.meta) : input.meta;
+    let known = activeMeta?.upstreams ?? [];
+    let pipeline = activeMeta?.pipeline ?? null;
+
+    const plan = buildCandidates({ modelId, cfg: input.cfg, meta: activeMeta, health: this.#deps.health });
     let degraded = plan.degraded;
-    let budgetExhausted = false;
-    let lastError: { status: number; message: string; kind: UpstreamErrorKind | null } | null = null;
 
-    // 没有账号就本地失败：不要发一个没有 Authorization 的请求到上游。
-    // 首次启动（账号池为空）与删光账号后最容易触发；那条请求除了一无所获，
-    // 还会把「未鉴权访问」暴露给网关。
-    if (!account) {
+    if (forcedInput && !account) {
+      const name = input.forcedAccount ?? input.forcedAccountInfo?.name ?? '';
       return {
         outcome: 'failure',
-        status: 503,
+        status: 404,
         body: {
           error: {
-            message: 'No upstream account is configured. Add one under Accounts.',
+            message: `Account "${name}" is not available.`,
             type: 'config_error',
-            code: 'accounts.none',
+            code: 'accounts.notFound',
           },
         },
         routing: emptyRouting(),
-        message: 'No upstream account is configured. Add one under Accounts.',
+        message: `Account "${name}" is not available.`,
         kind: null,
         account: null,
         trace: [],
@@ -199,6 +215,39 @@ export class ChatChain {
         totalMs: 0,
       };
     }
+
+    // 没有账号就本地失败：不要发一个没有 Authorization 的请求到上游。
+    // 首次启动（账号池为空）与删光账号后最容易触发；那条请求除了一无所获，
+    // 还会把「未鉴权访问」暴露给网关。
+    if (!account) {
+      const code = input.emptyAccountsCode ?? 'accounts.none';
+      const message =
+        code === 'accounts.emptyScope'
+          ? 'No account in this gateway scope. Adjust the account scope or add an account under Accounts.'
+          : 'No upstream account is configured. Add one under Accounts.';
+      return {
+        outcome: 'failure',
+        status: 503,
+        body: {
+          error: {
+            message,
+            type: 'config_error',
+            code,
+          },
+        },
+        routing: emptyRouting(),
+        message,
+        kind: null,
+        account: null,
+        trace: [],
+        degraded,
+        accountRotations: [],
+        budgetExhausted: false,
+        totalMs: 0,
+      };
+    }
+    let budgetExhausted = false;
+    let lastError: { status: number; message: string; kind: UpstreamErrorKind | null } | null = null;
 
     // 自动模式 = 单个 null 候选；显式模式 = 渠道序列
     const candidates: (string | null)[] = plan.channels.length ? [...plan.channels] : [null];
@@ -247,7 +296,7 @@ export class ChatChain {
           const mismatchNote = pinMismatchNote(
             upstream,
             !relax,
-            input.meta?.pinState ?? 'unknown',
+            activeMeta?.pinState ?? 'unknown',
             outcome.routing.finalProvider,
           );
           if (mismatchNote !== null) {
@@ -256,7 +305,7 @@ export class ChatChain {
             if (upstream) {
               this.#deps.health.markFailed(modelId, upstream, this.#deps.failover.cooldownMs);
               if (!failedEarlier.includes(upstream)) failedEarlier.push(upstream);
-              this.#onChannelFailure?.(modelId, upstream, mismatchNote);
+              this.#onChannelFailure?.(modelId, upstream, mismatchNote, account.name);
             }
             break; // 下一个候选
           }
@@ -294,7 +343,7 @@ export class ChatChain {
             budgetExhausted,
             totalMs: Date.now() - startedAt,
             pinAudit: {
-              enforced: (input.meta?.pinState ?? 'unknown') === 'enforced',
+              enforced: (activeMeta?.pinState ?? 'unknown') === 'enforced',
               strict: !relax,
               target: upstream,
             },
@@ -317,6 +366,10 @@ export class ChatChain {
           const info: AccountRotateInfo = { from: account.name, to: next.name, reason: outcome.message.slice(0, 80) };
           rotations.push(info);
           account = next;
+          // 换号后重新取该账号的检测记录：pinState / 渠道清单都属于具体账号
+          activeMeta = input.accountMeta?.(next.name) ?? input.meta;
+          known = activeMeta?.upstreams ?? [];
+          pipeline = activeMeta?.pipeline ?? null;
           tryIndex -= 1; // 同渠道新账号，不消耗渠道重试次数（轮转次数由 maxRotations 封顶）
           continue;
         }
@@ -326,7 +379,7 @@ export class ChatChain {
           if (!failedEarlier.includes(upstream)) failedEarlier.push(upstream);
         }
         // 自动模式（upstream=null）也回调：报错里附带的最新渠道清单会被学习合并
-        this.#onChannelFailure?.(modelId, upstream, outcome.message);
+        this.#onChannelFailure?.(modelId, upstream, outcome.message, account.name);
 
         if (outcome.kind === 'request') {
           // 请求级：同渠道只多给一次机会，避免对参数错误打满所有候选

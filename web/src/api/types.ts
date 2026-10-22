@@ -88,6 +88,8 @@ export interface OfficialFetch {
 
 export interface ModelsResponse {
   gateway: { id: string; name: string };
+  /** 检测所针对的账号（缺省 null = 只看模型清单）。 */
+  account: { name: string } | null;
   subscription: SubscriptionRow[];
   catalogCount: number;
   catalog: string[];
@@ -160,6 +162,8 @@ export interface GatewayView {
   perModel: Record<string, PerModelConfig>;
   failover: FailoverConfig;
   accountCount: number;
+  /** 账号可用状态：区分「没有账号」与「范围内没有账号」。 */
+  accountState: GatewayAccountStateInfo;
   modelCount: number;
   proxyBase: string;
   status: {
@@ -173,8 +177,34 @@ export interface GatewayView {
 
 export interface GatewaysResponse {
   gateways: GatewayView[];
-  consoleGatewayId: string;
   maxGateways: number;
+}
+
+export type GatewayAccountStateCode = 'ok' | 'no_accounts' | 'empty_scope' | 'disabled';
+
+export interface GatewayAccountStateInfo {
+  code: GatewayAccountStateCode;
+  /** 该网关范围内、key 非空的账号数。 */
+  inScope: number;
+  /** 全局 key 非空的账号数。 */
+  usableTotal: number;
+  scope: AccountScope;
+}
+
+export interface ConsoleStatus {
+  state: 'running' | 'error' | 'stopped';
+  boundPort: number | null;
+  boundHost: string | null;
+  error?: string;
+}
+
+/** 控制台独立监听的公开视图（/api/console）。 */
+export interface ConsoleInfo {
+  port: number;
+  bindHost: string;
+  hasProxyKey: boolean;
+  url: string;
+  status: ConsoleStatus;
 }
 
 export interface FailoverConfig {
@@ -262,13 +292,13 @@ export interface ValidationResult {
 
 export interface MetaInfo {
   version: string;
+  /** 远端访问控制台是否需要密钥（本机永远免密钥）。 */
   authRequired: boolean;
-  configured: boolean;
-  proxyBase: string;
-  /** 控制台挂在哪个网关上。 */
-  consoleGatewayId: string;
-  /** 网关清单（只给切换器用的最小信息）。 */
-  gateways: Array<{ id: string; name: string }>;
+  accounts: { total: number; usable: number };
+  defaultGatewayId: string;
+  console: ConsoleInfo;
+  /** 网关清单（只给选择器用的最小信息）。 */
+  gateways: Array<{ id: string; name: string; enabled: boolean; accountState: GatewayAccountStateCode }>;
 }
 
 /** 校验状态排序权重：可用优先、不可钉最后。 */

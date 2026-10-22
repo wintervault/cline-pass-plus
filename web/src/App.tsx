@@ -8,6 +8,7 @@ import {
   NodeIndexOutlined,
   PushpinFilled,
   PushpinOutlined,
+  SettingOutlined,
   TeamOutlined,
 } from '@ant-design/icons';
 import { useQueryClient } from '@tanstack/react-query';
@@ -25,11 +26,12 @@ import Gateways from './features/Gateways.tsx';
 import History from './features/History.tsx';
 import Models from './features/Models.tsx';
 import Playground from './features/Playground.tsx';
+import Settings from './features/Settings.tsx';
 import { useFeedback } from './feedback.ts';
-import { GatewayScopeProvider } from './gatewayScope.tsx';
 import { useHostControl } from './hostBridge.ts';
 import { I18nProvider, type MsgKey, useI18n, useT } from './i18n/index.tsx';
 import { PAGE_GUTTER, PAGE_WIDTH } from './layout.ts';
+import { RoutingGatewayProvider } from './routingGateway.tsx';
 import { ServiceBanner } from './serviceBanner.tsx';
 import { StatusBar } from './statusBar.tsx';
 import { darkTheme, initialTheme, lightTheme, persistTheme, type ThemeMode } from './theme.ts';
@@ -38,16 +40,20 @@ import { TITLEBAR_HEIGHT, TitleBar } from './titleBar.tsx';
 /** 钉住页面的持久化键：打开控制台时默认落到被钉住的页面。 */
 const PIN_KEY = 'cps_pinned_page';
 const SIDEBAR_KEY = 'cps_sidebar';
-/** 完整目录页默认隐藏：双击「订阅模型」才出现（彩蛋页）。 */
-const CATALOG_KEY = 'cps_catalog_egg';
 
-/** 导航注册表：壳层只认这张表；页面增减只改这里。 */
+/**
+ * 导航注册表：壳层只认这张表；页面增减只改这里。
+ *
+ * 顺序即使用频率：先账号与网关（配置），再订阅模型与测试台（日常），
+ * 然后请求历史与设置。完整目录是彩蛋页，永远排在最后且默认不出现。
+ */
 const PAGES: { key: string; labelKey: MsgKey; icon: ComponentType; element: ComponentType }[] = [
-  { key: 'models', labelKey: 'nav.models', icon: NodeIndexOutlined, element: Models },
   { key: 'accounts', labelKey: 'nav.accounts', icon: TeamOutlined, element: Accounts },
   { key: 'gateways', labelKey: 'nav.gateways', icon: GatewayOutlined, element: Gateways },
+  { key: 'models', labelKey: 'nav.models', icon: NodeIndexOutlined, element: Models },
   { key: 'playground', labelKey: 'nav.playground', icon: ExperimentOutlined, element: Playground },
   { key: 'history', labelKey: 'nav.history', icon: HistoryOutlined, element: History },
+  { key: 'settings', labelKey: 'nav.settings', icon: SettingOutlined, element: Settings },
   { key: 'catalog', labelKey: 'nav.catalog', icon: AppstoreOutlined, element: Catalog },
 ];
 
@@ -186,9 +192,13 @@ function Console({ mode, onToggleTheme }: { mode: ThemeMode; onToggleTheme: () =
   /** 钉住的页面：打开控制台时默认落在这里（用户可把高频页钉住，省一次点击）。 */
   const [pinned, setPinned] = useState<string | null>(() => localStorage.getItem(PIN_KEY));
   const [nav, setNav] = useState(() => localStorage.getItem(PIN_KEY) ?? 'models');
-  const [catalogVisible, setCatalogVisible] = useState(() => localStorage.getItem(CATALOG_KEY) === '1');
+  /**
+   * 完整目录是彩蛋页：**只在本次运行内可见**，不写 localStorage。
+   * 上次打开过就永久留在导航里，会让「隐藏功能」变成「移除不掉的入口」。
+   */
+  const [catalogVisible, setCatalogVisible] = useState(false);
   const pages = PAGES.filter((p) => p.key !== 'catalog' || catalogVisible);
-  /** 彩蛋页被隐藏时，别停在不可达的页面上。 */
+  /** 彩蛋页被隐藏时，别停留在不可达的页面上。 */
   const activeNav = nav === 'catalog' && !catalogVisible ? 'models' : nav;
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === 'collapsed');
 
@@ -199,12 +209,11 @@ function Console({ mode, onToggleTheme }: { mode: ThemeMode; onToggleTheme: () =
     });
   };
 
-  /** 双击「订阅模型」：显示/隐藏完整目录（彩蛋）。 */
+  /** 双击「订阅模型」：显示/隐藏完整目录（彩蛋，不跨会话保留）。 */
   const toggleCatalog = (key: string): void => {
     if (key !== 'models') return;
     const next = !catalogVisible;
     setCatalogVisible(next);
-    localStorage.setItem(CATALOG_KEY, next ? '1' : '0');
     if (next) setNav('catalog');
     else if (nav === 'catalog') setNav('models');
   };
@@ -290,8 +299,6 @@ function Console({ mode, onToggleTheme }: { mode: ThemeMode; onToggleTheme: () =
     }
   };
 
-  const proxyBase = meta.data?.proxyBase;
-
   return (
     // 网关选择是所有页面共享的状态（六个页面同时挂载，各自持有会不同步）
     <>
@@ -317,7 +324,7 @@ function Console({ mode, onToggleTheme }: { mode: ThemeMode; onToggleTheme: () =
           />
         </Layout.Sider>
 
-        <GatewayScopeProvider>
+        <RoutingGatewayProvider>
           <Layout style={{ background: 'transparent', minWidth: 0 }}>
             {/*
             内容列由外壳统一给定（唯一来源）：所有页面共用同一个宽度与左边距。
@@ -358,7 +365,7 @@ function Console({ mode, onToggleTheme }: { mode: ThemeMode; onToggleTheme: () =
                 ) : (
                   <>
                     <ServiceBanner control={host} />
-                    {meta.data && !meta.data.configured && (
+                    {meta.data && meta.data.accounts.usable === 0 && (
                       <Alert
                         type="error"
                         showIcon
@@ -390,8 +397,6 @@ function Console({ mode, onToggleTheme }: { mode: ThemeMode; onToggleTheme: () =
 
             <StatusBar
               control={host}
-              proxyBase={proxyBase}
-              authRequired={meta.data?.authRequired}
               version={meta.data?.version}
               onOpenGateways={() => setNav('gateways')}
               mode={mode}
@@ -404,7 +409,7 @@ function Console({ mode, onToggleTheme }: { mode: ThemeMode; onToggleTheme: () =
               }}
             />
           </Layout>
-        </GatewayScopeProvider>
+        </RoutingGatewayProvider>
       </Layout>
     </>
   );

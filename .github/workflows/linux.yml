@@ -131,14 +131,14 @@ jobs:
 
             echo "--- bundled runtime smoke test"
             mkdir -p /tmp/cps-data
-            DATA_DIR=/tmp/cps-data PORT=3123 \
+            DATA_DIR=/tmp/cps-data PORT=3125 \
               /usr/lib/cline-pass-plus/runtime/node \
               /usr/lib/cline-pass-plus/runtime/server/dist/index.js \
               >/tmp/cps-server.log 2>&1 &
             SERVER_PID=$!
             READY=0
             for i in $(seq 1 40); do
-              if curl -fsS http://127.0.0.1:3123/healthz >/tmp/health.json 2>/dev/null; then
+              if curl -fsS http://127.0.0.1:3125/healthz >/tmp/health.json 2>/dev/null; then
                 READY=1
                 break
               fi
@@ -148,7 +148,7 @@ jobs:
               echo "server did not start"; cat /tmp/cps-server.log; exit 1
             fi
             grep -q "\"ok\":true" /tmp/health.json
-            curl -fsS -D /tmp/headers.txt -o /dev/null http://127.0.0.1:3123/
+            curl -fsS -D /tmp/headers.txt -o /dev/null http://127.0.0.1:3125/
             grep -qi "^content-security-policy:" /tmp/headers.txt
             kill "$SERVER_PID"
             wait "$SERVER_PID" 2>/dev/null || true

@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { AccountPool } from '../src/accounts/pool.ts';
 import { defaultConfig } from '../src/config/schema.ts';
 import { ProbeService } from '../src/upstream/probe.ts';
 import { blankModelMeta, type ModelMeta } from '../src/upstream/types.ts';
@@ -17,6 +16,8 @@ const routedBody = (provider: string, plan = PLAN_TEXT) => ({
   },
 });
 
+const ACCOUNT = { name: 'A', key: 'sk_a' };
+
 let upstream: FakeUpstream;
 let base: string;
 
@@ -31,13 +32,10 @@ afterEach(async () => {
 
 function makeService() {
   const store = new Map<string, ModelMeta>();
-  const config = defaultConfig();
-  config.accounts = [{ name: 'A', key: 'sk_a' }];
   const probe = new ProbeService({
     upstreamBase: base,
-    pool: new AccountPool(() => ({ accounts: config.accounts, accountMode: 'sticky', activeAccount: '' })),
-    getMeta: (id) => store.get(id),
-    setMeta: (id, m) => void store.set(id, m),
+    getMeta: (_account, id) => store.get(id),
+    setMeta: (_account, id, m) => void store.set(id, m),
   });
   return { probe, store };
 }
@@ -46,11 +44,10 @@ describe('probeModel 钉住探针（docs/pinning.md D1）', () => {
   it('没有账号时本地失败，不发上游请求', async () => {
     const probe = new ProbeService({
       upstreamBase: base,
-      pool: new AccountPool(() => ({ accounts: [], accountMode: 'sticky', activeAccount: '' })),
       getMeta: () => undefined,
       setMeta: () => {},
     });
-    const r = await probe.probeModel('cline-pass/x');
+    const r = await probe.probeModel('cline-pass/x', null);
     expect(r.ok).toBe(false);
     expect(upstream.count).toBe(0);
   });
@@ -62,7 +59,7 @@ describe('probeModel 钉住探针（docs/pinning.md D1）', () => {
       { status: 400, body: { error: 'invalid_request_error: Available providers are: deepseek, alibaba, baseten. ' } },
     ]);
     const { probe, store } = makeService();
-    const r = await probe.probeModel('cline-pass/x');
+    const r = await probe.probeModel('cline-pass/x', ACCOUNT);
     expect(r.ok).toBe(true);
     expect(r.pinState).toBe('enforced');
     expect(r.availableProviders).toEqual(['deepseek', 'alibaba', 'baseten']);
@@ -79,7 +76,7 @@ describe('probeModel 钉住探针（docs/pinning.md D1）', () => {
       { status: 200, body: routedBody('openai-compatible-private') },
     ]);
     const { probe } = makeService();
-    const r = await probe.probeModel('cline-pass/x');
+    const r = await probe.probeModel('cline-pass/x', ACCOUNT);
     expect(r.pinState).toBe('ignored');
     expect(r.pinDisabledReason).toContain('网关忽略钉住参数');
     expect(r.pinDisabledReason).toContain('openai-compatible-private');
@@ -92,7 +89,7 @@ describe('probeModel 钉住探针（docs/pinning.md D1）', () => {
       { status: 500, body: { error: 'empty response content' } },
     ]);
     const { probe } = makeService();
-    const r = await probe.probeModel('cline-pass/x');
+    const r = await probe.probeModel('cline-pass/x', ACCOUNT);
     expect(r.pinState).toBe('ignored');
   });
 
@@ -103,7 +100,7 @@ describe('probeModel 钉住探针（docs/pinning.md D1）', () => {
     ]);
     const { probe, store } = makeService();
     store.set('cline-pass/x', { ...blankModelMeta(), pinState: 'enforced', pinProbeAt: 111 });
-    const r = await probe.probeModel('cline-pass/x');
+    const r = await probe.probeModel('cline-pass/x', ACCOUNT);
     expect(r.pinState).toBe('enforced');
     expect(r.pinProbeAt).toBe(111); // 未确认就不刷新探测时间
   });
@@ -111,7 +108,7 @@ describe('probeModel 钉住探针（docs/pinning.md D1）', () => {
   it('管道未知（无元数据）→ 不发探针，pinState 保持 unknown', async () => {
     upstream.script([{ status: 200, body: { choices: [{ message: { content: 'OK' } }] } }]);
     const { probe } = makeService();
-    const r = await probe.probeModel('cline-pass/x');
+    const r = await probe.probeModel('cline-pass/x', ACCOUNT);
     expect(r.pipeline).toBeNull();
     expect(r.pinState).toBe('unknown');
     expect(upstream.count).toBe(1);
@@ -128,7 +125,7 @@ describe('validateUpstreams 防假绿闸（D5）', () => {
       pinDisabledReason: '网关忽略钉住参数',
       upstreams: ['deepseek', 'alibaba'],
     });
-    const r = await probe.validateUpstreams('cline-pass/x');
+    const r = await probe.validateUpstreams('cline-pass/x', ACCOUNT);
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.reason).toContain('网关忽略钉住参数');
@@ -147,7 +144,7 @@ describe('validateUpstreams 防假绿闸（D5）', () => {
       pinState: 'unknown',
       upstreams: ['deepseek'],
     });
-    const r = await probe.validateUpstreams('cline-pass/x');
+    const r = await probe.validateUpstreams('cline-pass/x', ACCOUNT);
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.pinState).toBe('unknown');
@@ -166,11 +163,10 @@ describe('validateUpstreams 防假绿闸（D5）', () => {
     });
     const probe = new ProbeService({
       upstreamBase: base,
-      pool: new AccountPool(() => ({ accounts: [], accountMode: 'sticky', activeAccount: '' })),
-      getMeta: (id) => store.get(id),
-      setMeta: (id, m) => void store.set(id, m),
+      getMeta: (_account, id) => store.get(id),
+      setMeta: (_account, id, m) => void store.set(id, m),
     });
-    const r = await probe.validateUpstreams('cline-pass/x');
+    const r = await probe.validateUpstreams('cline-pass/x', null);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.code).toBe('validate.noAccount');
     expect(upstream.count).toBe(0);
@@ -185,7 +181,7 @@ describe('validateUpstreams 防假绿闸（D5）', () => {
       pinState: 'enforced',
       upstreams: ['deepseek'],
     });
-    const r = await probe.validateUpstreams('cline-pass/x');
+    const r = await probe.validateUpstreams('cline-pass/x', ACCOUNT);
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.results['deepseek']?.status).toBe('ok');
   });

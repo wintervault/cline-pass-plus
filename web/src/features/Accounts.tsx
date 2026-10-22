@@ -19,15 +19,7 @@ import {
 import dayjs from 'dayjs';
 import { useState } from 'react';
 
-import {
-  qk,
-  useAccounts,
-  useClassifyAccounts,
-  useMeta,
-  useModels,
-  useSaveAccounts,
-  useTestAccount,
-} from '../api/hooks.ts';
+import { qk, useAccounts, useClassifyAccounts, useModels, useSaveAccounts, useTestAccount } from '../api/hooks.ts';
 import type { AccountClassRecord, AccountsResponse, AccountView, ExpiryState } from '../api/types.ts';
 
 import { diagnosticText } from '../i18n/codes.ts';
@@ -151,9 +143,8 @@ export default function Accounts() {
   const { t, lang } = useI18n();
   const qc = useQueryClient();
   const accounts = useAccounts();
-  const meta = useMeta();
-  // 判定模型的下拉选项取控制台网关的订阅清单（判定模型是全局的，与当前查看哪个网关无关）
-  const models = useModels(meta.data?.consoleGatewayId ?? '');
+  // 判定模型的下拉选项取所有网关的模型并集（判定模型是全局的）
+  const models = useModels();
   const save = useSaveAccounts();
   const testKey = useTestAccount();
   const classify = useClassifyAccounts();

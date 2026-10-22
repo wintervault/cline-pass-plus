@@ -95,9 +95,8 @@ describe('migrateConfig', () => {
       perModel: { 'cline-pass/x': { upstreams: ['deepseek'] } },
       failover: { budgetMs: 120000 },
     });
-    expect(r.raw.version).toBe(4);
+    expect(r.raw.version).toBe(CONFIG_VERSION);
     const gateway = (r.raw.gateways as Array<Record<string, unknown>>)[0];
-    expect(gateway?.id).toBe('main');
     expect(gateway?.port).toBe(4000);
     expect(gateway?.bindHost).toBe('0.0.0.0');
     expect(gateway?.proxyKey).toBe('sk_down');
@@ -109,7 +108,8 @@ describe('migrateConfig', () => {
     expect(gateway?.accountScope).toBe('all');
     expect(gateway?.accounts).toEqual([]);
     expect(gateway?.knownModels).toEqual(['cline-pass/x']);
-    expect(r.raw.console).toEqual({ gatewayId: 'main' });
+    // v5：控制台独立监听，远端密钥沿用原控制台网关
+    expect(r.raw.console).toEqual({ port: 3125, bindHost: '127.0.0.1', proxyKey: 'sk_down' });
     for (const key of [
       'port',
       'bindHost',
@@ -139,7 +139,7 @@ describe('migrateConfig', () => {
       ],
       console: { gatewayId: 'main' },
     });
-    expect(r.raw.version).toBe(4);
+    expect(r.raw.version).toBe(CONFIG_VERSION);
     expect(r.applied.join()).toContain('v3 → v4');
     expect(r.applied.join()).toContain('账号启用开关已移除');
     const gateways = r.raw.gateways as Array<Record<string, unknown>>;
@@ -150,6 +150,20 @@ describe('migrateConfig', () => {
     const accounts = r.raw.accounts as Array<Record<string, unknown>>;
     expect(accounts).toHaveLength(2);
     expect(accounts[1]?.['enabled']).toBeUndefined();
+  });
+
+  it('v4 → v5：控制台独立到 3125，网关端口保持不动', () => {
+    const r = migrateConfig({
+      version: 4,
+      accounts: [{ name: 'A', key: 'sk_a' }],
+      gateways: [{ id: 'main', port: 3123, proxyKey: 'sk_console' }],
+      console: { gatewayId: 'main' },
+    });
+    expect(r.raw.version).toBe(5);
+    expect(r.applied.join()).toContain('v4 → v5');
+    expect(r.raw.console).toEqual({ port: 3125, bindHost: '127.0.0.1', proxyKey: 'sk_console' });
+    // 已接入客户端的地址不能因为改布局而被悄悄改掉
+    expect((r.raw.gateways as Array<Record<string, unknown>>)[0]?.port).toBe(3123);
   });
 
   it('版本高于程序支持时抛 ConfigTooNewError', () => {
@@ -168,8 +182,9 @@ describe('loadConfig', () => {
     const r = await loadConfig(file);
     expect(r.fresh).toBe(true);
     expect(r.config.accounts).toEqual([]);
-    expect(r.config.gateways[0]?.port).toBe(3123);
-    expect(r.config.console.gatewayId).toBe('main');
+    expect(r.config.gateways[0]?.port).toBe(3126);
+    expect(r.config.console.port).toBe(3125);
+    expect(r.config.console.bindHost).toBe('127.0.0.1');
     expect(await listBackups()).toEqual([]);
   });
 
@@ -227,7 +242,7 @@ describe('loadConfig', () => {
     await write('[1,2,3]');
     const r = await loadConfig(file);
     expect(r.backupPath).not.toBeNull();
-    expect(r.config.gateways[0]?.port).toBe(3123);
+    expect(r.config.gateways[0]?.port).toBe(3126);
   });
 
   it('无效账号被丢弃，有效账号保留', async () => {
@@ -256,7 +271,7 @@ describe('loadConfig', () => {
     expect(r2.config.gateways[0]?.activeAccount).toBe('');
   });
 
-  it('版本迁移会被标记，写回后文件是 v3 且原文件有备份', async () => {
+  it('版本迁移会被标记，写回后文件是 v5 且原文件有备份', async () => {
     const v2 = {
       version: 2,
       port: 3123,
@@ -270,7 +285,7 @@ describe('loadConfig', () => {
 
     const backupPath = await persistConfigMigration(file, r.config, r.migrationFrom ?? 0);
     const written = await readBack();
-    expect(written['version']).toBe(4);
+    expect(written['version']).toBe(CONFIG_VERSION);
     expect((written['gateways'] as Array<Record<string, unknown>>)[0]?.['id']).toBe('main');
     expect(written['port']).toBeUndefined();
     expect(backupPath).not.toBeNull();
@@ -301,7 +316,7 @@ describe('loadConfig', () => {
   });
 
   it('字段级修正（未涉及版本）不会被标记为迁移', async () => {
-    await write(JSON.stringify({ version: 4, accounts: [{ name: 'A', key: '' }] }));
+    await write(JSON.stringify({ version: CONFIG_VERSION, accounts: [{ name: 'A', key: '' }] }));
     const r = await loadConfig(file);
     expect(r.migrationFrom).toBeNull();
   });

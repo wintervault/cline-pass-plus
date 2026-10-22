@@ -13,10 +13,12 @@ services:
     environment:
       - DATA_DIR=/data
       - BIND_HOST=0.0.0.0
+      - GATEWAY_BIND_HOST=0.0.0.0
     volumes:
       - ../data:/data
     expose:
-      - "3123"
+      - "3125"
+      - "3126"
 
   caddy:
     image: caddy:2-alpine

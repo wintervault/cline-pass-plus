@@ -1,11 +1,11 @@
 import { Readable } from 'node:stream';
 
 import type { AppContext } from '../../appContext.ts';
-import { gatewayById } from '../../config/derive.ts';
+import { gatewayAccountState, gatewayById } from '../../config/derive.ts';
 import { type ChainStream, sameSlug } from '../../proxy/chain.ts';
 import { RoutingTap } from '../../proxy/stream.ts';
 import { emptyRouting } from '../../upstream/routing.ts';
-import { gatewayModels } from '../../upstream/types.ts';
+import { accountModels, gatewayModels } from '../../upstream/types.ts';
 import { applySecurityHeaders, canRespond, sendError } from '../respond.ts';
 import type { Ctx, Handler } from '../router.ts';
 import { readJsonBody, recordHistory } from './api.ts';
@@ -67,6 +67,11 @@ export function chatHandler(ctx: AppContext, gatewayId: string): Handler {
     const runtime = ctx.gateways.get(gatewayId);
     if (!gateway || !runtime) return sendError(c.res, 503, 'gateway not available', 'gateway_error');
     const meta = gatewayModels(ctx.metaStore.value, gatewayId)[modelId];
+    const accountState = gatewayAccountState(
+      ctx.configStore.value,
+      gateway,
+      (name) => ctx.metaStore.value.accountClass[name]?.class ?? 'unknown',
+    );
     const isStream = payload.stream === true;
 
     const result = await runtime.chain.run({
@@ -74,6 +79,9 @@ export function chatHandler(ctx: AppContext, gatewayId: string): Handler {
       body: payload as Record<string, unknown>,
       cfg: gateway.perModel[modelId],
       meta,
+      /** 检测结论按账号取：注入与审计必须用「这次真正执行的账号」的观测。 */
+      accountMeta: (name) => accountModels(ctx.metaStore.value, name)[modelId],
+      emptyAccountsCode: accountState.code === 'empty_scope' ? 'accounts.emptyScope' : 'accounts.none',
       stream: isStream,
       clientSignal: c.abortSignal,
     });

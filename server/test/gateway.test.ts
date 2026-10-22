@@ -152,6 +152,8 @@ describe('网关 API', () => {
       configStore,
       metaStore,
       gateways: manager,
+      console: {} as AppContext['console'],
+      probe: {} as AppContext['probe'],
       classify: {} as AppContext['classify'],
       catalog: {} as AppContext['catalog'],
     };
@@ -160,7 +162,7 @@ describe('网关 API', () => {
     // 先让网关真正监听：status 才是 running（保存/删除会再次 reconcile）
     await manager.reconcile();
     const server = createHttpServer({
-      gatewayId: configStore.value.console.gatewayId,
+      gatewayId: 'console',
       handler: (c: Ctx) => {
         const route = router.resolve(c.method, c.path);
         if (!route) {
@@ -181,8 +183,7 @@ describe('网关 API', () => {
       defaultGateway({ id: 'main', port, proxyKey: 'sk_secret', knownModels: ['cline-pass/x'] }),
     ]);
     const res = await request(apiPort, '/api/gateways');
-    const body = res.json<{ gateways: Array<Record<string, unknown>>; consoleGatewayId: string }>();
-    expect(body.consoleGatewayId).toBe('main');
+    const body = res.json<{ gateways: Array<Record<string, unknown>> }>();
     const main = body.gateways[0];
     if (!main) throw new Error('缺少网关卡');
     expect(main?.['proxyKey']).toBeUndefined();
@@ -274,7 +275,7 @@ describe('网关 API', () => {
     expect(configStore.value.gateways[0]?.proxyKey).toBe('sk_new');
   });
 
-  it('删除：最后一个与控制台网关不可删，其它可删', async () => {
+  it('删除：只剩最后一个时拒绝，其它可删（控制台已独立）', async () => {
     const p1 = await freePort();
     const p2 = await freePort();
     const { port: apiPort, configStore } = await harness([
@@ -282,67 +283,28 @@ describe('网关 API', () => {
       defaultGateway({ id: 'other', port: p2 }),
     ]);
 
-    expect((await request(apiPort, '/api/gateways/delete', { method: 'POST', body: { id: 'main' } })).status).toBe(400);
-
-    const del = await request(apiPort, '/api/gateways/delete', { method: 'POST', body: { id: 'other' } });
+    const del = await request(apiPort, '/api/gateways/delete', { method: 'POST', body: { id: 'main' } });
     expect(del.status).toBe(200);
-    expect(configStore.value.gateways.map((g) => g.id)).toEqual(['main']);
+    expect(configStore.value.gateways.map((g) => g.id)).toEqual(['other']);
 
-    expect((await request(apiPort, '/api/gateways/delete', { method: 'POST', body: { id: 'main' } })).status).toBe(400);
+    expect((await request(apiPort, '/api/gateways/delete', { method: 'POST', body: { id: 'other' } })).status).toBe(
+      400,
+    );
   });
 
-  it('切换控制台网关', async () => {
+  it('任意网关都可以停用（包括原来的「主网关」）', async () => {
     const p1 = await freePort();
     const p2 = await freePort();
     const { port: apiPort, configStore } = await harness([
       defaultGateway({ id: 'main', port: p1 }),
       defaultGateway({ id: 'other', port: p2 }),
     ]);
-    const res = await request(apiPort, '/api/gateways/console', { method: 'POST', body: { id: 'other' } });
+    const res = await request(apiPort, '/api/gateways/save', {
+      method: 'POST',
+      body: { gateway: { id: 'main', enabled: false } },
+    });
     expect(res.status).toBe(200);
-    expect(configStore.value.console.gatewayId).toBe('other');
-    // 旧控制台网关现在可以删了
-    expect((await request(apiPort, '/api/gateways/delete', { method: 'POST', body: { id: 'main' } })).status).toBe(200);
-  });
-
-  it('不能把控制台切到没起来的网关（否则旧控制台一停就再也进不来）', async () => {
-    const p1 = await freePort();
-    const blocker = http.createServer((_req, res) => res.end('busy'));
-    const taken = await listen(blocker);
-    closers.push(taken.close);
-    const { port: apiPort, configStore } = await harness([
-      defaultGateway({ id: 'main', port: p1 }),
-      defaultGateway({ id: 'dead', port: taken.port }),
-    ]);
-    expect(configStore.value.console.gatewayId).toBe('main');
-
-    const res = await request(apiPort, '/api/gateways/console', { method: 'POST', body: { id: 'dead' } });
-    expect(res.status).toBe(409);
-    expect(res.json<{ error: { code?: string } }>().error.code).toBe('gateway.notRunning');
-    expect(configStore.value.console.gatewayId).toBe('main');
-  });
-
-  it('桌面壳固定 PORT 时，切控制台会交换端口并返回真实的新地址', async () => {
-    const p1 = await freePort();
-    const p2 = await freePort();
-    const { port: apiPort, configStore } = await harness([
-      defaultGateway({ id: 'main', port: p1 }),
-      defaultGateway({ id: 'other', port: p2 }),
-    ]);
-    const previous = process.env['PORT'];
-    process.env['PORT'] = String(p1);
-    try {
-      const res = await request(apiPort, '/api/gateways/console', { method: 'POST', body: { id: 'other' } });
-      expect(res.status).toBe(200);
-      expect(configStore.value.console.gatewayId).toBe('other');
-      // 新控制台接管壳固定的端口，原控制台网关接管它的旧端口
-      expect(configStore.value.gateways.find((g) => g.id === 'other')?.port).toBe(p1);
-      expect(configStore.value.gateways.find((g) => g.id === 'main')?.port).toBe(p2);
-      expect(res.json<{ consoleUrl: string }>().consoleUrl).toBe(`http://127.0.0.1:${p1}`);
-    } finally {
-      if (previous === undefined) delete process.env['PORT'];
-      else process.env['PORT'] = previous;
-    }
+    expect(configStore.value.gateways.find((g) => g.id === 'main')?.enabled).toBe(false);
   });
 
   it('网关启用开关：停用后 listener 关闭、状态变为 disabled，可再启用', async () => {
@@ -378,21 +340,6 @@ describe('网关 API', () => {
         }>()
         .gateways.find((g) => g.id === 'other')?.status.state,
     ).toBe('running');
-  });
-
-  it('控制台网关不能被停用（否则控制台再也进不去）', async () => {
-    const p1 = await freePort();
-    const p2 = await freePort();
-    const { port: apiPort } = await harness([
-      defaultGateway({ id: 'main', port: p1 }),
-      defaultGateway({ id: 'other', port: p2 }),
-    ]);
-    const res = await request(apiPort, '/api/gateways/save', {
-      method: 'POST',
-      body: { gateway: { id: 'main', enabled: false } },
-    });
-    expect(res.status).toBe(409);
-    expect(res.json<{ error: { code?: string } }>().error.code).toBe('gateway.consoleDisabled');
   });
 
   it('账号改名 / 删除会同步迁移 gateway.accountOrder（粘性优先级不丢）', async () => {
@@ -451,11 +398,15 @@ describe('网关 API', () => {
       body: { gateway: { id: 'main', accountScope: 'normal' } },
     });
     expect(configStore.value.gateways[0]?.accountScope).toBe('normal');
-    const meta = await request(apiPort, '/api/meta');
-    expect(meta.json<{ configured: boolean }>().configured).toBe(true);
+    // 账号状态由网关视图给出：范围内有正常号 → ok（不再用「configured 布尔」误报）
+    const list = await request(apiPort, '/api/gateways');
+    expect(
+      list.json<{ gateways: Array<{ id: string; accountState: { code: string; inScope: number } }> }>().gateways[0]
+        ?.accountState,
+    ).toMatchObject({ code: 'ok', inScope: 1 });
   });
 
-  it('模型清单按网关隔离（/api/models?gateway=）', async () => {
+  it('模型清单取所有网关的并集（检测与网关解耦）', async () => {
     const p1 = await freePort();
     const p2 = await freePort();
     const { port: apiPort, ctx } = await harness([
@@ -467,8 +418,15 @@ describe('网关 API', () => {
 
     const a = await request(apiPort, '/api/models?gateway=main');
     const b = await request(apiPort, '/api/models?gateway=risk');
-    expect(a.json<{ subscription: Array<{ id: string }> }>().subscription.map((r) => r.id)).toEqual(['cline-pass/a']);
-    expect(b.json<{ subscription: Array<{ id: string }> }>().subscription.map((r) => r.id)).toEqual(['cline-pass/b']);
+    // 检测页不再按网关裁剪模型清单：两个入口都应看到并集
+    expect(a.json<{ subscription: Array<{ id: string }> }>().subscription.map((r) => r.id)).toEqual([
+      'cline-pass/a',
+      'cline-pass/b',
+    ]);
+    expect(b.json<{ subscription: Array<{ id: string }> }>().subscription.map((r) => r.id)).toEqual([
+      'cline-pass/a',
+      'cline-pass/b',
+    ]);
 
     const unknown = await request(apiPort, '/api/models?gateway=nope');
     expect(unknown.status).toBe(404);

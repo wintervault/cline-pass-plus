@@ -83,6 +83,8 @@ async function harness(
       reconcile: async () => {},
       closeAll: async () => {},
     } as unknown as AppContext['gateways'],
+    console: {} as AppContext['console'],
+    probe: {} as AppContext['probe'],
     classify,
     catalog: {} as AppContext['catalog'],
   };

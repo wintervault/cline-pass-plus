@@ -61,13 +61,16 @@ Installers live on the [Releases](../../releases/latest) page. Pick the package 
    service is ready; on Linux, launch it from the app menu.
 2. **Add an account.** Open **Accounts** → **Add account** and paste a Cline Pass `sk_` key.
    Opening the console locally does not require an extra key.
-3. **Probe and pin.** In **Models**, select a model → **Probe channels** → **Validate** →
-   check and order the channels you want. **Playground** can send a minimal request to
-   confirm the actual provider.
+3. **Probe and pin.** In **Models**, select the account to inspect → **Probe channels** →
+   **Validate** → check and order the channels you want. **Playground** can send a minimal
+   request as that account to confirm the actual provider.
 4. **Connect a client.** On the **Gateways** page, copy the endpoint (default
-   `http://127.0.0.1:3123/v1`). Set a downstream API key in the gateway settings if you need
-   authentication; it is never displayed again, so reset it if forgotten. Use the endpoint
-   and key in Cline or any OpenAI-compatible client.
+   `http://127.0.0.1:3126/v1`). Set a downstream API key in the gateway settings if you need
+   authentication; it is never displayed again, so reset it if forgotten. The console itself
+   lives at `http://127.0.0.1:3125/` and is independent of every gateway: disabling or
+   deleting one never takes the console down.
+5. **Optional.** In **Settings**, enable start-at-login (desktop app) or adjust the console
+   port, bind address and remote access key.
 
 > Data: `%APPDATA%\com.wintervault.clinepass` for the Windows installer,
 > `~/.local/share/com.wintervault.clinepass` on Linux. If a `data/` directory exists next
@@ -77,20 +80,23 @@ Installers live on the [Releases](../../releases/latest) page. Pick the package 
 
 ## Capabilities
 
-- **Channel visibility**: probe the real upstreams behind subscription models and validate
-  each channel. The actual route is written back to Playground and request history.
+- **Channel visibility**: probe the real upstreams behind subscription models **per account**
+  and validate each channel. Results only apply to the account that ran the probe, so two
+  accounts never overwrite each other. The actual route is written back to Playground and
+  request history.
 - **Precise pinning**: separate injection for the planner and direct pipelines. Strict mode
   only uses the listed channels; preferred mode lets only the last candidate fall back to
-  the gateway's own choice.
+  the gateway's own choice. Pinning belongs to the gateway; detection belongs to the account.
 - **Failover**: errors are classified as account-level, channel-level, or request-level.
   Failing channels sink to the bottom of the list instead of being removed; a global budget
   caps total failover time.
 - **Account policies**: sticky (preserves prompt cache), single account, or round-robin,
   with per-gateway account scope (all / normal / risk-flagged / custom) and order.
 - **Multiple gateways**: one process can expose several endpoints with independent ports,
-  keys, model lists, and routing policies. The console is served by one of them.
+  keys, model lists, and routing policies. **The console has its own listener** (3125 by
+  default), so a gateway that fails to bind, is disabled, or is deleted never affects it.
 - **Local-first**: the console is keyless on the local machine; remote console access and
-  `/v1/*` are protected by gateway API keys. Account keys are returned as masks only,
+  `/v1/*` are protected by separate keys. Account keys are returned as masks only,
   gateway keys only as "set / not set", and logs are redacted.
 - **Inspectable**: request history records the actual provider, latency, and every attempt;
   Playground shows the candidate order and result step by step.
@@ -103,12 +109,14 @@ Installers live on the [Releases](../../releases/latest) page. Pick the package 
 Cline / OpenAI-compatible endpoint
         │  /v1/chat/completions
         ▼
-  Cline Pass+ ── gateway (port / key / policy)
-        │                    │
-        │                    ├── account pool (sticky / round-robin / scope)
-        │                    └── channel candidates (pin / exclude / cooldown)
-        ▼
-   Cline upstream gateway (api.cline.bot)
+  Cline Pass+ ── console (dedicated listener on 3125)
+        │
+        └── gateway (3126+: port / key / policy)
+                    │
+                    ├── account pool (sticky / round-robin / scope)
+                    └── channel candidates (pin / exclude / cooldown)
+                    ▼
+           Cline upstream gateway (api.cline.bot)
 ```
 
 - **Non-stream requests stream internally**: when a client asks for `stream: false`, the
@@ -123,30 +131,31 @@ Cline / OpenAI-compatible endpoint
 
 ## Configuration
 
-The config file is `config.json` (version 4). Minimal shape:
+The config file is `config.json` (version 5). Minimal shape:
 
 ```json
 {
-  "version": 4,
+  "version": 5,
   "accounts": [{ "name": "primary", "key": "sk_..." }],
-  "gateways": [{ "id": "main", "name": "Main", "port": 3123 }],
-  "console": { "gatewayId": "main" }
+  "gateways": [{ "id": "main", "name": "Main", "port": 3126 }],
+  "console": { "port": 3125, "bindHost": "127.0.0.1", "proxyKey": "" }
 }
 ```
 
 Missing fields are filled in by the schema. See [`config.example.json`](config.example.json)
-for the full example.
+for the full example. The console `proxyKey` only guards **remote** console access (local
+access is always keyless); each gateway's `proxyKey` only guards that gateway's `/v1`.
 
 ---
 
 ## Security and privacy
 
 - **Keys**: `config.json` contains upstream keys in plaintext. The console API returns only
-  a mask and the last four characters for accounts, and only "set / not set" for gateway
-  keys. Logs redact keys and `Authorization`.
+  a mask and the last four characters for accounts, and only "set / not set" for gateway and
+  console keys. Logs redact keys and `Authorization`.
 - **Local console is keyless**: access is treated as local only when both the peer address
-  and the `Host` resolve to loopback. Remote console access and `/v1/*` use gateway-level
-  API keys.
+  and the `Host` resolve to loopback. Remote console access uses the console's own key;
+  `/v1/*` uses each gateway's key — the two are not interchangeable.
 - **No telemetry**: no usage data is uploaded. Account keys are sent only to the Cline
   upstream you configure. OpenRouter catalog requests carry no key.
 - **Local data**: request history stores the model, provider, latency, and an error summary;

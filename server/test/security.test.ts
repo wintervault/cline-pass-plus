@@ -57,9 +57,10 @@ describe('maskSecret', () => {
   });
 });
 
-describe('assertBindSafe（逐网关）', () => {
+describe('assertBindSafe（逐网关 + 控制台）', () => {
   const cfgWith = (bindHost: string, proxyKey: string) => ({
     gateways: [{ ...defaultGateway(), bindHost, proxyKey }],
+    console: { port: 3125, bindHost: '127.0.0.1', proxyKey: '' },
   });
 
   it('回环绑定无密钥 → 放行（本地自用）', () => {
@@ -75,6 +76,16 @@ describe('assertBindSafe（逐网关）', () => {
     expect(() => assertBindSafe(cfgWith('pass.example.com', ''), {})).toThrow(InsecureBindError);
   });
 
+  it('控制台绑定非回环地址且无密钥 → 同样拒绝', () => {
+    const cfg = { gateways: [{ ...defaultGateway(), bindHost: '127.0.0.1', proxyKey: '' }] };
+    expect(() => assertBindSafe({ ...cfg, console: { port: 3125, bindHost: '0.0.0.0', proxyKey: '' } }, {})).toThrow(
+      InsecureBindError,
+    );
+    expect(() =>
+      assertBindSafe({ ...cfg, console: { port: 3125, bindHost: '0.0.0.0', proxyKey: 'sk_console' } }, {}),
+    ).not.toThrow();
+  });
+
   it('报错信息给出可执行的修复方式', () => {
     try {
       assertBindSafe(cfgWith('0.0.0.0', ''), {});
@@ -82,7 +93,7 @@ describe('assertBindSafe（逐网关）', () => {
     } catch (err) {
       const message = (err as Error).message;
       expect(message).toContain('网关');
-      expect(message).toContain('BIND_HOST=127.0.0.1');
+      expect(message).toContain('GATEWAY_BIND_HOST=127.0.0.1');
       expect(message).toContain('ALLOW_INSECURE_BIND=1');
     }
   });
@@ -103,7 +114,7 @@ describe('applyEnvOverrides', () => {
     expect(cfg.accounts).toHaveLength(1);
   });
 
-  it('PROXY_KEY / PUBLIC_BASE_URL / PORT / BIND_HOST 覆盖生效', () => {
+  it('PROXY_KEY→网关、PORT/BIND_HOST→控制台', () => {
     const cfg = defaultConfig();
     applyEnvOverrides(cfg, {
       PROXY_KEY: 'sk_down',
@@ -114,26 +125,38 @@ describe('applyEnvOverrides', () => {
     const gateway = cfg.gateways[0];
     expect(gateway?.proxyKey).toBe('sk_down');
     expect(gateway?.publicBaseUrl).toBe('https://pass.example.com'); // 去掉尾斜杠
-    expect(gateway?.port).toBe(8080);
-    expect(gateway?.bindHost).toBe('0.0.0.0');
+    // 控制台是独立监听：PORT/BIND_HOST 不再改网关
+    expect(gateway?.port).toBe(3126);
+    expect(gateway?.bindHost).toBe('127.0.0.1');
+    expect(cfg.console.port).toBe(8080);
+    expect(cfg.console.bindHost).toBe('0.0.0.0');
+    // 兼容旧部署：控制台密钥为空时沿用 PROXY_KEY
+    expect(cfg.console.proxyKey).toBe('sk_down');
   });
 
-  it('PORT 与别的网关冲突时交换端口（桌面壳固定 3123 的场景）', () => {
+  it('CONSOLE_KEY 单独覆盖控制台密钥，GATEWAY_BIND_HOST 覆盖所有网关', () => {
     const cfg = defaultConfig();
-    cfg.gateways = [defaultGateway({ id: 'main', port: 3123 }), defaultGateway({ id: 'risk', port: 3124 })];
-    cfg.console.gatewayId = 'risk';
-    const notes = applyEnvOverrides(cfg, { PORT: '3123' });
-    expect(cfg.gateways.find((g) => g.id === 'risk')?.port).toBe(3123);
-    expect(cfg.gateways.find((g) => g.id === 'main')?.port).toBe(3124);
-    expect(notes.join()).toContain('交换端口');
+    cfg.gateways.push(defaultGateway({ id: 'risk', port: 3127 }));
+    applyEnvOverrides(cfg, { PROXY_KEY: 'sk_down', CONSOLE_KEY: 'sk_console', GATEWAY_BIND_HOST: '0.0.0.0' });
+    expect(cfg.console.proxyKey).toBe('sk_console');
+    expect(cfg.gateways.every((g) => g.bindHost === '0.0.0.0')).toBe(true);
+  });
+
+  it('PORT 只改控制台，不再与网关交换端口', () => {
+    const cfg = defaultConfig();
+    cfg.gateways = [defaultGateway({ id: 'main', port: 3126 }), defaultGateway({ id: 'risk', port: 3127 })];
+    const notes = applyEnvOverrides(cfg, { PORT: '3125' });
+    expect(cfg.console.port).toBe(3125);
+    expect(cfg.gateways.map((g) => g.port)).toEqual([3126, 3127]);
+    expect(notes.join()).not.toContain('交换端口');
   });
 
   it('非法 PORT 被忽略', () => {
     const cfg = defaultConfig();
     applyEnvOverrides(cfg, { PORT: 'abc' });
-    expect(cfg.gateways[0]?.port).toBe(3123);
+    expect(cfg.console.port).toBe(3125);
     applyEnvOverrides(cfg, { PORT: '99999' });
-    expect(cfg.gateways[0]?.port).toBe(3123);
+    expect(cfg.console.port).toBe(3125);
   });
 });
 
@@ -186,7 +209,7 @@ describe('derive', () => {
 
   it('gatewayProxyBase 优先用 publicBaseUrl，否则按绑定地址推导', () => {
     const gateway = defaultGateway();
-    expect(gatewayProxyBase(gateway)).toBe('http://127.0.0.1:3123/v1');
+    expect(gatewayProxyBase(gateway)).toBe('http://127.0.0.1:3126/v1');
     expect(gatewayProxyBase({ ...gateway, publicBaseUrl: 'https://pass.example.com/' })).toBe(
       'https://pass.example.com/v1',
     );

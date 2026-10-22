@@ -1,5 +1,5 @@
 import { uniqueAccountNames } from '../accounts/naming.ts';
-import { CONFIG_VERSION } from './schema.ts';
+import { CONFIG_VERSION, DEFAULT_CONSOLE_PORT } from './schema.ts';
 
 /** 配置文件版本高于本程序支持的版本——拒绝启动，否则会把新版配置改坏。 */
 export class ConfigTooNewError extends Error {
@@ -140,6 +140,26 @@ export function migrateConfig(input: Record<string, unknown>): MigrationResult {
     if (disabled.length) {
       applied.push(`账号启用开关已移除，以下账号改为启用：${disabled.join('、')}（如需排除请在网关里设置账号范围）`);
     }
+  }
+
+  if (from < 5) {
+    // ---- v4 → v5：控制台从网关里独立出来 ----
+    // 旧版控制台挂在 console.gatewayId 指向的网关上，该网关因此不能被停用/删除，
+    // 而且它绑不上时控制台一起不可达。现在控制台有自己的监听目标。
+    //
+    // 网关端口**保持原值**：用户可能已经把 3123 填进了 Cline，不能为了改布局而
+    // 悄悄改掉接入地址。新网关的默认端口从 3126 起（见 DEFAULT_GATEWAY_PORT）。
+    const oldConsole = isPlainObject(raw.console) ? raw.console : {};
+    const oldConsoleId = typeof oldConsole['gatewayId'] === 'string' ? oldConsole['gatewayId'] : '';
+    const gateways = Array.isArray(raw.gateways) ? raw.gateways.filter(isPlainObject) : [];
+    const donor = gateways.find((g) => g['id'] === oldConsoleId) ?? gateways[0];
+    // 复制旧控制台网关的密钥：远端用户升级后不会因为「换了一把钥匙」而进不去控制台。
+    const proxyKey = donor && typeof donor['proxyKey'] === 'string' ? donor['proxyKey'] : '';
+    raw.console = { port: DEFAULT_CONSOLE_PORT, bindHost: '127.0.0.1', proxyKey };
+    raw.version = 5;
+    applied.push(
+      `配置格式 v4 → v5：控制台改为独立监听 ${DEFAULT_CONSOLE_PORT}（仍可本机免密钥访问；远端访问密钥沿用原控制台网关）`,
+    );
   }
 
   return { raw, applied };

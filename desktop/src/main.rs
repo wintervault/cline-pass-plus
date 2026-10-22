@@ -13,7 +13,7 @@
 //!    启动方式与平常的桌面软件一致：双击图标就打开控制台（服务先就绪再开窗）。
 //!
 //! **控制通道走 HTTP，不走 Tauri IPC**（2.9.2 的根因修复，别再改回去）：
-//! 控制台页面是 `WebviewUrl::External("http://127.0.0.1:3123/")`。对外部 URL，
+//! 控制台页面是 `WebviewUrl::External("http://127.0.0.1:3125/")`。对外部 URL，
 //! Tauri 默认不注入 `window.__TAURI_INTERNALS__`，且新版对「非本地来源」强制执行 ACL、
 //! 未声明 remote capability 的自定义命令会被直接拒绝（tauri-apps/tauri#4837、#15190）。
 //! 页面里的 `cpsHost` 因此永远拿不到结果，UI 只能把每次失败当成「已停止」，
@@ -34,19 +34,23 @@ use std::time::{Duration, Instant};
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri_plugin_autostart::ManagerExt as AutostartExt;
 
 mod platform;
 
-const PORT: u16 = 3123;
+/// 控制台端口（2.1 起独立于网关）：网关默认从 3126 起。
+const PORT: u16 = 3125;
+/// 开机自启时使用的命令行参数：由 autostart 插件写入注册项，启动时据此只驻留托盘。
+const AUTOSTART_ARG: &str = "--autostart";
 /// 控制端口：壳自己的回环 HTTP 服务，页面据此启停服务。固定端口便于诊断（curl 可直连）；
 /// 被占用时退回系统分配端口（罕见路径，端口会通过注入脚本告诉页面）。
 const CONTROL_PORT: u16 = 3122;
 /// 允许调用控制通道的来源：**只有控制台自己**。
 ///
-/// 为什么必须放行：控制台在 3123、控制通道在 3122，对浏览器而言是跨源请求，
+/// 为什么必须放行：控制台在 3125、控制通道在 3122，对浏览器而言是跨源请求，
 /// 一定带 Origin/Referer；一律拒绝的话页面自己也被挡在门外——这正是「按钮点了没反应」
 /// 的最后一层原因。放行之后仍然安全：别的网页 Origin/Referer 不是这个值，照旧 403。
-const CONSOLE_ORIGIN: &str = "http://127.0.0.1:3123";
+const CONSOLE_ORIGIN: &str = "http://127.0.0.1:3125";
 const HEALTHZ_TIMEOUT: Duration = Duration::from_secs(25);
 const GRACEFUL_STOP: Duration = Duration::from_secs(8);
 const LOG_ROTATE_BYTES: u64 = 8 * 1024 * 1024;
@@ -117,7 +121,13 @@ impl ServerState {
 
 fn main() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        .plugin(tauri_plugin_autostart::Builder::new().args([AUTOSTART_ARG]).build())
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            // 开机自启触发的第二次启动：系统登录时可能已经有一个实例在跑，
+            // 此时不该把窗口抢到前台（用户刚登录，并不想看到这个窗口）。
+            if args.iter().any(|a| a == AUTOSTART_ARG) {
+                return;
+            }
             // 二次启动 = 用户又双击了一次图标/快捷方式 → 把已经开着的窗口叫到前面来。
             // （冷启动自己就会开窗，见下面的启动线程；这里只管「已经在跑」的那种。）
             let state = app.state::<Arc<ServerState>>();
@@ -125,6 +135,7 @@ fn main() {
             show_main(app);
         }))
         .setup(|app| {
+            let autostart_launch = std::env::args().any(|a| a == AUTOSTART_ARG);
             let (data_dir, portable) = resolve_data_dir(app.handle());
             let log_dir = data_dir.join("logs");
             platform::ensure_private_dir(&log_dir)?;
@@ -164,8 +175,8 @@ fn main() {
             }
 
             // 启动即打开控制台：跟平常的桌面软件一样，双击图标就该看到界面。
-            // 先等服务就绪再开窗（约半秒），用户不会看到 webview 的连接错误页；
-            // 窗口本身在隐藏状态下构建、一次性 show，也不会闪白。
+            // 例外：开机自启（--autostart）只把服务拉起来并驻留托盘，不弹窗——
+            // 用户登录系统时并不期待一个窗口跳出来。
             std::thread::spawn(move || {
                 let state = handle.state::<Arc<ServerState>>();
                 if let Err(err) = spawn_server(&state) {
@@ -178,7 +189,12 @@ fn main() {
                     state.log("[壳] 服务未能就绪：未开窗，可从托盘「打开控制台」重试");
                     return;
                 }
-                state.log(&format!("[壳] 服务就绪（{}ms），打开控制台", started.elapsed().as_millis()));
+                state.log(&format!("[壳] 服务就绪（{}ms）", started.elapsed().as_millis()));
+                if autostart_launch {
+                    state.log("[壳] 本次由开机自启触发：驻留托盘，不打开窗口");
+                    return;
+                }
+                state.log("[壳] 打开控制台");
                 // 窗口操作交给主线程执行（std::thread 里不能直接建窗）
                 let app = handle.clone();
                 let _ = handle.run_on_main_thread(move || show_main(&app));
@@ -242,6 +258,9 @@ const BRIDGE_SCRIPT: &str = r#"(() => {
     restart: () => call('/host/restart', 'POST'),
     log: () => call('/host/log'),
     openLogs: async () => { await call('/host/open-logs', 'POST'); },
+    autostart: () => call('/host/autostart'),
+    setAutostart: (enabled) => call('/host/autostart?enable=' + (enabled ? '1' : '0'), 'POST'),
+    info: () => call('/host/info'),
 
     // 自绘标题栏：窗口控制与拖动。
     // 拖动没有走 data-tauri-drag-region（外部 URL 下 Tauri 不注入其脚本），
@@ -317,7 +336,7 @@ fn handle_control(stream: TcpStream, state: &Arc<ServerState>) {
 
     // ---- 来源闸门 ----
     // 无 Origin：非浏览器客户端（curl、托盘自身、脚本）→ 放行。
-    // 有 Origin/Referer：必须是控制台页面自己（它在 3123，控制通道在 3122，属跨源），
+    // 有 Origin/Referer：必须是控制台页面自己（它在 3125，控制通道在 3122，属跨源），
     // 否则 403——任意网页都无法越权启停服务。
     let mut origin: Option<String> = None;
     let mut referer: Option<String> = None;
@@ -354,8 +373,31 @@ fn dispatch_control(method: &str, path: &str, state: &Arc<ServerState>) -> (u16,
         Some((p, q)) => (p, Some(q.to_string())),
         None => (path, None),
     };
+    // 开机自启是「读/写同一条路由」：GET 查状态，POST 设置。
+    if route == "/host/autostart" {
+        let manager = state.app.autolaunch();
+        match method {
+            "GET" => match manager.is_enabled() {
+                Ok(enabled) => return (200, format!("{{\"enabled\":{enabled}}}")),
+                Err(err) => return (500, format!("{{\"error\":{}}}", json_string(&err.to_string()))),
+            },
+            "POST" => {
+                let enable = query_param(query.as_deref().unwrap_or(""), "enable").as_deref() == Some("1");
+                let result = if enable { manager.enable() } else { manager.disable() };
+                if let Err(err) = result {
+                    return (500, format!("{{\"error\":{}}}", json_string(&err.to_string())));
+                }
+                return match manager.is_enabled() {
+                    Ok(enabled) => (200, format!("{{\"enabled\":{enabled}}}")),
+                    Err(err) => (500, format!("{{\"error\":{}}}", json_string(&err.to_string()))),
+                };
+            }
+            _ => return (405, "{\"error\":\"method not allowed\"}".into()),
+        }
+    }
+
     let expected = match route {
-        "/host/status" | "/host/log" => "GET",
+        "/host/status" | "/host/log" | "/host/info" => "GET",
         "/host/start" | "/host/stop" | "/host/restart" | "/host/open-logs" | "/host/window" | "/host/drag" => "POST",
         _ => return (404, "{\"error\":\"no such control route\"}".into()),
     };
@@ -364,6 +406,15 @@ fn dispatch_control(method: &str, path: &str, state: &Arc<ServerState>) -> (u16,
     }
     match route {
         "/host/status" => (200, control_status(state)),
+        "/host/info" => (
+            200,
+            format!(
+                "{{\"version\":{},\"dataDir\":{},\"logDir\":{}}}",
+                json_string(env!("CARGO_PKG_VERSION")),
+                json_string(&state.data_dir.display().to_string()),
+                json_string(&state.log_dir.display().to_string()),
+            ),
+        ),
         "/host/start" => {
             if let Err(err) = spawn_server(state) {
                 state.set_state(SvcState::Error(err.clone()));

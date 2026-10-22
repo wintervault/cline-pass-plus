@@ -1,11 +1,4 @@
-import {
-  ArrowDownOutlined,
-  ArrowUpOutlined,
-  DeleteOutlined,
-  EditOutlined,
-  PlusOutlined,
-  StarOutlined,
-} from '@ant-design/icons';
+import { ArrowDownOutlined, ArrowUpOutlined, DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
 import {
   Alert,
   Button,
@@ -25,7 +18,7 @@ import {
 } from 'antd';
 import { useState } from 'react';
 
-import { useAccounts, useDeleteGateway, useGateways, useSaveGateway, useSetConsoleGateway } from '../api/hooks.ts';
+import { useAccounts, useDeleteGateway, useGateways, useMeta, useSaveGateway } from '../api/hooks.ts';
 import type { AccountMode, AccountScope, FailoverConfig, GatewayView } from '../api/types.ts';
 import { useFeedback } from '../feedback.ts';
 import { type MsgKey, useI18n } from '../i18n/index.tsx';
@@ -191,20 +184,23 @@ function draftOf(gateway: GatewayView): Draft {
   };
 }
 
-/** 从 3124 起找一个没有被现有网关占用的端口（保存时服务端还会再校验一次）。 */
-function nextFreePort(used: number[]): number {
-  const taken = new Set([3122, ...used]);
-  let port = 3124;
+/**
+ * 从 3126 起找一个没有被现有网关占用的端口（保存时服务端还会再校验一次）。
+ * 3122 = 桌面壳控制通道，3125 = 控制台（独立监听），都要跳过。
+ */
+function nextFreePort(used: number[], consolePort: number): number {
+  const taken = new Set([3122, consolePort, ...used]);
+  let port = 3126;
   while (taken.has(port) && port < 65535) port += 1;
   return port;
 }
 
-function emptyDraft(usedPorts: number[]): Draft {
+function emptyDraft(usedPorts: number[], consolePort: number): Draft {
   return {
     created: true,
     id: makeGatewayId(),
     name: '',
-    port: nextFreePort(usedPorts),
+    port: nextFreePort(usedPorts, consolePort),
     bindHost: '127.0.0.1',
     proxyKey: '',
     clearKey: false,
@@ -230,18 +226,14 @@ function emptyDraft(usedPorts: number[]): Draft {
 /** 一个网关的列表行。 */
 function GatewayRow({
   gateway,
-  isConsole,
   busy,
   onEdit,
-  onSetConsole,
   onToggle,
   onDelete,
 }: {
   gateway: GatewayView;
-  isConsole: boolean;
   busy: boolean;
   onEdit: () => void;
-  onSetConsole: () => void;
   onToggle: (enabled: boolean) => void;
   onDelete: () => void;
 }) {
@@ -253,19 +245,31 @@ function GatewayRow({
         <div style={{ flex: 1, minWidth: 0, display: 'grid', gap: 6 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <Typography.Text strong>{gateway.name}</Typography.Text>
-            {isConsole && (
-              <Tooltip title={t('gateways.console.tip')}>
-                <Tag color="blue" style={{ margin: 0 }}>
-                  {t('gateways.console.badge')}
-                </Tag>
-              </Tooltip>
-            )}
             <Tooltip title={gateway.status.error ?? undefined}>
               <Tag color={state.color} style={{ margin: 0 }}>
                 {t(state.labelKey)}
                 {gateway.status.state === 'running' && gateway.status.boundPort ? ` :${gateway.status.boundPort}` : ''}
               </Tag>
             </Tooltip>
+            {gateway.accountState.code === 'empty_scope' && gateway.status.state !== 'disabled' && (
+              <Tooltip
+                title={t('gateways.accountState.empty_scope.tip', {
+                  inScope: gateway.accountState.inScope,
+                  total: gateway.accountState.usableTotal,
+                })}
+              >
+                <Tag color="warning" style={{ margin: 0 }}>
+                  {t('gateways.accountState.empty_scope')}
+                </Tag>
+              </Tooltip>
+            )}
+            {gateway.accountState.code === 'no_accounts' && gateway.status.state !== 'disabled' && (
+              <Tooltip title={t('gateways.accountState.no_accounts.tip')}>
+                <Tag color="warning" style={{ margin: 0 }}>
+                  {t('gateways.accountState.no_accounts')}
+                </Tag>
+              </Tooltip>
+            )}
             {gateway.status.state === 'error' && (
               <Typography.Text type="danger" style={{ fontSize: 12 }} ellipsis={{ tooltip: gateway.status.error }}>
                 {gateway.status.error}
@@ -293,39 +297,23 @@ function GatewayRow({
         </div>
 
         <Space size={6}>
-          <Tooltip
-            title={
-              isConsole
-                ? t('gateways.action.toggle.consoleLocked')
-                : gateway.enabled === false
-                  ? t('gateways.action.enable')
-                  : t('gateways.action.disable')
-            }
-          >
+          <Tooltip title={gateway.enabled === false ? t('gateways.action.enable') : t('gateways.action.disable')}>
             <Switch
               size="small"
               checked={gateway.enabled !== false}
               loading={busy}
-              disabled={isConsole}
               aria-label={t('gateways.action.toggle')}
               onChange={(v) => onToggle(v)}
             />
           </Tooltip>
-          {!isConsole && (
-            <Tooltip title={t('gateways.action.console')}>
-              <Button size="small" type="text" disabled={busy} icon={<StarOutlined />} onClick={onSetConsole}>
-                {t('gateways.action.console.short')}
-              </Button>
-            </Tooltip>
-          )}
           <Tooltip title={t('gateways.action.edit')}>
             <Button size="small" type="text" icon={<EditOutlined />} aria-label={t('common.edit')} onClick={onEdit} />
           </Tooltip>
           <Popconfirm
             title={t('gateways.delete.title', { name: gateway.name })}
-            description={isConsole ? t('gateways.delete.consoleDesc') : t('gateways.delete.desc')}
+            description={t('gateways.delete.desc')}
             okText={t('common.delete')}
-            okButtonProps={{ danger: true, disabled: isConsole }}
+            okButtonProps={{ danger: true }}
             cancelText={t('common.cancel')}
             onConfirm={onDelete}
           >
@@ -333,7 +321,6 @@ function GatewayRow({
               size="small"
               type="text"
               danger
-              disabled={isConsole}
               icon={<DeleteOutlined />}
               aria-label={t('gateways.action.delete')}
             />
@@ -348,16 +335,16 @@ export default function Gateways() {
   const { t } = useI18n();
   const gateways = useGateways();
   const accounts = useAccounts();
+  const meta = useMeta();
   const save = useSaveGateway();
   const remove = useDeleteGateway();
-  const setConsole = useSetConsoleGateway();
   const fb = useFeedback();
   const [draft, setDraft] = useState<Draft | null>(null);
   /** 默认 / 高级：偏好存本地，切换即时生效。 */
   const [advanced, setAdvanced] = useState(() => localStorage.getItem(ADVANCED_KEY) === '1');
 
   const list = gateways.data?.gateways ?? [];
-  const consoleId = gateways.data?.consoleGatewayId ?? 'main';
+  const consolePort = meta.data?.console.port ?? 3125;
   const maxGateways = gateways.data?.maxGateways ?? 8;
   const hasMain = list.some((g) => g.id === 'main');
   const accountNames = (accounts.data?.accounts ?? []).map((a) => a.name);
@@ -466,7 +453,14 @@ export default function Gateways() {
               type="primary"
               icon={<PlusOutlined />}
               disabled={list.length >= maxGateways}
-              onClick={() => setDraft(emptyDraft(list.map((g) => g.port)))}
+              onClick={() =>
+                setDraft(
+                  emptyDraft(
+                    list.map((g) => g.port),
+                    consolePort,
+                  ),
+                )
+              }
             >
               {t('gateways.create')}
             </Button>
@@ -502,16 +496,8 @@ export default function Gateways() {
               <GatewayRow
                 key={gateway.id}
                 gateway={gateway}
-                isConsole={gateway.id === consoleId}
-                busy={save.isPending || remove.isPending || setConsole.isPending}
+                busy={save.isPending || remove.isPending}
                 onEdit={() => setDraft(draftOf(gateway))}
-                onSetConsole={() =>
-                  setConsole.mutate({
-                    id: gateway.id,
-                    name: gateway.name,
-                    url: gateway.proxyBase.replace(/\/v1\/?$/, ''),
-                  })
-                }
                 onToggle={(enabled) =>
                   save.mutate({
                     gateway: { id: gateway.id, enabled },

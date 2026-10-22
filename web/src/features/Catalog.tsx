@@ -1,10 +1,9 @@
 import { SearchOutlined } from '@ant-design/icons';
-import { Alert, App, Button, Empty, Input, Skeleton, Space, Table, Tag, Tooltip, Typography } from 'antd';
+import { Alert, App, Button, Empty, Input, Select, Skeleton, Space, Table, Tag, Tooltip, Typography } from 'antd';
 import { useState } from 'react';
 
-import { useModels, useProbe } from '../api/hooks.ts';
+import { useAccounts, useModels, useProbe } from '../api/hooks.ts';
 import type { PinState, Pipeline } from '../api/types.ts';
-import { GatewaySwitcher, useGatewayScope } from '../gatewayScope.tsx';
 import { useI18n } from '../i18n/index.tsx';
 import { PageHeader } from '../pageHeader.tsx';
 import { Panel } from '../panel.tsx';
@@ -63,10 +62,13 @@ function ProbeTags({ p }: { p: ProbeOutcome }) {
 export default function Catalog() {
   const { message } = App.useApp();
   const { t } = useI18n();
-  // 目录是全局的；探测结果按网关存（同一个模型在不同网关可钉性不同）
-  const { gatewayId } = useGatewayScope();
-  const models = useModels(gatewayId);
-  const probe = useProbe(gatewayId);
+  // 目录是全局的；探测结论属于**账号**（按账号隔离，换号结果可能不同）
+  const accounts = useAccounts();
+  const accountList = accounts.data?.accounts ?? [];
+  const [picked, setPicked] = useState(() => localStorage.getItem('cps_detect_account') ?? '');
+  const activeAccount = accountList.some((a) => a.name === picked) ? picked : (accountList[0]?.name ?? '');
+  const models = useModels({ account: activeAccount });
+  const probe = useProbe(activeAccount);
   const [filter, setFilter] = useState('');
   const [probes, setProbes] = useState<Record<string, ProbeOutcome>>({});
 
@@ -79,7 +81,7 @@ export default function Catalog() {
       onSuccess: (r) => {
         setProbes((prev) => ({
           ...prev,
-          [`${gatewayId}|${id}`]: {
+          [`${activeAccount}|${id}`]: {
             ok: r.ok,
             error: r.error,
             pipeline: r.pipeline,
@@ -91,7 +93,7 @@ export default function Catalog() {
       },
       onError: (e) => {
         const err = String(e);
-        setProbes((prev) => ({ ...prev, [`${gatewayId}|${id}`]: { ok: false, error: err } }));
+        setProbes((prev) => ({ ...prev, [`${activeAccount}|${id}`]: { ok: false, error: err } }));
         message.error(t('catalog.probe.error', { id, error: err }));
       },
     });
@@ -99,7 +101,29 @@ export default function Catalog() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <PageHeader title={t('catalog.title')} desc={t('catalog.desc')} actions={<GatewaySwitcher />} />
+      <PageHeader
+        title={t('catalog.title')}
+        desc={t('catalog.desc')}
+        actions={
+          <Space size={6} align="center">
+            <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+              {t('models.account.label')}
+            </Typography.Text>
+            <Select
+              size="small"
+              showSearch
+              style={{ minWidth: 180 }}
+              value={activeAccount || undefined}
+              placeholder={t('models.account.placeholder')}
+              options={accountList.map((a) => ({ value: a.name, label: a.name }))}
+              onChange={(name: string) => {
+                setPicked(name);
+                localStorage.setItem('cps_detect_account', name);
+              }}
+            />
+          </Space>
+        }
+      />
       {/* 区域：目录（搜索与计数属于这块区域的头，表格是它的体） */}
       <Panel
         flush
@@ -166,7 +190,7 @@ export default function Catalog() {
                 width: 320,
                 render: (_, r) => {
                   const id = String(r.id);
-                  const p = probes[`${gatewayId}|${id}`];
+                  const p = probes[`${activeAccount}|${id}`];
                   if (!p) {
                     return id.includes(':free') ? (
                       <Tag color="green">{t('catalog.type.free')}</Tag>

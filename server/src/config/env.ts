@@ -1,19 +1,22 @@
 import { ensureUniqueAccountNames } from '../accounts/naming.ts';
-import { consoleGateway } from './derive.ts';
+import { primaryGateway } from './derive.ts';
 import type { Config } from './schema.ts';
 
 /**
  * 环境变量覆盖配置，便于 Docker 部署时注入密钥而不用把明文写进挂载卷。
  *
- * 3.0 起代理设置是**网关级**的：这些变量作用于**控制台网关**
- * （`console.gatewayId`）——桌面壳固定用 `PORT=3123` 指向控制台，语义不变。
+ * 2.1 起控制台是独立监听，所以变量的归属也拆开了：
+ * - `PORT` / `BIND_HOST` → **控制台**监听（桌面壳固定 `PORT=3125`）
+ * - `PROXY_KEY` / `PUBLIC_BASE_URL` → 第一个网关（兼容既有 `/v1` 客户端）
+ * - `CONSOLE_KEY` → 控制台远端访问密钥
+ * - `GATEWAY_BIND_HOST` → 所有网关的绑定地址（Docker 内需要 0.0.0.0）
  *
  * 注意：覆盖结果就是「当前生效值」，控制台保存设置时会以生效值写回 config.json
  * （与旧版行为一致，README 有说明）。因此这里只覆盖用户明确设了的环境变量。
  */
 export function applyEnvOverrides(config: Config, env: NodeJS.ProcessEnv = process.env): string[] {
   const notes: string[] = [];
-  const gateway = consoleGateway(config);
+  const gateway = primaryGateway(config);
 
   const clineKey = env.CLINE_PASS_KEY?.trim();
   if (clineKey && !config.accounts.some((a) => a.key === clineKey)) {
@@ -26,35 +29,43 @@ export function applyEnvOverrides(config: Config, env: NodeJS.ProcessEnv = proce
   const proxyKey = env.PROXY_KEY?.trim();
   if (proxyKey) {
     gateway.proxyKey = proxyKey;
-    notes.push(`PROXY_KEY 已覆盖控制台网关「${gateway.name}」的代理密钥`);
+    notes.push(`PROXY_KEY 已覆盖网关「${gateway.name}」的代理密钥`);
+    // 兼容旧部署：以前 PROXY_KEY 同时守住控制台（那时两者共用监听）。
+    // 现在控制台密钥为空时继续沿用它，远端控制台访问不会因为升级而失效。
+    if (!config.console.proxyKey && !env.CONSOLE_KEY?.trim()) {
+      config.console.proxyKey = proxyKey;
+      notes.push('PROXY_KEY 同时作为控制台的远端访问密钥（可用 CONSOLE_KEY 单独指定）');
+    }
+  }
+
+  const consoleKey = env.CONSOLE_KEY?.trim();
+  if (consoleKey) {
+    config.console.proxyKey = consoleKey;
+    notes.push('CONSOLE_KEY 已覆盖控制台的远端访问密钥');
   }
 
   const publicBase = env.PUBLIC_BASE_URL?.trim();
   if (publicBase) {
     gateway.publicBaseUrl = publicBase.replace(/\/+$/, '');
-    notes.push(`PUBLIC_BASE_URL 已覆盖控制台网关「${gateway.name}」的公网地址`);
+    notes.push(`PUBLIC_BASE_URL 已覆盖网关「${gateway.name}」的公网地址`);
+  }
+
+  const gatewayBindHost = env.GATEWAY_BIND_HOST?.trim();
+  if (gatewayBindHost) {
+    for (const gw of config.gateways) gw.bindHost = gatewayBindHost;
+    notes.push(`GATEWAY_BIND_HOST 已覆盖所有网关的绑定地址为 ${gatewayBindHost}`);
   }
 
   const port = Number(env.PORT);
   if (env.PORT && Number.isInteger(port) && port > 0 && port < 65536) {
-    if (gateway.port !== port) {
-      // 桌面壳固定用 PORT=3123 打开控制台。若这个端口现在属于别的网关（例如用户把
-      // 控制台切到了另一个网关），直接覆盖会让两个网关抢同一个端口、控制台起不来。
-      // 交换端口：控制台留在 PORT 上（壳能打开），另一个网关接管控制台原来的端口。
-      const clash = config.gateways.find((g) => g.id !== gateway.id && g.port === port);
-      if (clash && gateway.port > 0) {
-        clash.port = gateway.port;
-        notes.push(`PORT ${port} 已被网关「${clash.name}」使用，已与「${gateway.name}」交换端口`);
-      }
-      gateway.port = port;
-    }
-    notes.push(`PORT 已覆盖控制台网关「${gateway.name}」的端口为 ${port}`);
+    config.console.port = port;
+    notes.push(`PORT 已覆盖控制台端口为 ${port}`);
   }
 
   const bindHost = env.BIND_HOST?.trim();
   if (bindHost) {
-    gateway.bindHost = bindHost;
-    notes.push(`BIND_HOST 已覆盖控制台网关「${gateway.name}」的绑定地址`);
+    config.console.bindHost = bindHost;
+    notes.push(`BIND_HOST 已覆盖控制台的绑定地址为 ${bindHost}`);
   }
 
   return notes;

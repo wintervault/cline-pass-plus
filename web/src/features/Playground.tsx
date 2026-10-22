@@ -21,7 +21,7 @@ import {
 } from 'antd';
 import { useEffect, useState } from 'react';
 
-import { useModels, useSaveModelConfig, useTest } from '../api/hooks.ts';
+import { useAccounts, useModels, useSaveModelConfig, useTest } from '../api/hooks.ts';
 import {
   EMPTY_PER_MODEL,
   type ModelMeta,
@@ -30,12 +30,12 @@ import {
   type TraceEntry,
 } from '../api/types.ts';
 import { useFeedback } from '../feedback.ts';
-import { GatewaySwitcher, useGatewayScope } from '../gatewayScope.tsx';
 import { diagnosticText } from '../i18n/codes.ts';
 import { useI18n } from '../i18n/index.tsx';
 import { STATUS_TAG } from '../labels.ts';
 import { PageHeader } from '../pageHeader.tsx';
 import { Panel, PanelHint } from '../panel.tsx';
+import { RoutingGatewayPicker, useRoutingGateway } from '../routingGateway.tsx';
 import { RoutingFields } from './routingFields.tsx';
 
 /**
@@ -46,7 +46,7 @@ import { RoutingFields } from './routingFields.tsx';
  * 改动即时保存（与订阅模型页同一套配置，改哪边都生效）。
  */
 function RoutingPanel({ model, cfg, meta }: { model: string; cfg: PerModelConfig; meta: ModelMeta | null }) {
-  const { gatewayId } = useGatewayScope();
+  const { gatewayId } = useRoutingGateway();
   const { t, lang } = useI18n();
   const save = useSaveModelConfig(gatewayId);
 
@@ -87,6 +87,14 @@ function RoutingPanel({ model, cfg, meta }: { model: string; cfg: PerModelConfig
           <Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 400 }}>
             {cfg.pinMode === 'strict' ? t('playground.routing.strict') : t('playground.routing.preferred')}
           </Typography.Text>
+        </Space>
+      }
+      extra={
+        <Space size={8} align="center">
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            {t('playground.routing.gateway')}
+          </Typography.Text>
+          <RoutingGatewayPicker />
         </Space>
       }
     >
@@ -273,10 +281,14 @@ function TraceTable({ trace, targets }: { trace?: TraceEntry[]; targets: string[
 }
 
 export default function Playground() {
-  const { gatewayId } = useGatewayScope();
+  const { gatewayId } = useRoutingGateway();
   const { t } = useI18n();
-  const models = useModels(gatewayId);
-  const test = useTest(gatewayId);
+  const accountsQuery = useAccounts();
+  const accounts = accountsQuery.data?.accounts ?? [];
+  const [pickedAccount, setPickedAccount] = useState(() => localStorage.getItem('cps_detect_account') ?? '');
+  const activeAccount = accounts.some((a) => a.name === pickedAccount) ? pickedAccount : (accounts[0]?.name ?? '');
+  const models = useModels({ gatewayId, account: activeAccount });
+  const test = useTest(gatewayId, activeAccount);
   const fb = useFeedback();
   const [model, setModel] = useState('');
   const [upstream, setUpstream] = useState('');
@@ -288,14 +300,13 @@ export default function Playground() {
   const activeRow = rows.find((r) => r.id === active);
   const cfg: PerModelConfig = activeRow?.config ?? EMPTY_PER_MODEL;
 
-  // 切换网关时清掉上一网关的选择与结果：模型 ID 可能在新网关不存在，
-  // 结果区也不该继续展示另一个网关的测试回执。
+  // 切换账号或路由网关时清掉上一组选择与结果：结果只对执行它的账号成立。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 依赖的用途是「变化时重置」，effect 内不读取它们
   useEffect(() => {
-    if (!gatewayId) return;
     setModel('');
     setUpstream('');
     setResult(null);
-  }, [gatewayId]);
+  }, [activeAccount, gatewayId]);
 
   const upstreamOptions = [
     { value: '', label: t('playground.field.channel.auto') },
@@ -305,6 +316,10 @@ export default function Playground() {
   const run = (): void => {
     if (!active) {
       fb.fail(t('playground.validate.key'));
+      return;
+    }
+    if (!activeAccount) {
+      fb.fail(t('playground.validate.account'));
       return;
     }
     // 成功/失败的回执由 useTest 统一给出，这里只负责把结果放进结果区
@@ -317,7 +332,29 @@ export default function Playground() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <PageHeader title={t('playground.title')} desc={t('playground.desc')} actions={<GatewaySwitcher />} />
+      <PageHeader
+        title={t('playground.title')}
+        desc={t('playground.desc')}
+        actions={
+          <Space size={6} align="center">
+            <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+              {t('playground.account.label')}
+            </Typography.Text>
+            <Select
+              size="small"
+              showSearch
+              style={{ minWidth: 180 }}
+              value={activeAccount || undefined}
+              placeholder={t('models.account.placeholder')}
+              options={accounts.map((a) => ({ value: a.name, label: a.name }))}
+              onChange={(name: string) => {
+                setPickedAccount(name);
+                localStorage.setItem('cps_detect_account', name);
+              }}
+            />
+          </Space>
+        }
+      />
 
       <Panel title={t('playground.params.title')} extra={<PanelHint>{t('playground.params.hint')}</PanelHint>}>
         <Space wrap size={16} align="center">
@@ -366,6 +403,7 @@ export default function Playground() {
             type="primary"
             icon={<PlayCircleOutlined />}
             loading={test.isPending}
+            disabled={!activeAccount}
             onClick={run}
             style={{ marginLeft: 'auto' }}
           >

@@ -218,6 +218,29 @@ export async function loadMetaStore(file: string): Promise<LoadMetaResult> {
   if (droppedModels > 0) notes.push(`丢弃了 ${droppedModels} 个损坏或无信息量的模型观测记录`);
   else if (droppedModels < 0) notes.push('models 字段不是映射，已丢弃');
 
+  // 账号级检测记录（2.1 起）：账号 → 模型 → 记录。旧文件没有这个字段是正常的。
+  let droppedAccountModels = 0;
+  const accountModelsRaw = source['accountModels'];
+  if (isPlainObject(accountModelsRaw)) {
+    for (const [account, entries] of Object.entries(accountModelsRaw)) {
+      if (!isPlainObject(entries)) {
+        droppedAccountModels += 1;
+        continue;
+      }
+      const parsedMap: Record<string, ModelMeta> = {};
+      for (const [id, entry] of Object.entries(entries)) {
+        const parsed = parseModelMeta(entry);
+        if (parsed && isMeaningfulModelMeta(parsed)) parsedMap[id] = parsed;
+        else droppedAccountModels += 1;
+      }
+      if (Object.keys(parsedMap).length) meta.accountModels[account] = parsedMap;
+    }
+  } else if (accountModelsRaw !== undefined) {
+    droppedAccountModels = -1;
+  }
+  if (droppedAccountModels > 0) notes.push(`丢弃了 ${droppedAccountModels} 个损坏或无信息量的账号检测记录`);
+  else if (droppedAccountModels < 0) notes.push('accountModels 字段不是映射，已丢弃');
+
   let droppedHistory = 0;
   const history = source['history'];
   if (Array.isArray(history)) {

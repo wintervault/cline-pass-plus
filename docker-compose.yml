@@ -5,7 +5,11 @@ services:
     restart: unless-stopped
     environment:
       - DATA_DIR=/data
+      - BIND_HOST=0.0.0.0
+      - GATEWAY_BIND_HOST=0.0.0.0
     volumes:
       - ./data:/data
     ports:
-      - "127.0.0.1:3123:3123"
+      # 3125 = 控制台；3126 = 默认网关（/v1）
+      - "127.0.0.1:3125:3125"
+      - "127.0.0.1:3126:3126"
