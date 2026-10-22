@@ -7,6 +7,9 @@ services:
       - DATA_DIR=/data
       - BIND_HOST=0.0.0.0
       - GATEWAY_BIND_HOST=0.0.0.0
+      # 绑定非回环地址必须提供密钥（控制台与网关各一把；也可直接写进 data/config.json）
+      - PROXY_KEY=${PROXY_KEY:?set PROXY_KEY for the gateway}
+      - CONSOLE_KEY=${CONSOLE_KEY:?set CONSOLE_KEY for the console}
     volumes:
       - ./data:/data
     ports:

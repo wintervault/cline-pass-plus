@@ -120,6 +120,16 @@ Cline / OpenAI 格式端口
 未写的字段由 schema 补齐；完整示例见 [`config.example.json`](config.example.json)。
 控制台的 `proxyKey` 只用于**远端访问**，本机永远免密钥；网关的 `proxyKey` 只用于该网关的 `/v1`。
 
+### 容器部署（可选）
+
+```bash
+PROXY_KEY='下游密钥' CONSOLE_KEY='控制台密钥' docker compose up -d --build
+```
+
+控制台在 `3125`，默认网关在 `3126`。反向代理时把 `/v1/*` 转发到 `3126`，其余路径转发到 `3125`
+（见 [`deploy/Caddyfile`](deploy/Caddyfile)）。两把密钥不同：`CONSOLE_KEY` 守控制台，
+`PROXY_KEY` 守客户端接入。
+
 ---
 
 ## 安全与隐私

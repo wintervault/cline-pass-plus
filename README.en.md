@@ -146,6 +146,17 @@ Missing fields are filled in by the schema. See [`config.example.json`](config.e
 for the full example. The console `proxyKey` only guards **remote** console access (local
 access is always keyless); each gateway's `proxyKey` only guards that gateway's `/v1`.
 
+### Container deployment (optional)
+
+```bash
+PROXY_KEY='downstream key' CONSOLE_KEY='console key' docker compose up -d --build
+```
+
+The console listens on `3125`; the default gateway on `3126`. When using a reverse proxy,
+forward `/v1/*` to `3126` and everything else to `3125` (see
+[`deploy/Caddyfile`](deploy/Caddyfile)). The two keys are distinct: `CONSOLE_KEY` guards the
+console, `PROXY_KEY` guards client access.
+
 ---
 
 ## Security and privacy
