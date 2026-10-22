@@ -155,7 +155,9 @@ PROXY_KEY='downstream key' CONSOLE_KEY='console key' docker compose up -d --buil
 The console listens on `3125`; the default gateway on `3126`. When using a reverse proxy,
 forward `/v1/*` to `3126` and everything else to `3125` (see
 [`deploy/Caddyfile`](deploy/Caddyfile)). The two keys are distinct: `CONSOLE_KEY` guards the
-console, `PROXY_KEY` guards client access.
+console, `PROXY_KEY` guards client access. On first start you can also inject one upstream
+account with `CLINE_PASS_KEY=sk_...`; once the account pool has any account, that variable is
+ignored.
 
 ---
 

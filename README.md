@@ -128,7 +128,8 @@ PROXY_KEY='下游密钥' CONSOLE_KEY='控制台密钥' docker compose up -d --bu
 
 控制台在 `3125`，默认网关在 `3126`。反向代理时把 `/v1/*` 转发到 `3126`，其余路径转发到 `3125`
 （见 [`deploy/Caddyfile`](deploy/Caddyfile)）。两把密钥不同：`CONSOLE_KEY` 守控制台，
-`PROXY_KEY` 守客户端接入。
+`PROXY_KEY` 守客户端接入。首次启动也可以用 `CLINE_PASS_KEY=sk_...` 注入一个上游账号；
+账号池一旦有账号，该变量就会被忽略。
 
 ---
 
