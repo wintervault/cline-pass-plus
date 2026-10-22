@@ -34,6 +34,19 @@ describe('loadMetaStore', () => {
     expect(notes).toEqual([]);
   });
 
+  it('账号级检测记录按账号解析，原型链保留名被丢弃', async () => {
+    const record =
+      '{"pipeline":"planner","pinnable":true,"pinState":"enforced","pinProbeAt":null,"pinDisabledReason":null,"availableProviders":[],"upstreams":["deepseek"],"upstreamDetail":{},"upstreamStatus":{},"tier0":[],"canonicalSlug":null,"openrouterSlug":null,"lastProvider":"deepseek","lastMs":1,"probedAt":1,"validatedAt":null}';
+    await fs.writeFile(
+      file,
+      `{"accountModels":{"A":{"cline-pass/x":${record}},"__proto__":{"cline-pass/x":${record}}}}`,
+    );
+    const { store, notes } = await loadMetaStore(file);
+    expect(store.value.accountModels['A']?.['cline-pass/x']?.upstreams).toEqual(['deepseek']);
+    expect(Object.keys(store.value.accountModels)).not.toContain('__proto__');
+    expect(notes.join()).toContain('损坏或无信息量的账号检测记录');
+  });
+
   it('文件不存在 → 默认结构，无备份', async () => {
     const { store } = await loadMetaStore(file);
     expect(store.value.history).toEqual([]);

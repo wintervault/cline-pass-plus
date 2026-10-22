@@ -1,5 +1,5 @@
 import { z } from 'zod';
-
+import { isReservedAccountName } from '../accounts/naming.ts';
 import type { AccountClassRecord } from '../accounts/types.ts';
 import { isPlainObject } from '../config/migrate.ts';
 import { moduleLogger } from '../log/logger.ts';
@@ -223,7 +223,7 @@ export async function loadMetaStore(file: string): Promise<LoadMetaResult> {
   const accountModelsRaw = source['accountModels'];
   if (isPlainObject(accountModelsRaw)) {
     for (const [account, entries] of Object.entries(accountModelsRaw)) {
-      if (!isPlainObject(entries)) {
+      if (isReservedAccountName(account) || !isPlainObject(entries)) {
         droppedAccountModels += 1;
         continue;
       }
@@ -256,6 +256,10 @@ export async function loadMetaStore(file: string): Promise<LoadMetaResult> {
   const stats = source['stats'];
   if (typeof stats === 'object' && stats !== null && !Array.isArray(stats)) {
     for (const [name, entry] of Object.entries(stats as Record<string, unknown>)) {
+      if (isReservedAccountName(name)) {
+        droppedStats += 1;
+        continue;
+      }
       const parsed = parseAccountStats(entry);
       if (parsed && isMeaningfulStats(parsed)) meta.stats[name] = parsed;
       else droppedStats += 1;
@@ -267,6 +271,10 @@ export async function loadMetaStore(file: string): Promise<LoadMetaResult> {
   const accountClass = source['accountClass'];
   if (typeof accountClass === 'object' && accountClass !== null && !Array.isArray(accountClass)) {
     for (const [name, entry] of Object.entries(accountClass as Record<string, unknown>)) {
+      if (isReservedAccountName(name)) {
+        droppedClass += 1;
+        continue;
+      }
       const parsed = parseAccountClass(entry);
       if (parsed && isMeaningfulAccountClass(parsed)) meta.accountClass[name] = parsed;
       else droppedClass += 1;

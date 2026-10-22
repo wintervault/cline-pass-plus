@@ -23,6 +23,7 @@ import {
   MAX_GATEWAYS,
   type PerModelConfig,
 } from '../../config/schema.ts';
+import { probeBind } from '../../console/manager.ts';
 import { moduleLogger } from '../../log/logger.ts';
 import type { ChainResult } from '../../proxy/chain.ts';
 import { bindingsConflict } from '../../security/bind.ts';
@@ -154,7 +155,7 @@ export function mergeAccountsDetailed(existing: Account[], incoming: unknown): A
 }
 
 /**
- * 账号改名 / 删除后整理按账号名索引的观测数据（用量统计、风控结论）。
+ * 账号改名 / 删除后整理按账号名索引的观测数据（检测记录、用量统计、风控结论）。
  *
  * 两段式（先全部取出并删除，再写入新名）是必须的：改名可以成环
  * （A→B、B→A），逐条搬会把目标位置的旧数据覆盖掉。
@@ -162,24 +163,36 @@ export function mergeAccountsDetailed(existing: Account[], incoming: unknown): A
  */
 function migrateAccountMeta(ctx: AppContext, renames: Array<{ from: string; to: string }>, names: string[]): void {
   const alive = new Set(names);
-  const hasStale = [...Object.keys(ctx.metaStore.value.stats), ...Object.keys(ctx.metaStore.value.accountClass)].some(
-    (n) => !alive.has(n),
-  );
+  const current = ctx.metaStore.value;
+  const hasStale = [
+    ...Object.keys(current.stats),
+    ...Object.keys(current.accountClass),
+    ...Object.keys(current.accountModels),
+  ].some((n) => !alive.has(n));
   if (!renames.length && !hasStale) return;
 
   ctx.metaStore.update((meta) => {
-    const moves = renames.map((r) => ({ ...r, stats: meta.stats[r.from], cls: meta.accountClass[r.from] }));
+    const moves = renames.map((r) => ({
+      ...r,
+      stats: meta.stats[r.from],
+      cls: meta.accountClass[r.from],
+      models: meta.accountModels[r.from],
+    }));
     for (const r of renames) {
       delete meta.stats[r.from];
       delete meta.accountClass[r.from];
+      delete meta.accountModels[r.from];
     }
     for (const m of moves) {
       if (!alive.has(m.to)) continue;
       if (m.stats) meta.stats[m.to] = m.stats;
       if (m.cls) meta.accountClass[m.to] = m.cls;
+      if (m.models) meta.accountModels[m.to] = m.models;
     }
     for (const name of Object.keys(meta.stats)) if (!alive.has(name)) delete meta.stats[name];
     for (const name of Object.keys(meta.accountClass)) if (!alive.has(name)) delete meta.accountClass[name];
+    // 删除账号后，检测记录不能留着：同名账号以后再加回来时不该继承别人的探测结论
+    for (const name of Object.keys(meta.accountModels)) if (!alive.has(name)) delete meta.accountModels[name];
   });
 }
 
@@ -463,10 +476,28 @@ export function registerApiRoutes(
       );
     }
 
+    // 先预检新目标再写配置：端口被别的程序占用时，直接拒绝，
+    // 而不是先关掉当前控制台、再发现新端口绑不上（等于把自己锁在门外）。
+    const targetChanged = before.port !== next.port || before.bindHost !== next.bindHost;
+    if (targetChanged) {
+      // 同端口只改绑定地址时，旧 listener 还占着端口：用 0 号端口验证地址本身可用
+      const probePort = before.port === next.port ? 0 : next.port;
+      const bindError = await probeBind(probePort, next.bindHost);
+      if (bindError) {
+        return sendError(
+          c.res,
+          409,
+          `控制台无法监听 ${next.bindHost}:${next.port}：${bindError}`,
+          'invalid_request_error',
+          'console.bindFailed',
+          { addr: `${next.bindHost}:${next.port}`, error: bindError },
+        );
+      }
+    }
+
     updateConfig(ctx, (draft) => {
       draft.console = next;
     });
-    const targetChanged = before.port !== next.port || before.bindHost !== next.bindHost;
     const apply = () => {
       setTimeout(() => {
         ctx.console.reconcile().catch((err: unknown) => log.error({ err }, '延迟应用控制台监听变更失败'));
@@ -864,6 +895,16 @@ export function registerApiRoutes(
         'gateway.portConflict',
         { port: gateway.port, name: clash.name },
       );
+    // 控制台是独立监听：网关也不能占用它的端口（反之亦然）
+    if (bindingsConflict(cfg.console, gateway))
+      return sendError(
+        c.res,
+        409,
+        `端口 ${gateway.port} 已被控制台占用`,
+        'invalid_request_error',
+        'gateway.portConflictConsole',
+        { port: gateway.port },
+      );
 
     // 账号范围只保留存在的账号；自选范围下，single 指定的账号必须仍在范围里
     const alive = new Set(cfg.accounts.map((a) => a.name));
@@ -907,6 +948,10 @@ export function registerApiRoutes(
 
     updateConfig(ctx, (draft) => {
       draft.gateways = draft.gateways.filter((g) => g.id !== id);
+    });
+    // 网关级观测随网关一起删除：以后新建同 id 的网关时不该继承旧的探测/渠道状态
+    ctx.metaStore.update((m) => {
+      delete m.models[id];
     });
     const deferred = await applyGatewayChange(ctx, c, [id]);
     sendJSON(c.res, 200, { ok: true, deferred, gateways: gatewayViews(ctx) });

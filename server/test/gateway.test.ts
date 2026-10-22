@@ -14,7 +14,7 @@ import { type Ctx, Router } from '../src/http/router.ts';
 import { recordHistory, registerApiRoutes } from '../src/http/routes/api.ts';
 import { createHttpServer } from '../src/http/server.ts';
 import { JsonStore } from '../src/store/jsonStore.ts';
-import { defaultMeta, type MetaFile } from '../src/upstream/types.ts';
+import { blankModelMeta, defaultMeta, type MetaFile } from '../src/upstream/types.ts';
 import { listen, request } from './helpers/http.ts';
 
 let dir: string;
@@ -278,14 +278,20 @@ describe('网关 API', () => {
   it('删除：只剩最后一个时拒绝，其它可删（控制台已独立）', async () => {
     const p1 = await freePort();
     const p2 = await freePort();
-    const { port: apiPort, configStore } = await harness([
-      defaultGateway({ id: 'main', port: p1 }),
-      defaultGateway({ id: 'other', port: p2 }),
-    ]);
+    const {
+      port: apiPort,
+      configStore,
+      metaStore,
+    } = await harness([defaultGateway({ id: 'main', port: p1 }), defaultGateway({ id: 'other', port: p2 })]);
+    metaStore.update((m) => {
+      m.models['main'] = { 'cline-pass/x': { ...blankModelMeta(), upstreams: ['deepseek'] } };
+    });
 
     const del = await request(apiPort, '/api/gateways/delete', { method: 'POST', body: { id: 'main' } });
     expect(del.status).toBe(200);
     expect(configStore.value.gateways.map((g) => g.id)).toEqual(['other']);
+    // 网关级观测随网关删除，避免以后同 id 的新网关继承旧状态
+    expect(metaStore.value.models['main']).toBeUndefined();
 
     expect((await request(apiPort, '/api/gateways/delete', { method: 'POST', body: { id: 'other' } })).status).toBe(
       400,
@@ -305,6 +311,17 @@ describe('网关 API', () => {
     });
     expect(res.status).toBe(200);
     expect(configStore.value.gateways.find((g) => g.id === 'main')?.enabled).toBe(false);
+  });
+
+  it('网关不能占用控制台端口（两套监听互斥）', async () => {
+    const p1 = await freePort();
+    const { port: apiPort } = await harness([defaultGateway({ id: 'main', port: p1 })]);
+    const res = await request(apiPort, '/api/gateways/save', {
+      method: 'POST',
+      body: { gateway: { id: 'main', port: 3125 } },
+    });
+    expect(res.status).toBe(409);
+    expect(res.json<{ error: { code?: string } }>().error.code).toBe('gateway.portConflictConsole');
   });
 
   it('网关启用开关：停用后 listener 关闭、状态变为 disabled，可再启用', async () => {

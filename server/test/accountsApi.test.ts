@@ -12,7 +12,7 @@ import { type Ctx, Router } from '../src/http/router.ts';
 import { registerApiRoutes } from '../src/http/routes/api.ts';
 import { createHttpServer } from '../src/http/server.ts';
 import { JsonStore } from '../src/store/jsonStore.ts';
-import { defaultMeta, type MetaFile } from '../src/upstream/types.ts';
+import { blankModelMeta, defaultMeta, type MetaFile } from '../src/upstream/types.ts';
 import { listen, request } from './helpers/http.ts';
 import { FakeUpstream, type ScriptedResponse } from './helpers/upstream.ts';
 
@@ -200,11 +200,14 @@ describe('POST /api/accounts', () => {
     expect(configStore.value.accounts[0]?.expiresAt).toBe('2027-01-31');
   });
 
-  it('改名把用量统计与体检结论迁到新名字（不静默丢观测数据）', async () => {
+  it('改名把用量统计、体检结论与账号级检测记录迁到新名字（不静默丢观测数据）', async () => {
     const { port, metaStore } = await harness([acc('旧名'), acc('另一个')], {
       meta: (m) => {
         m.stats['旧名'] = { requests: 7, lastUsed: 1000, lastError: null };
         m.accountClass['旧名'] = { class: 'normal', checkedAt: 2000 };
+        m.accountModels['旧名'] = {
+          'cline-pass/x': { ...blankModelMeta(), pinState: 'enforced', upstreams: ['deepseek'] },
+        };
       },
     });
 
@@ -220,8 +223,10 @@ describe('POST /api/accounts', () => {
     expect(res.status).toBe(200);
     expect(metaStore.value.stats['新名']?.requests).toBe(7);
     expect(metaStore.value.accountClass['新名']?.class).toBe('normal');
+    expect(metaStore.value.accountModels['新名']?.['cline-pass/x']?.upstreams).toEqual(['deepseek']);
     expect(metaStore.value.stats['旧名']).toBeUndefined();
     expect(metaStore.value.accountClass['旧名']).toBeUndefined();
+    expect(metaStore.value.accountModels['旧名']).toBeUndefined();
   });
 
   it('改名成环（B→A 且 A→A-2）时观测数据不互相覆盖', async () => {
@@ -257,6 +262,7 @@ describe('POST /api/accounts', () => {
       meta: (m) => {
         m.stats['a'] = { requests: 3, lastUsed: 1, lastError: null };
         m.stats['b'] = { requests: 4, lastUsed: 1, lastError: null };
+        m.accountModels['a'] = { 'cline-pass/x': { ...blankModelMeta(), upstreams: ['deepseek'] } };
         m.history.push({
           ts: 1,
           gateway: 'main',
@@ -279,6 +285,7 @@ describe('POST /api/accounts', () => {
     });
     expect(metaStore.value.stats['a']).toBeUndefined();
     expect(metaStore.value.stats['b']?.requests).toBe(4);
+    expect(metaStore.value.accountModels['a']).toBeUndefined();
     expect(metaStore.value.history[0]?.account).toBe('a');
   });
 

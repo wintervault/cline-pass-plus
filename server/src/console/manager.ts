@@ -1,7 +1,40 @@
 import type http from 'node:http';
+import net from 'node:net';
 import type { Handler, Middleware } from '../http/router.ts';
 import { createHttpServer, shutdownServer } from '../http/server.ts';
 import { logger } from '../log/logger.ts';
+
+/**
+ * 预检监听目标：先在一个临时 socket 上试绑，失败就返回原因。
+ *
+ * 用途：保存控制台设置前先确认新端口/地址可用。否则「先写配置、再关旧
+ * listener、最后绑新端口」一旦失败，用户会失去正在访问的控制台——
+ * 明明只是改端口，却把自己锁在门外。
+ */
+export function probeBind(port: number, bindHost: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const probe = net.createServer();
+    let settled = false;
+    const done = (err: string | null): void => {
+      if (settled) return;
+      settled = true;
+      probe.removeAllListeners();
+      // 绑定失败时没有监听句柄需要关；成功时先关掉临时 socket 再返回
+      if (err) {
+        resolve(err);
+        return;
+      }
+      probe.close(() => resolve(null));
+    };
+    probe.once('error', (err: Error) => done(err.message));
+    probe.once('listening', () => done(null));
+    try {
+      probe.listen(port, bindHost);
+    } catch (err) {
+      done(err instanceof Error ? err.message : String(err));
+    }
+  });
+}
 
 export type ConsoleState = 'running' | 'error' | 'stopped';
 

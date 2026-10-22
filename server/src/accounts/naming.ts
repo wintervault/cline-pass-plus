@@ -1,6 +1,21 @@
 /** 账号名长度上限，与 `config/schema.ts` 的 AccountSchema 保持一致。 */
 const MAX_NAME = 50;
 
+/**
+ * 这些名字会被当成对象的特殊属性（原型链），不能直接用作 metadata 的键。
+ * 账号名来自用户输入；不拦的话 `meta.stats['__proto__']` 会改写对象原型。
+ */
+const RESERVED_NAMES = new Set(['__proto__', 'constructor', 'prototype']);
+
+export function isReservedAccountName(name: string): boolean {
+  return RESERVED_NAMES.has(name);
+}
+
+/** 把保留名改成可见的普通名字（用户能在界面上看到改名结果，不静默丢账号）。 */
+function safeAccountName(name: string): string {
+  return isReservedAccountName(name) ? `账号-${name}` : name;
+}
+
 export interface AccountRename {
   from: string;
   to: string;
@@ -20,7 +35,7 @@ export function ensureUniqueAccountNames<T extends { name: string }>(
   const seen = new Set<string>();
   const renamed: AccountRename[] = [];
   const out = accounts.map((account) => {
-    const base = account.name.trim().slice(0, MAX_NAME) || '账号';
+    const base = safeAccountName(account.name.trim().slice(0, MAX_NAME) || '账号');
     let name = base;
     for (let n = 2; seen.has(name); n += 1) {
       const suffix = `-${n}`;

@@ -185,7 +185,21 @@ export class ChatChain {
       (input.forcedAccount ? (this.#deps.pool.usable().find((a) => a.name === input.forcedAccount) ?? null) : null);
     let account = forcedInput ? forced : this.#deps.pool.pick();
     /** 当前账号的检测记录；没有就回退到网关聚合观测（至少保留历史渠道清单）。 */
-    let activeMeta = account ? (input.accountMeta?.(account.name) ?? input.meta) : input.meta;
+    /**
+     * 当前账号的检测记录。
+     *
+     * 没有该账号的检测记录时，只把网关聚合观测当作**渠道清单/pipeline 的兜底**，
+     * 但把 `pinState` 降级为 unknown：聚合记录可能来自另一个账号（例如风控号），
+     * 拿它去审计这个账号的请求会把正常请求误判成「钉住失效」。
+     */
+    const metaFor = (name: string): ModelMeta | undefined => {
+      const own = input.accountMeta?.(name);
+      if (own) return own;
+      // 调用方没有提供账号级观测（旧调用/单测）：沿用传进来的 meta
+      if (!input.accountMeta) return input.meta;
+      return input.meta ? { ...input.meta, pinState: 'unknown' } : undefined;
+    };
+    let activeMeta = account ? metaFor(account.name) : input.meta;
     let known = activeMeta?.upstreams ?? [];
     let pipeline = activeMeta?.pipeline ?? null;
 
@@ -367,7 +381,7 @@ export class ChatChain {
           rotations.push(info);
           account = next;
           // 换号后重新取该账号的检测记录：pinState / 渠道清单都属于具体账号
-          activeMeta = input.accountMeta?.(next.name) ?? input.meta;
+          activeMeta = metaFor(next.name);
           known = activeMeta?.upstreams ?? [];
           pipeline = activeMeta?.pipeline ?? null;
           tryIndex -= 1; // 同渠道新账号，不消耗渠道重试次数（轮转次数由 maxRotations 封顶）

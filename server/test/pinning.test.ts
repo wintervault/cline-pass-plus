@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { defaultConfig } from '../src/config/schema.ts';
 import { ProbeService } from '../src/upstream/probe.ts';
 import { blankModelMeta, type ModelMeta } from '../src/upstream/types.ts';
 import { FakeUpstream } from './helpers/upstream.ts';

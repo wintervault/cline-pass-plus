@@ -107,11 +107,19 @@ describe('assertBindSafe（逐网关 + 控制台）', () => {
 describe('applyEnvOverrides', () => {
   it('CLINE_PASS_KEY 注入账号池且不重复', () => {
     const cfg = defaultConfig();
-    expect(applyEnvOverrides(cfg, { CLINE_PASS_KEY: 'sk_env' })).toContain('CLINE_PASS_KEY 已注入账号池');
+    expect(applyEnvOverrides(cfg, { CLINE_PASS_KEY: 'sk_env' }).join()).toContain('CLINE_PASS_KEY 已注入账号池');
     expect(cfg.accounts).toEqual([{ name: 'env-account', key: 'sk_env' }]);
     // 再次应用不重复插入
     applyEnvOverrides(cfg, { CLINE_PASS_KEY: 'sk_env' });
     expect(cfg.accounts).toHaveLength(1);
+  });
+
+  it('CLINE_PASS_KEY 只做首次启动引导：已有账号时忽略', () => {
+    const cfg = defaultConfig();
+    cfg.accounts = [{ name: 'A', key: 'sk_a' }];
+    const notes = applyEnvOverrides(cfg, { CLINE_PASS_KEY: 'sk_env' });
+    expect(cfg.accounts).toEqual([{ name: 'A', key: 'sk_a' }]);
+    expect(notes.join()).toContain('已忽略 CLINE_PASS_KEY');
   });
 
   it('PROXY_KEY→网关、PORT/BIND_HOST→控制台', () => {

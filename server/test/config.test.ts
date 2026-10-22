@@ -166,6 +166,22 @@ describe('migrateConfig', () => {
     expect((r.raw.gateways as Array<Record<string, unknown>>)[0]?.port).toBe(3123);
   });
 
+  it('v4 → v5：原网关占用 3125 时让位给控制台，避免控制台绑不上', () => {
+    const r = migrateConfig({
+      version: 4,
+      accounts: [{ name: 'A', key: 'sk_a' }],
+      gateways: [
+        { id: 'main', port: 3125 },
+        { id: 'risk', port: 3126 },
+      ],
+      console: { gatewayId: 'main' },
+    });
+    const gateways = r.raw.gateways as Array<Record<string, unknown>>;
+    expect(gateways[0]?.port).toBe(3127);
+    expect(gateways[1]?.port).toBe(3126);
+    expect(r.applied.join()).toContain('与控制台冲突');
+  });
+
   it('版本高于程序支持时抛 ConfigTooNewError', () => {
     expect(() => migrateConfig({ version: CONFIG_VERSION + 1 })).toThrow(ConfigTooNewError);
   });

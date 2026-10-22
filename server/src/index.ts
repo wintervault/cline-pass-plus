@@ -10,7 +10,6 @@ import {
   gatewayAccounts,
   gatewayById,
   gatewayProxyBase,
-  primaryGateway,
   usableAccounts,
 } from './config/derive.ts';
 import { applyEnvOverrides } from './config/env.ts';
@@ -61,6 +60,8 @@ const FALLBACK_FAILOVER = FailoverSchema.parse({});
  */
 function learnFromFailure(configStore: JsonStore<Config>, metaStore: JsonStore<MetaFile>, gatewayId: string) {
   return (modelId: string, upstream: string | null, message: string, accountName: string): void => {
+    // 请求可能跨过网关删除：别给已删除的网关重新写观测数据
+    if (!configStore.value.gateways.some((g) => g.id === gatewayId)) return;
     if (upstream) {
       const status = classifyChannelStatus(message);
       if (status === 'unknown') return; // 无把握的不记录，避免误标
@@ -72,7 +73,7 @@ function learnFromFailure(configStore: JsonStore<Config>, metaStore: JsonStore<M
         const model = models[modelId] ?? blankModelMeta();
         model.upstreamStatus = { ...model.upstreamStatus, [upstream]: entry };
         models[modelId] = model;
-        if (accountName) {
+        if (accountName && configStore.value.accounts.some((a) => a.name === accountName)) {
           const byAccount = ensureAccountModels(meta, accountName);
           const accountModel = byAccount[modelId] ?? blankModelMeta();
           accountModel.upstreamStatus = { ...accountModel.upstreamStatus, [upstream]: entry };
@@ -167,6 +168,8 @@ async function main(): Promise<void> {
     getMeta: (account, modelId) => accountModels(metaStore.value, account)[modelId],
     setMeta: (account, modelId, model) =>
       metaStore.update((meta) => {
+        // 探测可能跑几十秒；期间账号被删除/改名时不要再写回孤儿记录
+        if (!configStore.value.accounts.some((a) => a.name === account)) return;
         ensureAccountModels(meta, account)[modelId] = model;
       }),
     orEndpoints: (slug) => catalog.orEndpoints(slug),

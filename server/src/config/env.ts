@@ -19,11 +19,24 @@ export function applyEnvOverrides(config: Config, env: NodeJS.ProcessEnv = proce
   const gateway = primaryGateway(config);
 
   const clineKey = env.CLINE_PASS_KEY?.trim();
-  if (clineKey && !config.accounts.some((a) => a.key === clineKey)) {
-    const merged = ensureUniqueAccountNames([{ name: 'env-account', key: clineKey }, ...config.accounts]);
-    config.accounts = merged.accounts;
-    for (const r of merged.renamed) notes.push(`账号名重复，已自动改名：${r.from} → ${r.to}`);
-    notes.push('CLINE_PASS_KEY 已注入账号池');
+  if (clineKey) {
+    /**
+     * 环境变量只用于**首次启动引导**。
+     *
+     * 账号池一旦有账号，就完全以控制台里的账号池为准：否则每次启动都会
+     * 塞回一个界面上删不掉、也看不出是环境变量来的 `env-account`，在账号已经
+     * 很多时既多余又会参与轮转（旧 key 失效时还会造成请求失败）。
+     * 多账号请直接在「账号池」里维护，或挂载 config.json；不在这里加分隔符——
+     * 那等于把账号池拆成两套真值。
+     */
+    if (config.accounts.length > 0) {
+      notes.push(`账号池已有 ${config.accounts.length} 个账号，已忽略 CLINE_PASS_KEY（该变量仅用于首次启动）`);
+    } else if (!config.accounts.some((a) => a.key === clineKey)) {
+      const merged = ensureUniqueAccountNames([{ name: 'env-account', key: clineKey }, ...config.accounts]);
+      config.accounts = merged.accounts;
+      for (const r of merged.renamed) notes.push(`账号名重复，已自动改名：${r.from} → ${r.to}`);
+      notes.push('CLINE_PASS_KEY 已注入账号池（首次启动引导）');
+    }
   }
 
   const proxyKey = env.PROXY_KEY?.trim();

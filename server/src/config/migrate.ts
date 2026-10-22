@@ -156,6 +156,21 @@ export function migrateConfig(input: Record<string, unknown>): MigrationResult {
     // 复制旧控制台网关的密钥：远端用户升级后不会因为「换了一把钥匙」而进不去控制台。
     const proxyKey = donor && typeof donor['proxyKey'] === 'string' ? donor['proxyKey'] : '';
     raw.console = { port: DEFAULT_CONSOLE_PORT, bindHost: '127.0.0.1', proxyKey };
+
+    // 旧配置里若已有网关占着 3125，控制台会绑不上 → 控制台彻底不可达。
+    // 把冲突的网关挪到 3126 起的下一个空位（桌面壳强制控制台用 3125，必须让路）。
+    let nextPort = 3126;
+    for (const gateway of gateways) {
+      if (gateway['port'] !== DEFAULT_CONSOLE_PORT) continue;
+      while (nextPort === DEFAULT_CONSOLE_PORT || gateways.some((g) => g !== gateway && g['port'] === nextPort)) {
+        nextPort += 1;
+      }
+      const name = typeof gateway['name'] === 'string' ? gateway['name'] : String(gateway['id'] ?? '网关');
+      gateway['port'] = nextPort;
+      applied.push(`网关「${name}」原端口 ${DEFAULT_CONSOLE_PORT} 与控制台冲突，已改为 ${nextPort}`);
+      nextPort += 1;
+    }
+
     raw.version = 5;
     applied.push(
       `配置格式 v4 → v5：控制台改为独立监听 ${DEFAULT_CONSOLE_PORT}（仍可本机免密钥访问；远端访问密钥沿用原控制台网关）`,

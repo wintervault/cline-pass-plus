@@ -1,9 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
+import { ensureUniqueAccountNames } from '../src/accounts/naming.ts';
 import { AccountPool } from '../src/accounts/pool.ts';
 import { defaultConfig } from '../src/config/schema.ts';
 
 const acc = (name: string, key = `sk_${name}`) => ({ name, key });
+
+describe('ensureUniqueAccountNames', () => {
+  it('原型链保留名会被改成可见的普通名字', () => {
+    const r = ensureUniqueAccountNames([acc('__proto__'), acc('constructor'), acc('正常')]);
+    expect(r.accounts.map((a) => a.name)).toEqual(['账号-__proto__', '账号-constructor', '正常']);
+    expect(r.renamed).toHaveLength(2);
+  });
+});
 
 /**
  * 账号池按网关构造：这里直接用「一个网关」的视角（账号子集 = 全部）。
