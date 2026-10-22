@@ -21,7 +21,7 @@ import {
 } from 'antd';
 import { useEffect, useState } from 'react';
 
-import { useAccounts, useModels, useSaveModelConfig, useTest } from '../api/hooks.ts';
+import { useModels, useSaveModelConfig, useTest } from '../api/hooks.ts';
 import {
   EMPTY_PER_MODEL,
   type ModelMeta,
@@ -29,6 +29,7 @@ import {
   type TestResult,
   type TraceEntry,
 } from '../api/types.ts';
+import { DetectionAccountPicker, useDetectionAccount } from '../detectionScope.tsx';
 import { useFeedback } from '../feedback.ts';
 import { diagnosticText } from '../i18n/codes.ts';
 import { useI18n } from '../i18n/index.tsx';
@@ -283,10 +284,7 @@ function TraceTable({ trace, targets }: { trace?: TraceEntry[]; targets: string[
 export default function Playground() {
   const { gatewayId } = useRoutingGateway();
   const { t } = useI18n();
-  const accountsQuery = useAccounts();
-  const accounts = accountsQuery.data?.accounts ?? [];
-  const [pickedAccount, setPickedAccount] = useState(() => localStorage.getItem('cps_detect_account') ?? '');
-  const activeAccount = accounts.some((a) => a.name === pickedAccount) ? pickedAccount : (accounts[0]?.name ?? '');
+  const { account: activeAccount } = useDetectionAccount();
   const models = useModels({ gatewayId, account: activeAccount });
   const test = useTest(gatewayId, activeAccount);
   const fb = useFeedback();
@@ -310,7 +308,9 @@ export default function Playground() {
 
   const upstreamOptions = [
     { value: '', label: t('playground.field.channel.auto') },
-    ...cfg.upstreams.map((u) => ({ value: u, label: u })),
+    // 先列路由清单，再补该账号探测到、但还没加入路由的渠道：
+    // 用户可以先测试一个候选渠道，再决定要不要钉它。
+    ...[...new Set([...cfg.upstreams, ...(activeRow?.meta?.upstreams ?? [])])].map((u) => ({ value: u, label: u })),
   ];
 
   const run = (): void => {
@@ -335,25 +335,7 @@ export default function Playground() {
       <PageHeader
         title={t('playground.title')}
         desc={t('playground.desc')}
-        actions={
-          <Space size={6} align="center">
-            <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-              {t('playground.account.label')}
-            </Typography.Text>
-            <Select
-              size="small"
-              showSearch
-              style={{ minWidth: 180 }}
-              value={activeAccount || undefined}
-              placeholder={t('models.account.placeholder')}
-              options={accounts.map((a) => ({ value: a.name, label: a.name }))}
-              onChange={(name: string) => {
-                setPickedAccount(name);
-                localStorage.setItem('cps_detect_account', name);
-              }}
-            />
-          </Space>
-        }
+        actions={<DetectionAccountPicker label={t('playground.account.label')} />}
       />
 
       <Panel title={t('playground.params.title')} extra={<PanelHint>{t('playground.params.hint')}</PanelHint>}>

@@ -1,9 +1,10 @@
 import { SearchOutlined } from '@ant-design/icons';
-import { Alert, App, Button, Empty, Input, Select, Skeleton, Space, Table, Tag, Tooltip, Typography } from 'antd';
+import { Alert, App, Button, Empty, Input, Skeleton, Space, Table, Tag, Tooltip, Typography } from 'antd';
 import { useState } from 'react';
 
-import { useAccounts, useModels, useProbe } from '../api/hooks.ts';
+import { useModels, useProbe } from '../api/hooks.ts';
 import type { PinState, Pipeline } from '../api/types.ts';
+import { DetectionAccountPicker, useDetectionAccount } from '../detectionScope.tsx';
 import { useI18n } from '../i18n/index.tsx';
 import { PageHeader } from '../pageHeader.tsx';
 import { Panel } from '../panel.tsx';
@@ -63,10 +64,7 @@ export default function Catalog() {
   const { message } = App.useApp();
   const { t } = useI18n();
   // 目录是全局的；探测结论属于**账号**（按账号隔离，换号结果可能不同）
-  const accounts = useAccounts();
-  const accountList = accounts.data?.accounts ?? [];
-  const [picked, setPicked] = useState(() => localStorage.getItem('cps_detect_account') ?? '');
-  const activeAccount = accountList.some((a) => a.name === picked) ? picked : (accountList[0]?.name ?? '');
+  const { account: activeAccount } = useDetectionAccount();
   const models = useModels({ account: activeAccount });
   const probe = useProbe(activeAccount);
   const [filter, setFilter] = useState('');
@@ -104,25 +102,7 @@ export default function Catalog() {
       <PageHeader
         title={t('catalog.title')}
         desc={t('catalog.desc')}
-        actions={
-          <Space size={6} align="center">
-            <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-              {t('models.account.label')}
-            </Typography.Text>
-            <Select
-              size="small"
-              showSearch
-              style={{ minWidth: 180 }}
-              value={activeAccount || undefined}
-              placeholder={t('models.account.placeholder')}
-              options={accountList.map((a) => ({ value: a.name, label: a.name }))}
-              onChange={(name: string) => {
-                setPicked(name);
-                localStorage.setItem('cps_detect_account', name);
-              }}
-            />
-          </Space>
-        }
+        actions={<DetectionAccountPicker label={t('models.account.label')} />}
       />
       {/* 区域：目录（搜索与计数属于这块区域的头，表格是它的体） */}
       <Panel
@@ -207,6 +187,7 @@ export default function Catalog() {
                 render: (_, r) => (
                   <Button
                     size="small"
+                    disabled={!activeAccount}
                     loading={probe.isPending && probe.variables === r.id}
                     onClick={() => runProbe(String(r.id))}
                   >

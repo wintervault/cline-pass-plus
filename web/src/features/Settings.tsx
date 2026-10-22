@@ -89,20 +89,16 @@ function AutostartPanel() {
 
   return (
     <Panel title={t('settings.start.title')}>
-      {!host?.autostart ? (
-        <Alert type="info" showIcon message={t('settings.start.desktopOnly')} />
-      ) : (
-        <div style={{ display: 'grid', gap: 12 }}>
-          <Space size={12} align="center">
-            <Switch checked={enabled === true} loading={busy || enabled === null} onChange={(v) => void toggle(v)} />
-            <Typography.Text>{t('settings.start.autostart')}</Typography.Text>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {t('settings.start.autostartHint')}
-            </Typography.Text>
-          </Space>
-          {error && <Alert type="error" showIcon message={t('settings.start.failed')} description={error} />}
-        </div>
-      )}
+      <div style={{ display: 'grid', gap: 12 }}>
+        <Space size={12} align="center">
+          <Switch checked={enabled === true} loading={busy || enabled === null} onChange={(v) => void toggle(v)} />
+          <Typography.Text>{t('settings.start.autostart')}</Typography.Text>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            {t('settings.start.autostartHint')}
+          </Typography.Text>
+        </Space>
+        {error && <Alert type="error" showIcon message={t('settings.start.failed')} description={error} />}
+      </div>
     </Panel>
   );
 }
@@ -126,6 +122,16 @@ function ConsolePanel() {
 
   const status = data?.status ?? { state: 'stopped' as const, boundPort: null, boundHost: null };
   const tag = STATE_TAG[status.state] ?? STATE_TAG.stopped;
+  /**
+   * 非回环绑定必须保留访问密钥（服务端会拒绝清除）。
+   * 这里提前禁用并说明原因，避免用户点完确认才收到一个失败回执。
+   */
+  const savedBindHost = (data?.bindHost ?? bindHost)
+    .trim()
+    .toLowerCase()
+    .replace(/^\[|\]$/g, '');
+  const loopbackBind = savedBindHost === 'localhost' || savedBindHost === '::1' || /^127\./.test(savedBindHost);
+  const canClearKey = !!data?.hasProxyKey && loopbackBind;
 
   return (
     <Panel title={t('settings.console.title')}>
@@ -244,20 +250,27 @@ function ConsolePanel() {
             >
               {t('settings.console.save')}
             </Button>
-            <Popconfirm
-              title={t('settings.console.clearKey.confirmTitle')}
-              description={t('settings.console.clearKey.confirmDesc')}
-              okText={t('common.confirmClear')}
-              okButtonProps={{ danger: true }}
-              cancelText={t('common.cancel')}
-              onConfirm={() =>
-                save.mutate({ proxyKey: null, note: t('settings.console.cleared') }, { onSuccess: () => setKey('') })
-              }
-            >
-              <Button danger disabled={!data?.hasProxyKey}>
-                {t('settings.console.clearKey')}
-              </Button>
-            </Popconfirm>
+            <Tooltip title={data?.hasProxyKey && !canClearKey ? t('settings.console.clearKey.nonLoopback') : undefined}>
+              <span>
+                <Popconfirm
+                  title={t('settings.console.clearKey.confirmTitle')}
+                  description={t('settings.console.clearKey.confirmDesc')}
+                  okText={t('common.confirmClear')}
+                  okButtonProps={{ danger: true }}
+                  cancelText={t('common.cancel')}
+                  onConfirm={() =>
+                    save.mutate(
+                      { proxyKey: null, note: t('settings.console.cleared') },
+                      { onSuccess: () => setKey('') },
+                    )
+                  }
+                >
+                  <Button danger disabled={!canClearKey}>
+                    {t('settings.console.clearKey')}
+                  </Button>
+                </Popconfirm>
+              </span>
+            </Tooltip>
           </div>
         </div>
 
@@ -384,10 +397,12 @@ function AboutPanel() {
 
 export default function Settings() {
   const { t } = useI18n();
+  const host = getHostBridge();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <PageHeader title={t('settings.title')} desc={t('settings.desc')} />
-      <AutostartPanel />
+      {/* 开机自启只在桌面版有意义：浏览器/服务器部署不显示这一块 */}
+      {host?.autostart ? <AutostartPanel /> : null}
       <ConsolePanel />
       <DataPanel />
       <AboutPanel />

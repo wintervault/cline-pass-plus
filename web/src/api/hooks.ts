@@ -195,9 +195,13 @@ export function useSaveAccounts() {
   const { t } = useI18n();
   return useMutation({
     mutationFn: (vars: { payload: unknown; note?: string }) =>
-      api<{ ok: boolean }>('/api/accounts', { json: vars.payload }),
-    onSuccess: (_data, vars) => {
+      api<{ ok: boolean; renamed?: Array<{ from: string; to: string }> }>('/api/accounts', { json: vars.payload }),
+    onSuccess: (data, vars) => {
       refresh();
+      // 账号改名后通知检测页把「当前检测账号」跟着改，否则会回退到第一个账号
+      if (data.renamed?.length) {
+        window.dispatchEvent(new CustomEvent('cps:accounts-renamed', { detail: data.renamed }));
+      }
       fb.ok(vars.note ?? t('toast.accounts.saved'));
     },
     onError: (err) => {

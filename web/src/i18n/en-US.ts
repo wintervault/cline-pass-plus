@@ -56,7 +56,7 @@ const enUS: Record<keyof typeof zhCN, string> = {
   'app.refreshed': 'All data refreshed',
   'app.notConfigured.title': 'No upstream account yet',
   'app.notConfigured.desc':
-    'The account pool is empty. Add a Cline Pass account (key starts with sk_) in Accounts and save. You can also provide it with the CLINE_PASS_KEY environment variable.',
+    'The account pool is empty. Add a Cline Pass account (key starts with sk_) in Accounts and save.',
   'app.notConfigured.action': 'Add account',
   'app.lang.switch': 'Interface language',
 
@@ -195,10 +195,10 @@ const enUS: Record<keyof typeof zhCN, string> = {
   'models.noAccount.action': 'Open Accounts',
   'models.pipeline.planner': 'Planner · Vercel',
   'models.pipeline.direct': 'Direct · OpenRouter',
-  'models.action.probe': 'Probe channels',
+  'models.action.probe': 'Probe',
   'models.action.probe.tip':
     'Sends one probe request: checks whether the gateway honours pinning and lists the channels this model can use.',
-  'models.action.test': 'Send a test',
+  'models.action.test': 'Test',
   'models.action.test.tip': 'Sends one small request with the current config to see which channel is actually used.',
   'models.action.validate': 'Validate',
   'models.action.validating': 'Validating…',
@@ -601,8 +601,6 @@ const enUS: Record<keyof typeof zhCN, string> = {
   'settings.desc':
     'App-level settings: startup, console access, data and about. Accounts and gateways are configured on their own pages.',
   'settings.start.title': 'Startup',
-  'settings.start.desktopOnly':
-    'Autostart is only available in the desktop app; a browser deployment is managed by its service manager.',
   'settings.start.autostart': 'Start at login',
   'settings.start.autostartHint': 'Starts in the tray after you sign in, without opening the window.',
   'settings.start.failed': 'Could not change the setting',
@@ -627,6 +625,8 @@ const enUS: Record<keyof typeof zhCN, string> = {
   'settings.console.clearKey.confirmTitle': 'Clear the console access key?',
   'settings.console.clearKey.confirmDesc':
     'Remote console access will no longer require a key (loopback bind only). Local access is unaffected.',
+  'settings.console.clearKey.nonLoopback':
+    'A non-loopback bind must keep an access key; switch back to 127.0.0.1 before clearing it',
   'settings.console.saved': 'Console settings saved',
   'settings.console.cleared': 'Console access key cleared',
   'settings.console.note':
@@ -651,6 +651,7 @@ const enUS: Record<keyof typeof zhCN, string> = {
   'api.console.bindHostRequired': 'Console bind address cannot be empty',
   'api.console.insecureBind': 'Set a console access key before binding to a non-loopback address (or use 127.0.0.1)',
   'api.console.portConflict': 'Port {port} is already used by gateway "{name}"',
+  'api.console.bindFailed': 'The console cannot listen on {addr}: {error}',
   'api.console.invalid': 'Invalid console settings',
   // ---------------- API errors (server code → message) ----------------
   'api.accounts.noTargets': 'No matching accounts',
@@ -665,6 +666,7 @@ const enUS: Record<keyof typeof zhCN, string> = {
   'api.gateway.failoverInvalid': 'Invalid failover settings',
   'api.gateway.insecureBind': 'Set an API key before binding to a non-loopback address (or bind 127.0.0.1)',
   'api.gateway.portConflict': 'Port {port} is already used by gateway "{name}"',
+  'api.gateway.portConflictConsole': 'Port {port} is already used by the console',
   'api.gateway.notFound': 'Gateway not found',
   'api.gateway.lastOne': 'Keep at least one gateway',
   'api.gateway.consoleProtected': 'The console gateway cannot be deleted — switch the console elsewhere first',

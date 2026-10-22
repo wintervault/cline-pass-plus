@@ -20,6 +20,7 @@ import { AccessGate } from './accessGate.tsx';
 import { getAuthKey, setAuthKey } from './api/client.ts';
 import { useMeta, useRefresh } from './api/hooks.ts';
 import './app.css';
+import { DetectionAccountProvider } from './detectionScope.tsx';
 import Accounts from './features/Accounts.tsx';
 import Catalog from './features/Catalog.tsx';
 import Gateways from './features/Gateways.tsx';
@@ -44,7 +45,7 @@ const SIDEBAR_KEY = 'cps_sidebar';
 /**
  * 导航注册表：壳层只认这张表；页面增减只改这里。
  *
- * 顺序即使用频率：先账号与网关（配置），再订阅模型与测试台（日常），
+ * 顺序即使用频率：先网关与账号（配置），再订阅模型与测试台（日常），
  * 然后请求历史与设置。完整目录是彩蛋页，永远排在最后且默认不出现。
  */
 const PAGES: { key: string; labelKey: MsgKey; icon: ComponentType; element: ComponentType }[] = [
@@ -300,7 +301,7 @@ function Console({ mode, onToggleTheme }: { mode: ThemeMode; onToggleTheme: () =
   };
 
   return (
-    // 网关选择是所有页面共享的状态（六个页面同时挂载，各自持有会不同步）
+    // 检测账号与路由网关是跨页共享状态（页面同时挂载，各自持有会不同步）
     <>
       {/* 桌面应用形态：自绘标题栏 + 固定侧栏 + 内容区内滚 + 常驻状态栏（窗口高度恒定，不整页滚） */}
       <TitleBar />
@@ -324,9 +325,10 @@ function Console({ mode, onToggleTheme }: { mode: ThemeMode; onToggleTheme: () =
           />
         </Layout.Sider>
 
-        <RoutingGatewayProvider>
-          <Layout style={{ background: 'transparent', minWidth: 0 }}>
-            {/*
+        <DetectionAccountProvider>
+          <RoutingGatewayProvider>
+            <Layout style={{ background: 'transparent', minWidth: 0 }}>
+              {/*
             内容列由外壳统一给定（唯一来源）：所有页面共用同一个宽度与左边距。
             两处关键：
             1. `scrollbarGutter: 'stable'` —— 常驻预留滚动条槽位。不预留的话，
@@ -335,81 +337,82 @@ function Console({ mode, onToggleTheme }: { mode: ThemeMode; onToggleTheme: () =
             2. 页面**不许**再自己写 maxWidth —— 一写就与别的页面对不齐，
                标题的横坐标会在切页时跳。
           */}
-            <Layout.Content
-              style={{
-                overflow: 'auto',
-                scrollbarGutter: 'stable',
-                padding: `20px ${PAGE_GUTTER}px 24px`,
-              }}
-            >
-              <div
+              <Layout.Content
                 style={{
-                  width: '100%',
-                  maxWidth: PAGE_WIDTH,
-                  margin: '0 auto',
-                  /* 必须给**确定**高度（不是 minHeight）：需要填满内容列的页面
-                   （订阅模型）以它为高度来源；内容更高的页面照常溢出、由内容区滚动。 */
-                  height: '100%',
-                  display: 'flex',
-                  flexDirection: 'column',
+                  overflow: 'auto',
+                  scrollbarGutter: 'stable',
+                  padding: `20px ${PAGE_GUTTER}px 24px`,
                 }}
               >
-                {needKey ? (
-                  <AccessGate
-                    value={keyDraft}
-                    onChange={setKeyDraft}
-                    onSubmit={() => void tryKey()}
-                    checking={keyChecking}
-                    error={keyError}
-                  />
-                ) : (
-                  <>
-                    <ServiceBanner control={host} />
-                    {meta.data && meta.data.accounts.usable === 0 && (
-                      <Alert
-                        type="error"
-                        showIcon
-                        style={{ marginBottom: 16 }}
-                        message={t('app.notConfigured.title')}
-                        description={t('app.notConfigured.desc')}
-                        action={
-                          <Button size="small" danger onClick={() => setNav('accounts')}>
-                            {t('app.notConfigured.action')}
-                          </Button>
-                        }
-                      />
-                    )}
-                    {pages.map((p) => (
-                      /* 页面包装层可拉伸、不可压缩：需要「填满内容列」的页面（订阅模型）
+                <div
+                  style={{
+                    width: '100%',
+                    maxWidth: PAGE_WIDTH,
+                    margin: '0 auto',
+                    /* 必须给**确定**高度（不是 minHeight）：需要填满内容列的页面
+                   （订阅模型）以它为高度来源；内容更高的页面照常溢出、由内容区滚动。 */
+                    height: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                  }}
+                >
+                  {needKey ? (
+                    <AccessGate
+                      value={keyDraft}
+                      onChange={setKeyDraft}
+                      onSubmit={() => void tryKey()}
+                      checking={keyChecking}
+                      error={keyError}
+                    />
+                  ) : (
+                    <>
+                      <ServiceBanner control={host} />
+                      {meta.data && meta.data.accounts.usable === 0 && (
+                        <Alert
+                          type="error"
+                          showIcon
+                          style={{ marginBottom: 16 }}
+                          message={t('app.notConfigured.title')}
+                          description={t('app.notConfigured.desc')}
+                          action={
+                            <Button size="small" danger onClick={() => setNav('accounts')}>
+                              {t('app.notConfigured.action')}
+                            </Button>
+                          }
+                        />
+                      )}
+                      {pages.map((p) => (
+                        /* 页面包装层可拉伸、不可压缩：需要「填满内容列」的页面（订阅模型）
                        把这一层当高度来源；内容更高的页面保持自然高度、由内容区滚动。
                        shrink 必须是 0——缩了会把高页面的内容压进视口。 */
-                      <div
-                        key={p.key}
-                        style={{ display: activeNav === p.key ? 'block' : 'none', flex: '1 0 auto', minHeight: 0 }}
-                      >
-                        <p.element />
-                      </div>
-                    ))}
-                  </>
-                )}
-              </div>
-            </Layout.Content>
+                        <div
+                          key={p.key}
+                          style={{ display: activeNav === p.key ? 'block' : 'none', flex: '1 0 auto', minHeight: 0 }}
+                        >
+                          <p.element />
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              </Layout.Content>
 
-            <StatusBar
-              control={host}
-              version={meta.data?.version}
-              onOpenGateways={() => setNav('gateways')}
-              mode={mode}
-              lang={lang}
-              onToggleLang={setLang}
-              onToggleTheme={onToggleTheme}
-              onRefresh={() => {
-                refresh();
-                fb.ok(t('app.refreshed'));
-              }}
-            />
-          </Layout>
-        </RoutingGatewayProvider>
+              <StatusBar
+                control={host}
+                version={meta.data?.version}
+                onOpenGateways={() => setNav('gateways')}
+                mode={mode}
+                lang={lang}
+                onToggleLang={setLang}
+                onToggleTheme={onToggleTheme}
+                onRefresh={() => {
+                  refresh();
+                  fb.ok(t('app.refreshed'));
+                }}
+              />
+            </Layout>
+          </RoutingGatewayProvider>
+        </DetectionAccountProvider>
       </Layout>
     </>
   );

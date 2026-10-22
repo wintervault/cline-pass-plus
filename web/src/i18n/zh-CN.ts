@@ -55,8 +55,7 @@ const zhCN = {
   // ---------------- 应用外壳 ----------------
   'app.refreshed': '已刷新全部数据',
   'app.notConfigured.title': '尚未添加上游账号',
-  'app.notConfigured.desc':
-    '账号池还是空的。在「账号池」里添加你的 Cline Pass 账号（sk_ 开头的 key）并保存；也可通过 CLINE_PASS_KEY 环境变量提供。',
+  'app.notConfigured.desc': '账号池还是空的。在「账号池」里添加你的 Cline Pass 账号（sk_ 开头的 key）并保存。',
   'app.notConfigured.action': '去添加',
   'app.lang.switch': '切换界面语言',
 
@@ -568,7 +567,6 @@ const zhCN = {
   'settings.title': '设置',
   'settings.desc': '应用级设置：启动方式、控制台访问、数据与关于。账号与网关的配置在各自页面。',
   'settings.start.title': '启动',
-  'settings.start.desktopOnly': '开机自启只在桌面版可用；浏览器直开时由系统服务管理器负责。',
   'settings.start.autostart': '开机自启',
   'settings.start.autostartHint': '登录系统后在托盘启动，不自动弹出窗口。',
   'settings.start.failed': '设置失败',
@@ -592,6 +590,7 @@ const zhCN = {
   'settings.console.clearKey.confirmTitle': '清除控制台访问密钥？',
   'settings.console.clearKey.confirmDesc':
     '清除后，远端访问控制台将不再需要密钥（仅限已绑定回环地址的情况）。本机访问不受影响。',
+  'settings.console.clearKey.nonLoopback': '绑定非回环地址时必须保留访问密钥；先改回 127.0.0.1 才能清除',
   'settings.console.saved': '控制台设置已保存',
   'settings.console.cleared': '控制台访问密钥已清除',
   'settings.console.note':
@@ -616,6 +615,7 @@ const zhCN = {
   'api.console.bindHostRequired': '控制台绑定地址不能为空',
   'api.console.insecureBind': '绑定非回环地址时必须设置控制台访问密钥（或改回 127.0.0.1）',
   'api.console.portConflict': '端口 {port} 已被网关「{name}」占用',
+  'api.console.bindFailed': '控制台无法监听 {addr}：{error}',
   'api.console.invalid': '控制台设置不合法',
   // ---------------- 接口错误（后端 code → 词条） ----------------
   'api.accounts.noTargets': '没有匹配的账号',
@@ -630,6 +630,7 @@ const zhCN = {
   'api.gateway.failoverInvalid': '失败转移参数不合法',
   'api.gateway.insecureBind': '绑定非回环地址时必须设置 API Key（或把绑定地址改成 127.0.0.1）',
   'api.gateway.portConflict': '端口 {port} 已被网关「{name}」占用',
+  'api.gateway.portConflictConsole': '端口 {port} 已被控制台占用',
   'api.gateway.notFound': '网关不存在',
   'api.gateway.lastOne': '至少保留一个网关',
   'api.gateway.consoleProtected': '不能删除控制台网关：先把控制台切到别的网关',

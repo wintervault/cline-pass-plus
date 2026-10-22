@@ -1,4 +1,4 @@
-import { Select, Space, Typography } from 'antd';
+import { Select, Space, Tooltip, Typography } from 'antd';
 
 import type { PerModelConfig, SortKey } from '../api/types.ts';
 import { useT } from '../i18n/index.tsx';
@@ -23,9 +23,14 @@ export function RoutingFields({
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '16px 40px' }}>
       <div>
         <Space size={12} align="center">
-          <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-            {t('routing.pinMode')}
-          </Typography.Text>
+          <Tooltip title={t('routing.pinMode.hint')}>
+            <Typography.Text
+              type="secondary"
+              style={{ fontSize: 13, borderBottom: '1px dashed var(--ant-color-border)' }}
+            >
+              {t('routing.pinMode')}
+            </Typography.Text>
+          </Tooltip>
           <Select
             style={{ width: selectWidth }}
             value={cfg.pinMode}
@@ -43,15 +48,17 @@ export function RoutingFields({
             ]}
           />
         </Space>
-        <Typography.Text type="secondary" style={{ fontSize: 12, lineHeight: '18px', display: 'block', marginTop: 6 }}>
-          {t('routing.pinMode.hint')}
-        </Typography.Text>
       </div>
       <div>
         <Space size={12} align="center">
-          <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-            {t('routing.sort')}
-          </Typography.Text>
+          <Tooltip title={t('routing.sort.hint')}>
+            <Typography.Text
+              type="secondary"
+              style={{ fontSize: 13, borderBottom: '1px dashed var(--ant-color-border)' }}
+            >
+              {t('routing.sort')}
+            </Typography.Text>
+          </Tooltip>
           <Select
             style={{ width: selectWidth }}
             value={cfg.sort ?? ''}
@@ -72,9 +79,6 @@ export function RoutingFields({
             ]}
           />
         </Space>
-        <Typography.Text type="secondary" style={{ fontSize: 12, lineHeight: '18px', display: 'block', marginTop: 6 }}>
-          {t('routing.sort.hint')}
-        </Typography.Text>
       </div>
     </div>
   );

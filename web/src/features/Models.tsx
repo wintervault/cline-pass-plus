@@ -4,36 +4,14 @@ import {
   DownloadOutlined,
   ExclamationCircleFilled,
   HolderOutlined,
+  InfoCircleOutlined,
   SearchOutlined,
   StopOutlined,
 } from '@ant-design/icons';
 import { useQueryClient } from '@tanstack/react-query';
-import {
-  Alert,
-  Button,
-  Card,
-  Checkbox,
-  Empty,
-  Input,
-  Select,
-  Skeleton,
-  Space,
-  Tag,
-  Tooltip,
-  Typography,
-  theme,
-} from 'antd';
+import { Alert, Button, Card, Checkbox, Empty, Input, Skeleton, Space, Tag, Tooltip, Typography, theme } from 'antd';
 import { useEffect, useState } from 'react';
-import {
-  qk,
-  useAccounts,
-  useFetchOfficial,
-  useModels,
-  useProbe,
-  useSaveModelConfig,
-  useTest,
-  useValidate,
-} from '../api/hooks.ts';
+import { qk, useFetchOfficial, useModels, useProbe, useSaveModelConfig, useTest, useValidate } from '../api/hooks.ts';
 import {
   EMPTY_PER_MODEL,
   type ModelMeta,
@@ -43,6 +21,7 @@ import {
   type SubscriptionRow,
   type UpstreamStatusKind,
 } from '../api/types.ts';
+import { DetectionAccountPicker, useDetectionAccount } from '../detectionScope.tsx';
 import { diagnosticText } from '../i18n/codes.ts';
 import { type Lang, type MsgKey, useI18n, useT } from '../i18n/index.tsx';
 import { STATUS_TAG } from '../labels.ts';
@@ -319,11 +298,7 @@ export default function Models() {
   /** 检测属于账号；路由配置属于网关（底部「路由策略」区块里的选择器）。 */
   const { gatewayId } = useRoutingGateway();
   const { t, lang } = useI18n();
-  const accountsQuery = useAccounts();
-  const accounts = accountsQuery.data?.accounts ?? [];
-  const [pickedAccount, setPickedAccount] = useState(() => localStorage.getItem('cps_detect_account') ?? '');
-  const activeAccount = accounts.some((a) => a.name === pickedAccount) ? pickedAccount : (accounts[0]?.name ?? '');
-  const accountInfo = accounts.find((a) => a.name === activeAccount) ?? null;
+  const { account: activeAccount, accounts } = useDetectionAccount();
 
   const models = useModels({ gatewayId, account: activeAccount });
   const qc = useQueryClient();
@@ -338,13 +313,11 @@ export default function Models() {
   const [dragFrom, setDragFrom] = useState<number | null>(null);
   const [dragTo, setDragTo] = useState<number | null>(null);
 
-  // 账号被删/改名后把选择收敛到仍然存在的账号
+  // 切换检测账号时把模型选择收回到第一项，避免停留在上一个账号的选择上
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 依赖的用途是「变化时重置」，effect 内不读取它
   useEffect(() => {
-    if (activeAccount && activeAccount !== pickedAccount) {
-      setPickedAccount(activeAccount);
-      localStorage.setItem('cps_detect_account', activeAccount);
-    }
-  }, [activeAccount, pickedAccount]);
+    setSelectedId(null);
+  }, [activeAccount]);
 
   const rows = models.data?.subscription ?? [];
   const official = models.data?.officialFetch ?? null;
@@ -413,14 +386,6 @@ export default function Models() {
   };
 
   /** 账号体检结论标签：检测结果要跟着账号走，页头必须能看见「现在用的是哪个号」。 */
-  const classTag = (() => {
-    const kind = accountInfo?.classify?.class ?? 'unknown';
-    if (!activeAccount) return null;
-    if (kind === 'normal') return <Tag color="green">{t('models.account.normal')}</Tag>;
-    if (kind === 'private') return <Tag color="orange">{t('models.account.private')}</Tag>;
-    return <Tag>{t('models.account.unknown')}</Tag>;
-  })();
-
   return (
     /* 填满内容列：两栏吃满剩余高度，路由策略贴底，底部只留内容区内边距。 */
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, height: '100%' }}>
@@ -429,25 +394,7 @@ export default function Models() {
         desc={t('models.desc')}
         actions={
           <Space size={8}>
-            <Space size={6} align="center">
-              <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-                {t('models.account.label')}
-              </Typography.Text>
-              <Select
-                size="small"
-                showSearch
-                style={{ minWidth: 180, maxWidth: 240 }}
-                value={activeAccount || undefined}
-                placeholder={t('models.account.placeholder')}
-                options={accounts.map((a) => ({ value: a.name, label: a.name }))}
-                onChange={(name: string) => {
-                  setPickedAccount(name);
-                  localStorage.setItem('cps_detect_account', name);
-                  setSelectedId(null);
-                }}
-              />
-              {classTag}
-            </Space>
+            <DetectionAccountPicker label={t('models.account.label')} showClass />
             <Tooltip
               title={
                 official
@@ -697,70 +644,68 @@ export default function Models() {
                     </Typography.Text>
                     <PanelHint>{t('models.chain.count', { count: ups.length })}</PanelHint>
                     {activeAccount && <PanelHint>{t('models.observe.forAccount', { name: activeAccount })}</PanelHint>}
+                    <Tooltip title={t('models.observe.footer')}>
+                      <InfoCircleOutlined style={{ color: 'var(--ant-color-text-tertiary)', fontSize: 13 }} />
+                    </Tooltip>
                   </div>
 
                   <div style={{ flex: 1, minHeight: 0, overflow: 'auto', overscrollBehavior: 'contain' }}>
                     {ups.length ? (
-                      <>
-                        <ul className="cps-chain">
-                          {ups.map((u) => {
-                            const s = meta?.upstreamStatus[u];
-                            const detail = meta?.upstreamDetail[u];
-                            const order = cfg.upstreams.indexOf(u);
-                            const excluded = cfg.exclude.includes(u);
-                            const state = excluded ? 'excluded' : order >= 0 ? 'on' : 'off';
-                            return (
-                              <li key={u} className="cps-chain-row" data-state={state}>
-                                <span className="cps-chain-node">{order >= 0 ? order + 1 : null}</span>
-                                <span style={{ width: 16 }} />
-                                <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                                  <Typography.Text code style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
-                                    {u}
-                                  </Typography.Text>
-                                  {detail?.name && (
-                                    <Typography.Text type="secondary" style={{ fontSize: 12 }} ellipsis>
-                                      {detail.name}
-                                      {detail.endpoints !== undefined && detail.endpoints > 1
-                                        ? ` ×${detail.endpoints}`
-                                        : ''}
-                                    </Typography.Text>
-                                  )}
-                                  {detail?.context ? (
-                                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                                      {t('playground.channel.context', { k: Math.round(detail.context / 1000) })}
-                                    </Typography.Text>
-                                  ) : null}
-                                </div>
-                                {s ? (
-                                  <Tooltip title={diagnosticText(lang, s.note) || undefined}>
-                                    {statusTag(s.status, t)}
-                                  </Tooltip>
-                                ) : (
-                                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                                    {t('labels.upstream.unknown')}
+                      <ul className="cps-chain">
+                        {ups.map((u) => {
+                          const s = meta?.upstreamStatus[u];
+                          const detail = meta?.upstreamDetail[u];
+                          const order = cfg.upstreams.indexOf(u);
+                          const excluded = cfg.exclude.includes(u);
+                          const state = excluded ? 'excluded' : order >= 0 ? 'on' : 'off';
+                          return (
+                            <li key={u} className="cps-chain-row" data-state={state}>
+                              <span className="cps-chain-node">{order >= 0 ? order + 1 : null}</span>
+                              <span style={{ width: 16 }} />
+                              <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                                <Typography.Text code style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+                                  {u}
+                                </Typography.Text>
+                                {detail?.name && (
+                                  <Typography.Text type="secondary" style={{ fontSize: 12 }} ellipsis>
+                                    {detail.name}
+                                    {detail.endpoints !== undefined && detail.endpoints > 1
+                                      ? ` ×${detail.endpoints}`
+                                      : ''}
                                   </Typography.Text>
                                 )}
-                                <Typography.Text
-                                  type="secondary"
-                                  style={{ width: 64, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
-                                >
-                                  {s?.ms != null ? `${s.ms} ms` : '—'}
+                                {detail?.context ? (
+                                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                    {t('playground.channel.context', { k: Math.round(detail.context / 1000) })}
+                                  </Typography.Text>
+                                ) : null}
+                              </div>
+                              {s ? (
+                                <Tooltip title={diagnosticText(lang, s.note) || undefined}>
+                                  {statusTag(s.status, t)}
+                                </Tooltip>
+                              ) : (
+                                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                  {t('labels.upstream.unknown')}
                                 </Typography.Text>
-                                <Typography.Text type="secondary" style={{ fontSize: 12, width: 76 }}>
-                                  {state === 'on'
-                                    ? t('models.observe.inRoute')
-                                    : state === 'excluded'
-                                      ? t('models.observe.excluded')
-                                      : t('models.observe.notUsed')}
-                                </Typography.Text>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                        <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 12 }}>
-                          {t('models.observe.footer')}
-                        </Typography.Text>
-                      </>
+                              )}
+                              <Typography.Text
+                                type="secondary"
+                                style={{ width: 64, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
+                              >
+                                {s?.ms != null ? `${s.ms} ms` : '—'}
+                              </Typography.Text>
+                              <Typography.Text type="secondary" style={{ fontSize: 12, width: 76 }}>
+                                {state === 'on'
+                                  ? t('models.observe.inRoute')
+                                  : state === 'excluded'
+                                    ? t('models.observe.excluded')
+                                    : t('models.observe.notUsed')}
+                              </Typography.Text>
+                            </li>
+                          );
+                        })}
+                      </ul>
                     ) : (
                       <Empty
                         image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -802,6 +747,9 @@ export default function Models() {
                     {t('models.chain.title')}
                   </Typography.Text>
                   <PanelHint>{t('models.chain.count', { count: ups.length })}</PanelHint>
+                  <Tooltip title={t('models.chain.footer')}>
+                    <InfoCircleOutlined style={{ color: 'var(--ant-color-text-tertiary)', fontSize: 13 }} />
+                  </Tooltip>
                   <Space size={8} style={{ marginLeft: 'auto' }}>
                     <Button
                       size="small"
@@ -825,7 +773,7 @@ export default function Models() {
                   </Space>
                 </div>
 
-                <div style={{ maxHeight: 240, overflow: 'auto', overscrollBehavior: 'contain' }}>
+                <div style={{ maxHeight: 160, overflow: 'auto', overscrollBehavior: 'contain' }}>
                   {chainRows.length ? (
                     <ul className="cps-chain">
                       {chainRows.map((u) => {
@@ -873,9 +821,6 @@ export default function Models() {
                     </div>
                   )}
                 </div>
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  {t('models.chain.footer')}
-                </Typography.Text>
                 <RoutingFields cfg={cfg} onChange={(patch, note) => saveConfig(current.id, patch, note)} />
               </div>
             </Panel>
