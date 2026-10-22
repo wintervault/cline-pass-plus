@@ -1,5 +1,18 @@
 import { InfoCircleOutlined, SaveOutlined } from '@ant-design/icons';
-import { Alert, Button, Descriptions, Input, InputNumber, Space, Switch, Tag, Tooltip, Typography, theme } from 'antd';
+import {
+  Alert,
+  Button,
+  Descriptions,
+  Input,
+  InputNumber,
+  Popconfirm,
+  Space,
+  Switch,
+  Tag,
+  Tooltip,
+  Typography,
+  theme,
+} from 'antd';
 import { useEffect, useState } from 'react';
 
 import { setAuthKey } from '../api/client.ts';
@@ -9,7 +22,7 @@ import { useFeedback } from '../feedback.ts';
 import { getHostBridge, type HostInfo } from '../hostBridge.ts';
 import { type MsgKey, useI18n } from '../i18n/index.tsx';
 import { PageHeader } from '../pageHeader.tsx';
-import { Panel, PanelHint } from '../panel.tsx';
+import { Panel } from '../panel.tsx';
 
 /**
  * 设置页：只放「不属于账号、也不属于某个网关」的东西。
@@ -17,7 +30,7 @@ import { Panel, PanelHint } from '../panel.tsx';
  * - 启动：桌面壳的开机自启（操作系统级）
  * - 控制台访问：独立监听的端口/绑定/远端密钥（2.1 起与网关解耦）
  * - 数据：数据目录、日志、本机保存的访问密钥
- * - 关于：版本、许可证与仓库
+ * - 关于：版本、仓库与许可证
  */
 
 const STATE_TAG: Record<ConsoleStatus['state'], { color: string; key: MsgKey }> = {
@@ -75,7 +88,7 @@ function AutostartPanel() {
   };
 
   return (
-    <Panel title={t('settings.start.title')} extra={<PanelHint>{t('settings.start.hint')}</PanelHint>}>
+    <Panel title={t('settings.start.title')}>
       {!host?.autostart ? (
         <Alert type="info" showIcon message={t('settings.start.desktopOnly')} />
       ) : (
@@ -115,7 +128,7 @@ function ConsolePanel() {
   const tag = STATE_TAG[status.state] ?? STATE_TAG.stopped;
 
   return (
-    <Panel title={t('settings.console.title')} extra={<PanelHint>{t('settings.console.hint')}</PanelHint>}>
+    <Panel title={t('settings.console.title')}>
       <div style={{ display: 'grid', gap: 14 }}>
         <Descriptions
           size="small"
@@ -189,12 +202,20 @@ function ConsolePanel() {
             </Space>
           </Field>
           <Field label={t('settings.console.bindHost')}>
-            <Input
-              value={bindHost}
-              onChange={(e) => setBindHost(e.target.value)}
-              style={{ maxWidth: 240 }}
-              placeholder="127.0.0.1"
-            />
+            <Space size={8} align="center">
+              <Input
+                value={bindHost}
+                disabled={!!host}
+                onChange={(e) => setBindHost(e.target.value)}
+                style={{ maxWidth: 240 }}
+                placeholder="127.0.0.1"
+              />
+              {host && (
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  {t('settings.console.bindDesktopFixed')}
+                </Typography.Text>
+              )}
+            </Space>
           </Field>
           <Field label={t('settings.console.newKey')}>
             <Input.Password
@@ -223,15 +244,20 @@ function ConsolePanel() {
             >
               {t('settings.console.save')}
             </Button>
-            <Button
-              danger
-              disabled={!data?.hasProxyKey}
-              onClick={() =>
+            <Popconfirm
+              title={t('settings.console.clearKey.confirmTitle')}
+              description={t('settings.console.clearKey.confirmDesc')}
+              okText={t('common.confirmClear')}
+              okButtonProps={{ danger: true }}
+              cancelText={t('common.cancel')}
+              onConfirm={() =>
                 save.mutate({ proxyKey: null, note: t('settings.console.cleared') }, { onSuccess: () => setKey('') })
               }
             >
-              {t('settings.console.clearKey')}
-            </Button>
+              <Button danger disabled={!data?.hasProxyKey}>
+                {t('settings.console.clearKey')}
+              </Button>
+            </Popconfirm>
           </div>
         </div>
 
@@ -303,14 +329,19 @@ function DataPanel() {
           <Button disabled={!host?.openLogs} onClick={() => host?.openLogs().catch(() => {})}>
             {t('service.action.logs')}
           </Button>
-          <Button
-            onClick={() => {
+          <Popconfirm
+            title={t('settings.data.clearKey.confirmTitle')}
+            description={t('settings.data.clearKey.confirmDesc')}
+            okText={t('common.confirmClear')}
+            okButtonProps={{ danger: true }}
+            cancelText={t('common.cancel')}
+            onConfirm={() => {
               setAuthKey('');
               fb.ok(t('settings.data.keyCleared'));
             }}
           >
-            {t('settings.data.clearKey')}
-          </Button>
+            <Button danger>{t('settings.data.clearKey')}</Button>
+          </Popconfirm>
         </Space>
       </div>
     </Panel>
@@ -332,11 +363,6 @@ function AboutPanel() {
             children: <span className="cps-mono">v{meta.data?.version ?? '…'}</span>,
           },
           {
-            key: 'license',
-            label: t('settings.about.license'),
-            children: 'MIT',
-          },
-          {
             key: 'repo',
             label: t('settings.about.repo'),
             children: (
@@ -346,22 +372,9 @@ function AboutPanel() {
             ),
           },
           {
-            key: 'credits',
-            label: t('settings.about.credits'),
-            children: (
-              <Typography.Link
-                href="https://github.com/munmunjaklin458-afk/cline-pass-switcher"
-                target="_blank"
-                rel="noreferrer"
-              >
-                munmunjaklin458-afk/cline-pass-switcher
-              </Typography.Link>
-            ),
-          },
-          {
-            key: 'desc',
-            label: t('settings.about.desc'),
-            children: t('settings.about.descValue'),
+            key: 'license',
+            label: t('settings.about.license'),
+            children: 'MIT',
           },
         ]}
       />

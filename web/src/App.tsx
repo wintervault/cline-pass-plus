@@ -48,8 +48,8 @@ const SIDEBAR_KEY = 'cps_sidebar';
  * 然后请求历史与设置。完整目录是彩蛋页，永远排在最后且默认不出现。
  */
 const PAGES: { key: string; labelKey: MsgKey; icon: ComponentType; element: ComponentType }[] = [
-  { key: 'accounts', labelKey: 'nav.accounts', icon: TeamOutlined, element: Accounts },
   { key: 'gateways', labelKey: 'nav.gateways', icon: GatewayOutlined, element: Gateways },
+  { key: 'accounts', labelKey: 'nav.accounts', icon: TeamOutlined, element: Accounts },
   { key: 'models', labelKey: 'nav.models', icon: NodeIndexOutlined, element: Models },
   { key: 'playground', labelKey: 'nav.playground', icon: ExperimentOutlined, element: Playground },
   { key: 'history', labelKey: 'nav.history', icon: HistoryOutlined, element: History },
