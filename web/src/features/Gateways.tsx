@@ -518,6 +518,8 @@ export default function Gateways() {
         width={560}
         title={draft?.created ? t('gateways.drawer.create') : t('gateways.drawer.edit', { name: draft?.name ?? '' })}
         onClose={() => setDraft(null)}
+        /* 表单里可能已经填了密钥/端口；点遮罩误关会全部丢失 */
+        maskClosable={false}
         destroyOnHidden
         extra={
           <Space>

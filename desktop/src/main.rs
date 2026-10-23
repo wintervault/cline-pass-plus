@@ -51,6 +51,9 @@ const CONTROL_PORT: u16 = 3122;
 /// 一定带 Origin/Referer；一律拒绝的话页面自己也被挡在门外——这正是「按钮点了没反应」
 /// 的最后一层原因。放行之后仍然安全：别的网页 Origin/Referer 不是这个值，照旧 403。
 const CONSOLE_ORIGIN: &str = "http://127.0.0.1:3125";
+/// 「关于」里的仓库链接。桌面 WebView 不处理 target=_blank，只能由壳交给系统浏览器；
+/// 只暴露这一个固定地址，不开放任意 URL 打开（否则控制通道就成了启动器）。
+const REPO_URL: &str = "https://github.com/wintervault/cline-pass-plus";
 const HEALTHZ_TIMEOUT: Duration = Duration::from_secs(25);
 const GRACEFUL_STOP: Duration = Duration::from_secs(8);
 const LOG_ROTATE_BYTES: u64 = 8 * 1024 * 1024;
@@ -258,6 +261,7 @@ const BRIDGE_SCRIPT: &str = r#"(() => {
     restart: () => call('/host/restart', 'POST'),
     log: () => call('/host/log'),
     openLogs: async () => { await call('/host/open-logs', 'POST'); },
+    openRepo: async () => { await call('/host/open-repo', 'POST'); },
     autostart: () => call('/host/autostart'),
     setAutostart: (enabled) => call('/host/autostart?enable=' + (enabled ? '1' : '0'), 'POST'),
     info: () => call('/host/info'),
@@ -398,7 +402,8 @@ fn dispatch_control(method: &str, path: &str, state: &Arc<ServerState>) -> (u16,
 
     let expected = match route {
         "/host/status" | "/host/log" | "/host/info" => "GET",
-        "/host/start" | "/host/stop" | "/host/restart" | "/host/open-logs" | "/host/window" | "/host/drag" => "POST",
+        "/host/start" | "/host/stop" | "/host/restart" | "/host/open-logs" | "/host/open-repo"
+        | "/host/window" | "/host/drag" => "POST",
         _ => return (404, "{\"error\":\"no such control route\"}".into()),
     };
     if method != expected {
@@ -452,6 +457,12 @@ fn dispatch_control(method: &str, path: &str, state: &Arc<ServerState>) -> (u16,
         }
         "/host/open-logs" => {
             let _ = platform::open_path(&state.log_dir);
+            (200, "{\"ok\":true}".into())
+        }
+        "/host/open-repo" => {
+            if let Err(err) = platform::open_url(REPO_URL) {
+                return (500, format!("{{\"error\":{}}}", json_string(&err)));
+            }
             (200, "{\"ok\":true}".into())
         }
         "/host/log" => (200, recent_logs(state)),

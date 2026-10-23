@@ -109,6 +109,19 @@ pub fn open_path(path: &Path) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+/// 用系统默认浏览器打开 URL。
+///
+/// 不走 `explorer`：它会把 URL 当成本地路径尝试解析。`url.dll` 的协议处理器
+/// 是 Windows 自己的「打开这个 URL」入口，且不会弹控制台窗口。
+pub fn open_url(url: &str) -> Result<(), String> {
+    Command::new("rundll32")
+        .args(["url.dll,FileProtocolHandler", url])
+        .creation_flags(CREATE_NO_WINDOW)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
 /// Windows 上托盘左键由 `on_tray_icon_event` 处理；菜单只响应右键。
 pub fn tray_menu_on_left_click() -> bool {
     false

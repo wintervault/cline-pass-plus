@@ -84,6 +84,19 @@ pub fn open_path(path: &Path) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+/// 用系统默认浏览器打开 URL（`xdg-open` / `open` 都接受 http(s) 地址）。
+pub fn open_url(url: &str) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    let opener = "open";
+    #[cfg(not(target_os = "macos"))]
+    let opener = "xdg-open";
+    Command::new(opener)
+        .arg(url)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
 /// AppIndicator 不产生左键点击事件；左键直接弹菜单，否则 Linux 上托盘无法打开控制台。
 pub fn tray_menu_on_left_click() -> bool {
     true

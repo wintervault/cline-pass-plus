@@ -38,6 +38,8 @@ export interface HostBridge extends HostWindow {
   restart: () => Promise<HostStatus>;
   log: () => Promise<{ lines: string[] }>;
   openLogs: () => Promise<void>;
+  /** 用系统浏览器打开项目仓库（桌面 WebView 不处理 target=_blank）。 */
+  openRepo?: () => Promise<void>;
   /** 开机自启状态（操作系统级，由桌面壳管理）。 */
   autostart: () => Promise<{ enabled: boolean }>;
   setAutostart: (enabled: boolean) => Promise<{ enabled: boolean }>;

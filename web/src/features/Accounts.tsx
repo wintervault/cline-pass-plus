@@ -427,6 +427,8 @@ export default function Accounts() {
         cancelText={t('common.cancel')}
         onOk={submitModal}
         onCancel={() => setModal(null)}
+        /* 填 key 时经常要切到浏览器/编辑器复制再切回来；点一下遮罩就丢掉已输入的内容太伤 */
+        maskClosable={false}
         destroyOnHidden
       >
         <Space direction="vertical" style={{ width: '100%' }}>
@@ -462,6 +464,10 @@ export default function Accounts() {
             </Typography.Text>
             <DatePicker
               style={{ marginTop: 4, width: '100%' }}
+              /* 日历挂到 body：留在 Modal 内会被弹窗边界裁掉，底部日期点不到 */
+              getPopupContainer={() => document.body}
+              placement="bottomLeft"
+              allowClear
               placeholder={t('accounts.field.expiry.placeholder')}
               value={modal?.expiresAt ? dayjs(modal.expiresAt) : null}
               onChange={(d) => setModal((m) => (m ? { ...m, expiresAt: d ? d.format('YYYY-MM-DD') : null } : m))}

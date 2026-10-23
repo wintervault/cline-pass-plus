@@ -33,6 +33,9 @@ import { Panel } from '../panel.tsx';
  * - 关于：版本、仓库与许可证
  */
 
+/** 项目仓库地址（「关于」与桌面壳的打开动作共用同一份）。 */
+const REPO_URL = 'https://github.com/wintervault/cline-pass-plus';
+
 const STATE_TAG: Record<ConsoleStatus['state'], { color: string; key: MsgKey }> = {
   running: { color: 'green', key: 'settings.console.state.running' },
   error: { color: 'red', key: 'settings.console.state.error' },
@@ -364,6 +367,7 @@ function DataPanel() {
 function AboutPanel() {
   const { t } = useI18n();
   const meta = useMeta();
+  const host = getHostBridge();
   return (
     <Panel title={t('settings.about.title')}>
       <Descriptions
@@ -379,7 +383,21 @@ function AboutPanel() {
             key: 'repo',
             label: t('settings.about.repo'),
             children: (
-              <Typography.Link href="https://github.com/wintervault/cline-pass-plus" target="_blank" rel="noreferrer">
+              <Typography.Link
+                href={REPO_URL}
+                target="_blank"
+                rel="noreferrer"
+                onClick={(e) => {
+                  /*
+                   * 控制台在桌面壳里是外部 WebView，target=_blank 不会被处理
+                   * （点击看起来毫无反应）。壳把「用系统浏览器打开仓库」暴露成
+                   * 控制通道动作；浏览器直开时仍走普通链接。
+                   */
+                  if (!host?.openRepo) return;
+                  e.preventDefault();
+                  void host.openRepo().catch(() => {});
+                }}
+              >
                 wintervault/cline-pass-plus
               </Typography.Link>
             ),
