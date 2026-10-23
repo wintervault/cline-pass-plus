@@ -85,7 +85,7 @@ function SideNav({
   const btnBase = { height: 44, width: '100%', gap: 10, paddingInline: collapsed ? 0 : 10 } as const;
   const gutter = collapsed ? '0 10px' : '0 12px';
   /**
-   * 选中指示条：全站只有一条，在导航项之间**滑过去**（180ms），
+   * 选中底色：全站只有一块，在导航项之间**滑过去**（180ms），
    * 而不是每一项各画一条、切换时瞬间闪现。位置由 active 项的实际几何决定，
    * 折叠/展开、彩蛋页出现导致的重排都能自动跟上。
    */
@@ -165,6 +165,7 @@ function SideNav({
                 <Button
                   type="text"
                   aria-label={t(p.labelKey)}
+                  aria-current={active ? 'page' : undefined}
                   className={[
                     'cps-nav',
                     active ? 'cps-nav-active' : '',

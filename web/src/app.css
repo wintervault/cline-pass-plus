@@ -778,4 +778,8 @@ samp {
     /* biome-ignore lint/complexity/noImportantStyles: 加载旋转需要持续转动 */
     animation-iteration-count: infinite !important;
   }
+  /* 扫描线在 reduce 下会变成一条静止的装饰条；忙碌状态由按钮的加载旋转表达 */
+  .cps-panel.cps-scanning::after {
+    display: none;
+  }
 }

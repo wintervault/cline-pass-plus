@@ -241,7 +241,7 @@ function GatewayRow({
   const { t } = useI18n();
   const state = STATE_TAG[gateway.status.state];
   return (
-    <div className="cps-list-row">
+    <div className="cps-list-row" data-flip-key={gateway.id}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, width: '100%' }}>
         <div style={{ flex: 1, minWidth: 0, display: 'grid', gap: 6 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -496,22 +496,21 @@ export default function Gateways() {
         ) : (
           <div ref={listRef} className="cps-fade-in">
             {list.map((gateway) => (
-              <div key={gateway.id} data-flip-key={gateway.id}>
-                <GatewayRow
-                  gateway={gateway}
-                  busy={save.isPending || remove.isPending}
-                  onEdit={() => setDraft(draftOf(gateway))}
-                  onToggle={(enabled) =>
-                    save.mutate({
-                      gateway: { id: gateway.id, enabled },
-                      note: enabled
-                        ? t('gateways.note.enabled', { name: gateway.name })
-                        : t('gateways.note.disabled', { name: gateway.name }),
-                    })
-                  }
-                  onDelete={() => remove.mutate({ id: gateway.id, name: gateway.name })}
-                />
-              </div>
+              <GatewayRow
+                key={gateway.id}
+                gateway={gateway}
+                busy={save.isPending || remove.isPending}
+                onEdit={() => setDraft(draftOf(gateway))}
+                onToggle={(enabled) =>
+                  save.mutate({
+                    gateway: { id: gateway.id, enabled },
+                    note: enabled
+                      ? t('gateways.note.enabled', { name: gateway.name })
+                      : t('gateways.note.disabled', { name: gateway.name }),
+                  })
+                }
+                onDelete={() => remove.mutate({ id: gateway.id, name: gateway.name })}
+              />
             ))}
           </div>
         )}

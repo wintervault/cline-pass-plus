@@ -367,6 +367,8 @@ export default function Models() {
   const chainRows = [...cfg.upstreams.filter((u) => ups.includes(u)), ...ups.filter((u) => !cfg.upstreams.includes(u))];
   /** 渠道顺序变化（上下移、勾选、拖拽落点）时，让行滑到新位置。 */
   const chainRef = useFlipList<HTMLUListElement>(chainRows.join('|'));
+  /** 探测/校验会按健康状态重排观测列表：让行滑过去，而不是瞬移。 */
+  const observeRef = useFlipList<HTMLUListElement>(ups.join('|'));
   const pinIgnored = meta?.pinState === 'ignored';
   /** 只有明确确认钉住生效才允许校验——ignored 与 unknown 都会产出不可信的结果。 */
   const pinUnverified = meta?.pinState !== 'enforced';
@@ -522,7 +524,8 @@ export default function Models() {
             {/* 右：所选账号在该模型上的真实渠道观测（只读；路由在下方区块编辑） */}
             {current && (
               <Panel
-                className={probe.isPending ? 'cps-scanning' : undefined}
+                /* 只有当前模型的探测才显示扫描线：切到别的模型时不该继续「假装在探测」 */
+                className={probe.isPending && probe.variables === current.id ? 'cps-scanning' : undefined}
                 style={{ flex: 1, minWidth: 0 }}
                 title={
                   <>
@@ -657,7 +660,7 @@ export default function Models() {
 
                   <div style={{ flex: 1, minHeight: 0, overflow: 'auto', overscrollBehavior: 'contain' }}>
                     {ups.length ? (
-                      <ul className="cps-chain">
+                      <ul className="cps-chain" ref={observeRef}>
                         {ups.map((u) => {
                           const s = meta?.upstreamStatus[u];
                           const detail = meta?.upstreamDetail[u];
@@ -665,7 +668,7 @@ export default function Models() {
                           const excluded = cfg.exclude.includes(u);
                           const state = excluded ? 'excluded' : order >= 0 ? 'on' : 'off';
                           return (
-                            <li key={u} className="cps-chain-row" data-state={state}>
+                            <li key={u} className="cps-chain-row" data-flip-key={u} data-state={state}>
                               <span className="cps-chain-node">{order >= 0 ? order + 1 : null}</span>
                               <span style={{ width: 16 }} />
                               <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 8 }}>

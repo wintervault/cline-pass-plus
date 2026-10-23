@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 
 /**
  * 动效 token 与工具。**唯一来源**：CSS 变量由 `main.tsx` 写进 `:root`，
@@ -99,14 +99,15 @@ export function useFlipList<T extends HTMLElement = HTMLDivElement>(signature: s
   const previous = useRef<Map<string, { x: number; y: number }>>(new Map());
   const first = useRef(true);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: signature 是调用方给的顺序指纹，只用来决定「何时重新测量」
-  useLayoutEffect(() => {
+  const measure = useCallback((animate: boolean) => {
     const container = ref.current;
     if (!container) return;
-    // display:none 时量不到有意义的位置：清空基准，等可见后再重新建立
+    // display:none 时量不到有意义的位置：清空基准，等可见后重建
     if (container.getClientRects().length === 0) {
-      previous.current = new Map();
-      first.current = true;
+      if (animate) {
+        previous.current = new Map();
+        first.current = true;
+      }
       return;
     }
     const box = container.getBoundingClientRect();
@@ -119,7 +120,7 @@ export function useFlipList<T extends HTMLElement = HTMLDivElement>(signature: s
       const rect = node.getBoundingClientRect();
       const pos = { x: rect.left - box.left, y: rect.top - box.top + scrollTop };
       next.set(key, pos);
-      if (first.current) continue;
+      if (!animate || first.current) continue;
       const before = previous.current.get(key);
       if (!before) {
         if (!prefersReducedMotion()) {
@@ -144,7 +145,32 @@ export function useFlipList<T extends HTMLElement = HTMLDivElement>(signature: s
     }
     previous.current = next;
     first.current = false;
-  }, [signature]);
+  }, []);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: signature 是调用方给的顺序指纹，只用来决定「何时重新测量」
+  useLayoutEffect(() => {
+    measure(true);
+  }, [signature, measure]);
+
+  /*
+   * 列表装载时往往在别的页面里（display:none）：那时量不到位置。
+   * 用 ResizeObserver 在它**第一次可见**时建立基准（不播动画），
+   * 之后的第一次增删/排序才有上一帧可比。
+   */
+  useEffect(() => {
+    const container = ref.current;
+    if (!container || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => {
+      if (container.getClientRects().length === 0) {
+        previous.current = new Map();
+        first.current = true;
+        return;
+      }
+      if (first.current) measure(false);
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [measure]);
 
   return ref;
 }
