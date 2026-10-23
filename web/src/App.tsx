@@ -192,7 +192,7 @@ function Console({ mode, onToggleTheme }: { mode: ThemeMode; onToggleTheme: () =
   });
   /** 钉住的页面：打开控制台时默认落在这里（用户可把高频页钉住，省一次点击）。 */
   const [pinned, setPinned] = useState<string | null>(() => localStorage.getItem(PIN_KEY));
-  const [nav, setNav] = useState(() => localStorage.getItem(PIN_KEY) ?? 'models');
+  const [nav, setNav] = useState(() => localStorage.getItem(PIN_KEY) ?? 'gateways');
   /**
    * 完整目录是彩蛋页：**只在本次运行内可见**，不写 localStorage。
    * 上次打开过就永久留在导航里，会让「隐藏功能」变成「移除不掉的入口」。
@@ -200,7 +200,7 @@ function Console({ mode, onToggleTheme }: { mode: ThemeMode; onToggleTheme: () =
   const [catalogVisible, setCatalogVisible] = useState(false);
   const pages = PAGES.filter((p) => p.key !== 'catalog' || catalogVisible);
   /** 彩蛋页被隐藏时，别停留在不可达的页面上。 */
-  const activeNav = nav === 'catalog' && !catalogVisible ? 'models' : nav;
+  const activeNav = nav === 'catalog' && !catalogVisible ? 'gateways' : nav;
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === 'collapsed');
 
   const toggleSidebar = (): void => {

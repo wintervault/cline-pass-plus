@@ -117,8 +117,8 @@ const enUS: Record<keyof typeof zhCN, string> = {
   'statusbar.address': 'Endpoint',
   'statusbar.address.copy': 'Copy address',
   'statusbar.key': 'API Key',
-  'statusbar.key.set': 'Set · View',
-  'statusbar.key.unset': 'Not set · Set up',
+  'statusbar.key.set': 'Set',
+  'statusbar.key.unset': 'Not set',
   'statusbar.key.tip.set': 'This gateway has a key; clients must send it on /v1. Click to review or change it.',
   'statusbar.key.tip.unset':
     'This gateway has no key — fine on localhost, required for public access. Click to set one.',

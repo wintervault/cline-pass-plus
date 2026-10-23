@@ -59,12 +59,39 @@ const STATE_KEY: Record<string, MsgKey> = {
 };
 
 /** 状态栏里的一格：小号灰色标签 + 值。标签是「这是什么」不该靠猜。 */
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  children,
+  flexible,
+}: {
+  label: string;
+  children: React.ReactNode;
+  /**
+   * 允许这一格在窄窗口下收缩（只有接入地址需要）。
+   *
+   * 其余各格必须 `flex: 0 0 auto` + `nowrap`：状态栏是固定高度的一行，
+   * 一旦允许收缩，中文会被逐字挤成竖排（「网 / 关」），看起来像 UI 坏了。
+   * 地址太长时由它自己省略，复制按钮仍在。
+   */
+  flexible?: boolean;
+}) {
   return (
-    <Space size={6} align="center">
-      <Typography.Text style={{ fontSize: 12, color: 'var(--ant-color-text-quaternary)' }}>{label}</Typography.Text>
-      {children}
-    </Space>
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        /* 地址可以省略，但不能缩到看不见——再窄就让整条状态栏横向滚动 */
+        minWidth: flexible ? 150 : 0,
+        flex: flexible ? '1 1 auto' : '0 0 auto',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <Typography.Text style={{ fontSize: 12, color: 'var(--ant-color-text-quaternary)', flex: '0 0 auto' }}>
+        {label}
+      </Typography.Text>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>{children}</div>
+    </div>
   );
 }
 
@@ -138,7 +165,7 @@ function ServiceCluster({ control }: { control: HostControl }) {
   const label = t(STATE_KEY[status.state] ?? 'service.state.stopped');
 
   return (
-    <Space size={8} align="center">
+    <Space size={8} align="center" style={{ flex: '0 0 auto', whiteSpace: 'nowrap' }}>
       <Typography.Text style={{ fontSize: 12, color: 'var(--ant-color-text-quaternary)' }}>
         {t('statusbar.service')}
       </Typography.Text>
@@ -225,8 +252,9 @@ export function StatusBar({
         height: 54,
         flex: '0 0 auto',
         display: 'flex',
+        flexWrap: 'nowrap',
         alignItems: 'center',
-        gap: 14,
+        gap: 8,
         padding: '0 16px',
         background: token.colorBgContainer,
         borderTop: `1px solid ${token.colorBorderSecondary}`,
@@ -239,7 +267,7 @@ export function StatusBar({
           <Select
             size="small"
             variant="borderless"
-            style={{ minWidth: 88 }}
+            style={{ minWidth: 88, maxWidth: 180 }}
             value={picked?.id}
             popupMatchSelectWidth={false}
             onChange={(id: string) => {
@@ -249,15 +277,18 @@ export function StatusBar({
             options={gateways.map((g) => ({ value: g.id, label: g.name }))}
           />
         ) : (
-          <Typography.Text style={{ fontSize: 13 }}>{picked?.name ?? t('statusbar.notReady')}</Typography.Text>
+          <Typography.Text ellipsis={{ tooltip: picked?.name }} style={{ fontSize: 13, maxWidth: 180 }}>
+            {picked?.name ?? t('statusbar.notReady')}
+          </Typography.Text>
         )}
       </Field>
 
-      <Field label={t('statusbar.address')}>
+      <Field label={t('statusbar.address')} flexible>
         {picked?.proxyBase ? (
           <Typography.Text
+            ellipsis={{ tooltip: picked.proxyBase }}
             copyable={{ text: picked.proxyBase, tooltips: [t('statusbar.address.copy'), t('common.copied')] }}
-            style={{ fontSize: 13, fontFamily: 'var(--cps-font-mono)' }}
+            style={{ fontSize: 13, fontFamily: 'var(--cps-font-mono)', maxWidth: 320 }}
           >
             {picked.proxyBase}
           </Typography.Text>
@@ -269,14 +300,16 @@ export function StatusBar({
       </Field>
 
       {/* ② 同一个网关的状态 / 账号 / 密钥，紧挨着左侧选择 */}
-      <Space size={8} align="center">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto', whiteSpace: 'nowrap' }}>
         <GatewayCluster gateway={picked} onOpenGateways={onOpenGateways} />
-      </Space>
+      </div>
 
       <div style={{ width: 1, height: 20, background: token.colorBorderSecondary, flex: '0 0 auto' }} />
 
       {/* ③ 服务是进程级动作，明确标注，避免与上面的网关状态混淆 */}
-      <ServiceCluster control={control} />
+      <div style={{ flex: '0 0 auto', whiteSpace: 'nowrap' }}>
+        <ServiceCluster control={control} />
+      </div>
 
       <Space size={2} style={{ marginLeft: 'auto', flex: '0 0 auto' }}>
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
