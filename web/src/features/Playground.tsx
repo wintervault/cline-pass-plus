@@ -292,6 +292,8 @@ export default function Playground() {
   const [upstream, setUpstream] = useState('');
   const [maxTokens, setMaxTokens] = useState(256);
   const [result, setResult] = useState<TestResult | null>(null);
+  /** 每次测试递增：尝试链以新表挂载，才能按执行顺序重新逐行落定。 */
+  const [runSeq, setRunSeq] = useState(0);
 
   const rows = models.data?.subscription ?? [];
   const active = rows.some((r) => r.id === model) ? model : (rows[0]?.id ?? '');
@@ -323,7 +325,15 @@ export default function Playground() {
       return;
     }
     // 成功/失败的回执由 useTest 统一给出，这里只负责把结果放进结果区
-    test.mutate({ model: active, upstreams: upstream ? [upstream] : [], exclude: [] }, { onSuccess: setResult });
+    test.mutate(
+      { model: active, upstreams: upstream ? [upstream] : [], exclude: [] },
+      {
+        onSuccess: (r) => {
+          setResult(r);
+          setRunSeq((n) => n + 1);
+        },
+      },
+    );
   };
 
   const hit =
@@ -509,7 +519,7 @@ export default function Playground() {
                 {t('playground.trace')}
               </Typography.Text>
               <div style={{ marginTop: 6 }}>
-                <TraceTable trace={result.trace} targets={result.targets} />
+                <TraceTable key={runSeq} trace={result.trace} targets={result.targets} />
               </div>
             </div>
           </div>
