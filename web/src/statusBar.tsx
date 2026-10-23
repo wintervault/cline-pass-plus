@@ -323,7 +323,12 @@ export function StatusBar({
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
           v{version ?? '…'}
         </Typography.Text>
-        {/* 语言切换：即时生效，不刷新页面 */}
+        {/*
+          语言切换：即时生效，不刷新页面。
+          **不要用 Tooltip 包这个按钮**：状态栏贴着窗口底部，菜单和提示都会被自动
+          翻到上方并重叠，提示层会截走菜单项的点击（实测：语言菜单点不动）。
+          用原生 title 即可，它不参与命中测试。
+        */}
         <Dropdown
           trigger={['click']}
           menu={{
@@ -336,9 +341,13 @@ export function StatusBar({
             onClick: ({ key }) => onToggleLang(key as Lang),
           }}
         >
-          <Tooltip title={t('app.lang.switch')}>
-            <Button size="small" type="text" icon={<TranslationOutlined />} aria-label={t('app.lang.switch')} />
-          </Tooltip>
+          <Button
+            size="small"
+            type="text"
+            icon={<TranslationOutlined />}
+            aria-label={t('app.lang.switch')}
+            title={t('app.lang.switch')}
+          />
         </Dropdown>
         <Tooltip title={mode === 'dark' ? t('statusbar.theme.dark') : t('statusbar.theme.light')}>
           <Button
