@@ -5,12 +5,15 @@ import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import { UnauthorizedError } from './api/client.ts';
 import { DURATION, EASE } from './motion.ts';
-import { FONT_MONO, FONT_SANS } from './theme.ts';
+import { FONT_MONO, FONT_SANS, initialTheme } from './theme.ts';
 
 // 字体栈的唯一来源是 theme.ts；CSS 侧通过自定义变量引用（antd 6 **不会**把
 // fontFamily / fontFamilyCode 注入成 --ant-* 变量，实测为空——别再依赖它）。
 document.documentElement.style.setProperty('--cps-font-sans', FONT_SANS);
 document.documentElement.style.setProperty('--cps-font-mono', FONT_MONO);
+
+// 主题在首帧之前落位：CSS 的暗/亮表面 token 依赖它，晚一帧会闪一下
+document.documentElement.dataset.theme = initialTheme();
 
 // 动效 token 的唯一来源是 motion.ts（antd 在 theme.ts 映射到同一套值）。
 for (const [name, ms] of Object.entries(DURATION)) {
