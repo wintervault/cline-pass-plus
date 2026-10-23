@@ -25,6 +25,7 @@ import { DetectionAccountPicker, useDetectionAccount } from '../detectionScope.t
 import { diagnosticText } from '../i18n/codes.ts';
 import { type Lang, type MsgKey, useI18n, useT } from '../i18n/index.tsx';
 import { STATUS_TAG } from '../labels.ts';
+import { useFlipList } from '../motion.ts';
 import { PageHeader } from '../pageHeader.tsx';
 import { Panel, PanelHint } from '../panel.tsx';
 import { RoutingGatewayPicker, useRoutingGateway } from '../routingGateway.tsx';
@@ -79,14 +80,15 @@ function ModelItem({
       style={{
         textAlign: 'left',
         cursor: 'pointer',
-        border: active ? `1px solid ${token.colorPrimaryBorder}` : undefined,
-        background: active ? token.colorPrimaryBg : undefined,
+        border: active ? '1px solid var(--cps-accent-border)' : undefined,
+        background: active ? 'var(--cps-accent-wash)' : undefined,
         borderRadius: token.borderRadius,
         padding: '10px 12px',
         display: 'grid',
         gap: 6,
         font: 'inherit',
         width: '100%',
+        transition: 'background-color var(--cps-duration-fast) var(--cps-ease-standard)',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
@@ -214,6 +216,7 @@ function UpstreamRow({
   return (
     <li
       className={`cps-chain-row${drag.isDragging ? ' cps-dragging' : ''}${drag.isDropTarget ? ' cps-drop-target' : ''}`}
+      data-flip-key={upstream}
       data-state={excluded ? 'excluded' : selected ? 'on' : 'off'}
       onDragOver={
         selected
@@ -362,6 +365,8 @@ export default function Models() {
   const ups = sortedUpstreams(meta);
   /** 管线渲染顺序：链上（按优先级序号）在前，离线（按状态排序）在后。 */
   const chainRows = [...cfg.upstreams.filter((u) => ups.includes(u)), ...ups.filter((u) => !cfg.upstreams.includes(u))];
+  /** 渠道顺序变化（上下移、勾选、拖拽落点）时，让行滑到新位置。 */
+  const chainRef = useFlipList<HTMLUListElement>(chainRows.join('|'));
   const pinIgnored = meta?.pinState === 'ignored';
   /** 只有明确确认钉住生效才允许校验——ignored 与 unknown 都会产出不可信的结果。 */
   const pinUnverified = meta?.pinState !== 'enforced';
@@ -517,6 +522,7 @@ export default function Models() {
             {/* 右：所选账号在该模型上的真实渠道观测（只读；路由在下方区块编辑） */}
             {current && (
               <Panel
+                className={probe.isPending ? 'cps-scanning' : undefined}
                 style={{ flex: 1, minWidth: 0 }}
                 title={
                   <>
@@ -775,7 +781,7 @@ export default function Models() {
 
                 <div style={{ maxHeight: 160, overflow: 'auto', overscrollBehavior: 'contain' }}>
                   {chainRows.length ? (
-                    <ul className="cps-chain">
+                    <ul className="cps-chain" ref={chainRef}>
                       {chainRows.map((u) => {
                         const rowOrder = cfg.upstreams.indexOf(u);
                         return (

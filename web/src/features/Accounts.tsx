@@ -25,6 +25,7 @@ import type { AccountClassRecord, AccountsResponse, AccountView, ExpiryState } f
 import { diagnosticText } from '../i18n/codes.ts';
 import { type Lang, useI18n } from '../i18n/index.tsx';
 import { ACCOUNT_CLASS_TAG } from '../labels.ts';
+import { useFlipList } from '../motion.ts';
 import { PageHeader } from '../pageHeader.tsx';
 import { Panel, PanelHint } from '../panel.tsx';
 
@@ -156,7 +157,8 @@ export default function Accounts() {
 
   const unclassified = rows.filter((a) => (a.classify?.class ?? 'unknown') === 'unknown').length;
   const noExpiry = rows.filter((a) => !a.expiresAt).length;
-
+  /** 增删账号时，其余行滑到新位置，而不是瞬移（只响应用户操作后的数据变化）。 */
+  const listRef = useFlipList<HTMLDivElement>(rows.map((a) => a.name).join('|'));
   /** 判定模型的可选清单：订阅模型 + 当前值（当前值可能已不在清单里，不能因此消失）。 */
   const modelIds = (models.data?.subscription ?? []).map((m) => m.id);
   const classifyOptions = [...new Set([...modelIds, ...(classifyModel ? [classifyModel] : [])])].map((id) => ({
@@ -324,14 +326,14 @@ export default function Accounts() {
               </Empty>
             </div>
           ) : (
-            <div>
+            <div ref={listRef} className="cps-fade-in">
               {rows.map((a, i) => {
                 const st = data?.stats[a.name];
                 const testingThis =
                   classify.isPending &&
                   ((classify.variables?.names?.length ?? 0) > 0 ? classify.variables?.names?.includes(a.name) : true);
                 return (
-                  <div key={`${a.name}-${a.keyMasked}`} className="cps-list-row">
+                  <div key={`${a.name}-${a.keyMasked}`} className="cps-list-row" data-flip-key={a.name}>
                     {/* width:100% 让名字列（flex:1）吃掉空白，操作按钮才落在右缘 */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 16, width: '100%' }}>
                       <div style={{ flex: 1, minWidth: 0, display: 'grid', gap: 6 }}>

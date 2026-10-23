@@ -22,6 +22,7 @@ import { useAccounts, useDeleteGateway, useGateways, useMeta, useSaveGateway } f
 import type { AccountMode, AccountScope, FailoverConfig, GatewayView } from '../api/types.ts';
 import { useFeedback } from '../feedback.ts';
 import { type MsgKey, useI18n } from '../i18n/index.tsx';
+import { useFlipList } from '../motion.ts';
 import { PageHeader } from '../pageHeader.tsx';
 import { Panel, PanelHint } from '../panel.tsx';
 
@@ -344,6 +345,8 @@ export default function Gateways() {
   const [advanced, setAdvanced] = useState(() => localStorage.getItem(ADVANCED_KEY) === '1');
 
   const list = gateways.data?.gateways ?? [];
+  /** 新增/删除网关时，其余行滑到新位置，而不是瞬移。 */
+  const listRef = useFlipList<HTMLDivElement>(list.map((g) => g.id).join('|'));
   const consolePort = meta.data?.console.port ?? 3125;
   const maxGateways = gateways.data?.maxGateways ?? 8;
   const hasMain = list.some((g) => g.id === 'main');
@@ -491,23 +494,24 @@ export default function Gateways() {
             <Skeleton active paragraph={{ rows: 3 }} />
           </div>
         ) : (
-          <div>
+          <div ref={listRef} className="cps-fade-in">
             {list.map((gateway) => (
-              <GatewayRow
-                key={gateway.id}
-                gateway={gateway}
-                busy={save.isPending || remove.isPending}
-                onEdit={() => setDraft(draftOf(gateway))}
-                onToggle={(enabled) =>
-                  save.mutate({
-                    gateway: { id: gateway.id, enabled },
-                    note: enabled
-                      ? t('gateways.note.enabled', { name: gateway.name })
-                      : t('gateways.note.disabled', { name: gateway.name }),
-                  })
-                }
-                onDelete={() => remove.mutate({ id: gateway.id, name: gateway.name })}
-              />
+              <div key={gateway.id} data-flip-key={gateway.id}>
+                <GatewayRow
+                  gateway={gateway}
+                  busy={save.isPending || remove.isPending}
+                  onEdit={() => setDraft(draftOf(gateway))}
+                  onToggle={(enabled) =>
+                    save.mutate({
+                      gateway: { id: gateway.id, enabled },
+                      note: enabled
+                        ? t('gateways.note.enabled', { name: gateway.name })
+                        : t('gateways.note.disabled', { name: gateway.name }),
+                    })
+                  }
+                  onDelete={() => remove.mutate({ id: gateway.id, name: gateway.name })}
+                />
+              </div>
             ))}
           </div>
         )}

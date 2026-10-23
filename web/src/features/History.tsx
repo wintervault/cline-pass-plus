@@ -185,6 +185,7 @@ export default function History() {
         <Skeleton active paragraph={{ rows: 8 }} />
       ) : (
         <Panel
+          className="cps-fade-in"
           flush
           title={
             <Space size={32} wrap>

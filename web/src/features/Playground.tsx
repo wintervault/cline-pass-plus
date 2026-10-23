@@ -225,7 +225,7 @@ function TraceTable({ trace, targets }: { trace?: TraceEntry[]; targets: string[
   }
   return (
     <Table<TraceEntry>
-      className="cps-table-center"
+      className="cps-table-center cps-trace-in"
       size="small"
       rowKey={(r, i) => `${r.upstream ?? 'auto'}-${i}`}
       pagination={false}
