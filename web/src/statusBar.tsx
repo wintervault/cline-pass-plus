@@ -102,6 +102,13 @@ const GATEWAY_STATE_TAG: Record<GatewayView['status']['state'], { color: string;
   disabled: { color: 'default', key: 'statusbar.gateway.disabled' },
 };
 
+/** 状态标签的颜色过渡：状态翻转时是「变色」，不是「闪一下」。 */
+const TAG_MOTION = {
+  margin: 0,
+  transition:
+    'background-color var(--cps-duration-base) var(--cps-ease-standard), color var(--cps-duration-base) var(--cps-ease-standard), border-color var(--cps-duration-base) var(--cps-ease-standard)',
+} as const;
+
 function GatewayCluster({ gateway, onOpenGateways }: { gateway: GatewayView | undefined; onOpenGateways: () => void }) {
   const { t } = useI18n();
   if (!gateway) {
@@ -116,13 +123,13 @@ function GatewayCluster({ gateway, onOpenGateways }: { gateway: GatewayView | un
   return (
     <>
       <Tooltip title={gateway.status.error ?? undefined}>
-        <Tag color={state.color} style={{ margin: 0 }}>
+        <Tag color={state.color} style={TAG_MOTION}>
           {t(state.key)}
         </Tag>
       </Tooltip>
       {account.code === 'no_accounts' && (
         <Tooltip title={t('statusbar.accountState.no_accounts.tip')}>
-          <Tag color="warning" style={{ margin: 0 }}>
+          <Tag color="warning" style={TAG_MOTION}>
             {t('statusbar.accountState.no_accounts')}
           </Tag>
         </Tooltip>
@@ -134,7 +141,7 @@ function GatewayCluster({ gateway, onOpenGateways }: { gateway: GatewayView | un
             total: account.usableTotal,
           })}
         >
-          <Tag color="warning" style={{ margin: 0 }}>
+          <Tag color="warning" style={TAG_MOTION}>
             {t('statusbar.accountState.empty_scope')}
           </Tag>
         </Tooltip>
@@ -248,6 +255,7 @@ export function StatusBar({
 
   return (
     <div
+      className="cps-statusbar"
       style={{
         height: 54,
         flex: '0 0 auto',

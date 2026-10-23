@@ -15,7 +15,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Alert, App as AntdApp, Button, ConfigProvider, Layout, Tooltip, theme } from 'antd';
 import enUS from 'antd/es/locale/en_US';
 import zhCN from 'antd/es/locale/zh_CN';
-import { type ComponentType, useCallback, useEffect, useState } from 'react';
+import { type ComponentType, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AccessGate } from './accessGate.tsx';
 import { getAuthKey, setAuthKey } from './api/client.ts';
 import { useMeta, useRefresh } from './api/hooks.ts';
@@ -32,6 +32,7 @@ import { useFeedback } from './feedback.ts';
 import { useHostControl } from './hostBridge.ts';
 import { I18nProvider, type MsgKey, useI18n, useT } from './i18n/index.tsx';
 import { PAGE_GUTTER, PAGE_WIDTH } from './layout.ts';
+import { animateEnter } from './motion.ts';
 import { RoutingGatewayProvider } from './routingGateway.tsx';
 import { ServiceBanner } from './serviceBanner.tsx';
 import { StatusBar } from './statusBar.tsx';
@@ -83,6 +84,32 @@ function SideNav({
   const t = useT();
   const btnBase = { height: 44, width: '100%', gap: 10, paddingInline: collapsed ? 0 : 10 } as const;
   const gutter = collapsed ? '0 10px' : '0 12px';
+  /**
+   * 选中指示条：全站只有一条，在导航项之间**滑过去**（180ms），
+   * 而不是每一项各画一条、切换时瞬间闪现。位置由 active 项的实际几何决定，
+   * 折叠/展开、彩蛋页出现导致的重排都能自动跟上。
+   */
+  const listRef = useRef<HTMLDivElement>(null);
+  const [pill, setPill] = useState<{ top: number; height: number } | null>(null);
+  const [indicatorReady, setIndicatorReady] = useState(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: collapsed 与 pages.length 改变导航几何，必须重新测量
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const item = list.querySelector<HTMLElement>(`[data-nav-key="${nav}"]`);
+    if (!item) {
+      setPill(null);
+      return;
+    }
+    const listBox = list.getBoundingClientRect();
+    const box = item.getBoundingClientRect();
+    setPill({ top: box.top - listBox.top, height: box.height });
+  }, [nav, collapsed, pages.length]);
+  // 首帧直接落位，不做一次「从顶部滑下来」的假动画
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setIndicatorReady(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
   return (
     /*
       侧栏顶部这一段（20 + 28 + 8 = 56px）原本是「logo + Cline Pass」品牌块，
@@ -114,13 +141,26 @@ function SideNav({
           />
         </Tooltip>
       </div>
-      <div style={{ display: 'grid', gap: 4, padding: gutter, marginTop: 8 }}>
+      <div ref={listRef} style={{ position: 'relative', display: 'grid', gap: 4, padding: gutter, marginTop: 8 }}>
+        {pill && (
+          <span
+            aria-hidden
+            className="cps-nav-pill"
+            style={{
+              left: collapsed ? 10 : 12,
+              right: collapsed ? 10 : 12,
+              height: pill.height,
+              transform: `translateY(${pill.top}px)`,
+              transition: indicatorReady ? undefined : 'none',
+            }}
+          />
+        )}
         {pages.map((p) => {
           const active = nav === p.key;
           const isPinned = pinned === p.key;
           const Comp = p.icon;
           return (
-            <div key={p.key} className="cps-nav-item">
+            <div key={p.key} className="cps-nav-item" data-nav-key={p.key}>
               <Tooltip title={collapsed ? t(p.labelKey) : undefined} placement="right">
                 <Button
                   type="text"
@@ -139,12 +179,15 @@ function SideNav({
                     justifyContent: collapsed ? 'center' : 'flex-start',
                     fontSize: 18,
                     color: active ? token.colorPrimary : token.colorTextSecondary,
-                    background: active ? token.colorPrimaryBg : undefined,
+                    /* 选中底色由滑动的 pill 承担（见 .cps-nav-pill），按钮本身透明 */
+                    background: active ? 'transparent' : undefined,
                   }}
                   icon={<Comp />}
                 >
                   {!collapsed && (
-                    <span style={{ fontSize: 14, paddingRight: 18, whiteSpace: 'nowrap' }}>{t(p.labelKey)}</span>
+                    <span className="cps-nav-label" style={{ fontSize: 14, paddingRight: 18, whiteSpace: 'nowrap' }}>
+                      {t(p.labelKey)}
+                    </span>
                   )}
                 </Button>
               </Tooltip>
@@ -201,6 +244,21 @@ function Console({ mode, onToggleTheme }: { mode: ThemeMode; onToggleTheme: () =
   const pages = PAGES.filter((p) => p.key !== 'catalog' || catalogVisible);
   /** 彩蛋页被隐藏时，别停留在不可达的页面上。 */
   const activeNav = nav === 'catalog' && !catalogVisible ? 'gateways' : nav;
+  /**
+   * 页面切换：新页面淡入并上移 6px（180ms），而不是硬切。
+   * 页面仍然全部挂载（保留表单/滚动/查询状态），只对**当前**容器播一次动画；
+   * 快速连续切页时 animateEnter 会取消上一段，不排队。
+   */
+  const pageRefs = useRef(new Map<string, HTMLDivElement>());
+  const contentRef = useRef<HTMLElement>(null);
+  const previousNav = useRef(activeNav);
+  useLayoutEffect(() => {
+    if (previousNav.current === activeNav) return;
+    previousNav.current = activeNav;
+    // 切页从顶部开始：页面容器共享同一个滚动区，不重置的话会落在上一页的滚动位置
+    contentRef.current?.scrollTo({ top: 0 });
+    animateEnter(pageRefs.current.get(activeNav), { y: 6 });
+  }, [activeNav]);
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === 'collapsed');
 
   const toggleSidebar = (): void => {
@@ -248,8 +306,10 @@ function Console({ mode, onToggleTheme }: { mode: ThemeMode; onToggleTheme: () =
   const [keyChecking, setKeyChecking] = useState(false);
   const [keyError, setKeyError] = useState<string | null>(null);
 
-  // 页面底色跟随主题（Layout 之外的区域由 body 承担）
+  // 页面底色跟随主题（Layout 之外的区域由 body 承担）；
+  // data-theme 供 CSS 选择暗/亮专用的表面与光效
   useEffect(() => {
+    document.documentElement.dataset.theme = mode;
     document.body.style.background = token.colorBgLayout;
     document.body.style.colorScheme = mode;
   }, [token.colorBgLayout, mode]);
@@ -305,7 +365,7 @@ function Console({ mode, onToggleTheme }: { mode: ThemeMode; onToggleTheme: () =
     <>
       {/* 桌面应用形态：自绘标题栏 + 固定侧栏 + 内容区内滚 + 常驻状态栏（窗口高度恒定，不整页滚） */}
       <TitleBar />
-      <Layout style={{ height: '100vh', paddingTop: TITLEBAR_HEIGHT }}>
+      <Layout style={{ height: '100vh', paddingTop: TITLEBAR_HEIGHT, background: 'transparent' }}>
         <Layout.Sider
           width={collapsed ? 64 : 200}
           style={{
@@ -338,6 +398,7 @@ function Console({ mode, onToggleTheme }: { mode: ThemeMode; onToggleTheme: () =
                标题的横坐标会在切页时跳。
           */}
               <Layout.Content
+                ref={contentRef}
                 style={{
                   overflow: 'auto',
                   scrollbarGutter: 'stable',
@@ -387,6 +448,10 @@ function Console({ mode, onToggleTheme }: { mode: ThemeMode; onToggleTheme: () =
                        shrink 必须是 0——缩了会把高页面的内容压进视口。 */
                         <div
                           key={p.key}
+                          ref={(node) => {
+                            if (node) pageRefs.current.set(p.key, node);
+                            else pageRefs.current.delete(p.key);
+                          }}
                           style={{ display: activeNav === p.key ? 'block' : 'none', flex: '1 0 auto', minHeight: 0 }}
                         >
                           <p.element />

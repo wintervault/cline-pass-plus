@@ -18,6 +18,24 @@ body {
   overflow: hidden;
 }
 
+/*
+ * 画布上的一层极淡冷光：从顶部中央往下衰减。
+ * 它不改变任何布局，也不随鼠标移动——只是让近黑的底不至于像一块死板；
+ * 面板与侧栏是不透明的，光只落在内容区的留白上。
+ */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(1100px 520px at 50% -8%, var(--cps-canvas-glow), transparent 65%);
+  z-index: 0;
+}
+#root {
+  position: relative;
+  z-index: 1;
+}
+
 /* 浏览器对 <code>/<pre> 的 UA 默认是 monospace——中文会落到宋体（SimSun）。
    --cps-font-mono 由 main.tsx 从 theme.ts 写入，带 CJK 回退。 */
 code,
@@ -32,6 +50,22 @@ samp {
      比原值更淡，悬停才提亮。 */
   --cps-thumb: rgba(127, 127, 127, 0.26);
   --cps-thumb-hover: rgba(127, 127, 127, 0.48);
+
+  /* 表面与光：暗色靠 1px 顶部内高光 + 亮度阶梯，不用投影。
+     主题切换时由 [data-theme="light"] 覆盖。 */
+  --cps-surface-highlight: rgba(255, 255, 255, 0.04);
+  --cps-canvas-glow: rgba(79, 140, 255, 0.055);
+  --cps-accent-wash: rgba(79, 140, 255, 0.11);
+  --cps-accent-wash-strong: rgba(79, 140, 255, 0.16);
+  --cps-accent-border: rgba(79, 140, 255, 0.34);
+}
+
+[data-theme="light"] {
+  --cps-surface-highlight: rgba(255, 255, 255, 0.85);
+  --cps-canvas-glow: rgba(79, 140, 255, 0.045);
+  --cps-accent-wash: rgba(79, 140, 255, 0.08);
+  --cps-accent-wash-strong: rgba(79, 140, 255, 0.13);
+  --cps-accent-border: rgba(79, 140, 255, 0.26);
 }
 
 /*
@@ -78,7 +112,15 @@ samp {
   background: var(--ant-color-bg-container);
   border: 1px solid var(--ant-color-border-secondary);
   border-radius: var(--ant-border-radius-lg);
+  /* 顶部一道 1px 内高光：像被同一盏灯照着的表面，暗色下尤其明显 */
+  box-shadow: inset 0 1px 0 0 var(--cps-surface-highlight);
   overflow: hidden;
+}
+[data-theme="light"] .cps-panel {
+  /* 亮色下用极淡投影代替高光，边界才立得住 */
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    inset 0 1px 0 0 var(--cps-surface-highlight);
 }
 .cps-panel-head {
   display: flex;
@@ -88,7 +130,12 @@ samp {
   flex: 0 0 auto;
   min-height: 48px;
   padding: 10px 16px;
+  /* 极淡的顶部提亮：让标题栏像一条「工具条」，而不是正文的第一行 */
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0));
   border-bottom: 1px solid var(--ant-color-border-secondary);
+}
+[data-theme="light"] .cps-panel-head {
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.018), rgba(15, 23, 42, 0));
 }
 .cps-panel-title {
   display: flex;
@@ -129,7 +176,7 @@ samp {
   gap: 16px;
   padding: 14px 16px;
   border-bottom: 1px solid var(--ant-color-border-secondary);
-  transition: background-color 0.15s ease;
+  transition: background-color var(--cps-duration-fast) var(--cps-ease-standard);
 }
 .cps-list-row:last-child {
   border-bottom: none;
@@ -263,12 +310,15 @@ samp {
   cursor: default;
   padding: 0;
   transition:
-    background-color 0.12s ease,
-    color 0.12s ease;
+    background-color var(--cps-duration-fast) var(--cps-ease-standard),
+    color var(--cps-duration-fast) var(--cps-ease-standard);
 }
 .cps-wbtn:hover {
   background: var(--ant-color-fill-secondary);
   color: var(--ant-color-text);
+}
+.cps-wbtn:active {
+  background: var(--ant-color-fill-tertiary);
 }
 .cps-wbtn-close:hover {
   background: #e81123;
@@ -366,8 +416,8 @@ samp {
   border: 1px solid transparent;
   background: transparent;
   transition:
-    background-color 0.15s ease,
-    border-color 0.15s ease;
+    background-color var(--cps-duration-fast) var(--cps-ease-standard),
+    border-color var(--cps-duration-fast) var(--cps-ease-standard);
 }
 .cps-ghost:hover {
   background: var(--ant-color-fill-quaternary);
@@ -379,31 +429,41 @@ samp {
 
 /* 无边框列表行（渠道清单）：悬停浅底；选中行的内联背景不受影响 */
 .cps-row {
-  transition: background-color 0.15s ease;
+  transition: background-color var(--cps-duration-fast) var(--cps-ease-standard);
 }
 .cps-row:hover {
   background: var(--ant-color-fill-quaternary);
 }
 
-/* 侧栏导航：选中项在栏左缘显示指示条 */
-.cps-nav {
-  position: relative;
-}
-.cps-nav-active::before {
-  content: "";
+/* 侧栏导航：**一块**选中底色在项与项之间滑动（位置由 App.tsx 计算）。
+   以前每一项各画一条指示线、切换时瞬间闪现；滑动让「当前在哪个区域」
+   变成一次可被眼睛跟随的动作，而不是一次闪烁。 */
+.cps-nav-pill {
   position: absolute;
-  left: -10px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 3px;
-  height: 22px;
-  border-radius: 2px;
-  background: var(--ant-color-primary);
+  top: 0;
+  border-radius: 6px;
+  /* 与渠道链的选中行同一层薄晕染：全站的「选中」只有一种浓度 */
+  background: var(--cps-accent-wash-strong);
+  pointer-events: none;
+  z-index: 0;
+  transition:
+    transform var(--cps-duration-base) var(--cps-ease-standard),
+    left var(--cps-duration-fast) var(--cps-ease-standard),
+    right var(--cps-duration-fast) var(--cps-ease-standard),
+    height var(--cps-duration-fast) var(--cps-ease-standard);
+}
+[data-theme="light"] .cps-nav-pill {
+  box-shadow: inset 0 0 0 1px rgba(79, 140, 255, 0.08);
+}
+/* 展开/收起时文字重新挂载：淡入，而不是闪一下出现 */
+.cps-nav-label {
+  animation: cps-fade-in var(--cps-duration-fast) var(--cps-ease-standard) both;
 }
 
 /* 导航钉住（展开态）：悬停浮现的 pin 按钮；已钉项常显主色 */
 .cps-nav-item {
   position: relative;
+  z-index: 1;
 }
 .cps-pin {
   position: absolute;
@@ -488,16 +548,17 @@ samp {
   margin-left: 30px;
   padding: 8px 12px;
   border-radius: var(--ant-border-radius);
-  transition: background-color 0.15s ease;
+  transition: background-color var(--cps-duration-fast) var(--cps-ease-standard);
 }
 .cps-chain-row:hover {
   background: var(--ant-color-fill-quaternary);
 }
+/* 选中行用一层薄薄的主色晕染，而不是整块实色——链路是内容，不该比操作按钮更抢眼 */
 .cps-chain-row[data-state="on"] {
-  background: var(--ant-color-primary-bg);
+  background: var(--cps-accent-wash);
 }
 .cps-chain-row[data-state="on"]:hover {
-  background: var(--ant-color-primary-bg-hover);
+  background: var(--cps-accent-wash-strong);
 }
 /* 选中 = 加粗高亮；位置不许变（视觉焦点靠字重与颜色，不靠位移） */
 .cps-chain-row[data-state="on"] code {
@@ -545,7 +606,7 @@ samp {
   padding: 0;
   border: none;
   background: transparent;
-  transition: color 0.15s ease;
+  transition: color var(--cps-duration-fast) var(--cps-ease-standard);
 }
 .cps-grip:hover {
   color: var(--ant-color-text-secondary);
@@ -581,5 +642,140 @@ samp {
   * {
     scrollbar-width: thin;
     scrollbar-color: var(--cps-thumb) transparent;
+  }
+}
+
+/* ---------- 交互状态与入场（2.2） ----------
+   按压下沉 0.5px：不影响布局的触觉反馈，比放大/发光安静得多。 */
+.ant-btn:not(:disabled):not(.ant-btn-loading):active {
+  transform: translateY(0.5px);
+}
+.cps-wbtn:focus-visible,
+.cps-pin:focus-visible,
+.cps-grip:focus-visible {
+  outline: 2px solid var(--ant-color-primary);
+  outline-offset: 1px;
+}
+.cps-wbtn:focus-visible {
+  outline-offset: -2px;
+}
+/* 底栏与面板共用同一条「顶部受光」 */
+.cps-statusbar {
+  box-shadow: inset 0 1px 0 0 var(--cps-surface-highlight);
+}
+/* 空态与提示出现时淡入，而不是「啪」地占位 */
+.ant-alert,
+.ant-empty,
+.cps-fade-in {
+  animation: cps-fade-in var(--cps-duration-base) var(--cps-ease-standard);
+}
+
+/* 测试台的尝试链：每次请求按时间顺序逐段落定，行轻微上浮。
+   这是真实的执行顺序，不是装饰性编排。 */
+.cps-trace-in .ant-table-tbody > tr.ant-table-row {
+  animation: cps-row-rise var(--cps-duration-base) var(--cps-ease-standard) both;
+}
+.cps-trace-in .ant-table-tbody > tr.ant-table-row:nth-child(2) {
+  animation-delay: 30ms;
+}
+.cps-trace-in .ant-table-tbody > tr.ant-table-row:nth-child(3) {
+  animation-delay: 60ms;
+}
+.cps-trace-in .ant-table-tbody > tr.ant-table-row:nth-child(4) {
+  animation-delay: 90ms;
+}
+.cps-trace-in .ant-table-tbody > tr.ant-table-row:nth-child(n + 5) {
+  animation-delay: 120ms;
+}
+@keyframes cps-row-rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 探测中的扫描线：真实的「正在向上游逐个确认」的忙碌指示，
+   不代表任何百分比——进度不造假。 */
+.cps-panel.cps-scanning {
+  position: relative;
+}
+.cps-panel.cps-scanning::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--ant-color-primary), transparent);
+  opacity: 0.85;
+  pointer-events: none;
+  animation: cps-scan 1.4s var(--cps-ease-standard) infinite;
+}
+@keyframes cps-scan {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* 复制成功：对勾轻轻跳一下，比再弹一条消息克制 */
+.ant-typography-copy,
+.ant-typography-copy-success {
+  transition:
+    color var(--cps-duration-fast) var(--cps-ease-standard),
+    transform var(--cps-duration-fast) var(--cps-ease-standard);
+}
+.ant-typography-copy-success {
+  animation: cps-pop var(--cps-duration-slow) var(--cps-ease-standard);
+}
+@keyframes cps-pop {
+  0% {
+    transform: scale(0.82);
+    opacity: 0.5;
+  }
+  60% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@keyframes cps-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/*
+ * reduced-motion：颜色与透明度保留，位移与时长归零。
+ * 加载旋转表达的是「正在工作」，属于状态而不是装饰，保留其节奏。
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: 必须覆盖组件库自带的过渡 */
+    transition-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: 必须覆盖组件库自带的动画 */
+    animation-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: 无限循环的动画在 reduce 下必须只跑一次 */
+    animation-iteration-count: 1 !important;
+  }
+  .anticon-spin,
+  .ant-spin-dot-item {
+    /* biome-ignore lint/complexity/noImportantStyles: 加载旋转表达状态，保留其节奏 */
+    animation-duration: 1s !important;
+    /* biome-ignore lint/complexity/noImportantStyles: 加载旋转需要持续转动 */
+    animation-iteration-count: infinite !important;
   }
 }

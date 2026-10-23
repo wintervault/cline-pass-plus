@@ -37,9 +37,20 @@ const sharedToken = {
   colorPrimary: '#4f8cff',
   colorInfo: '#4f8cff',
   borderRadius: 6,
-  fontSizeHeading3: 20,
+  borderRadiusLG: 10,
+  fontSizeHeading3: 22,
   fontFamily: FONT_SANS,
   fontFamilyCode: FONT_MONO,
+  /*
+   * 动效节奏与 `motion.ts` 同源（60 / 120 / 280ms）。
+   * antd 的弹层、下拉、消息都用这三档；不映射的话，antd 组件会和
+   * 我们自己的过渡呈现两种速度感——同屏两种节奏是最容易露怯的细节。
+   */
+  motionDurationFast: '0.06s',
+  motionDurationMid: '0.12s',
+  motionDurationSlow: '0.28s',
+  motionEaseOut: 'cubic-bezier(0.2, 0, 0, 1)',
+  motionEaseInOut: 'cubic-bezier(0.2, 0, 0, 1)',
 };
 
 /**
@@ -53,6 +64,8 @@ const darkToken = {
   colorBgContainer: '#16181d',
   colorBgElevated: '#1e2026',
   colorBorderSecondary: '#25272e',
+  /* 遮罩比 antd 默认略深一点：暗色界面下 45% 仍能看清底下的结构，会显得吵 */
+  colorBgMask: 'rgba(0, 0, 0, 0.52)',
 };
 
 /**
@@ -73,11 +86,16 @@ export const darkTheme = {
     ...sharedComponents,
     // 暗色下默认的消息底色偏黑，与侧栏/内容面糊在一起；抬到弹层色才看得出是浮层
     Message: { ...sharedComponents.Message, contentBg: darkToken.colorBgElevated },
+    Modal: { borderRadiusLG: 12 },
   },
 };
 
 export const lightTheme = {
   algorithm: theme.defaultAlgorithm,
-  token: sharedToken,
-  components: sharedComponents,
+  token: { ...sharedToken, colorBgMask: 'rgba(0, 0, 0, 0.32)' },
+  components: {
+    ...sharedComponents,
+    /* 弹层与面板的圆角阶梯：面板 8（全局 borderRadiusLG），弹层再大一号 */
+    Modal: { borderRadiusLG: 12 },
+  },
 };

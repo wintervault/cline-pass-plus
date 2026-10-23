@@ -23,7 +23,7 @@ export function PageHeader({ title, desc, actions }: { title: ReactNode; desc?: 
           在 flex-wrap 下先换行、再收缩，右侧操作会被挤到第二行（英文长文案尤甚）。
           basis 0 让操作先占位，标题块拿剩余宽度。 */}
       <div style={{ minWidth: 0, flex: '1 1 0' }}>
-        <Typography.Title level={3} style={{ margin: 0, fontSize: 20, lineHeight: '28px' }}>
+        <Typography.Title level={3} style={{ margin: 0, fontSize: 22, lineHeight: '30px' }}>
           {title}
         </Typography.Title>
         {desc && (
