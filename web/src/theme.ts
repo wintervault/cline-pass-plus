@@ -30,7 +30,7 @@ export const FONT_MONO =
 
 /**
  * 品牌与体系 token（亮暗共用语义）。排版角色固定四层：
- * 20 页标题 / 14 正文与控件 / 13 说明文字 / 12 小注与数据。
+ * 22 页标题 / 14 正文与控件 / 13 说明文字 / 12 小注与数据。
  * 主色只用于主操作、选中与状态，其余交给 antd 算法。
  */
 const sharedToken = {
@@ -95,7 +95,7 @@ export const lightTheme = {
   token: { ...sharedToken, colorBgMask: 'rgba(0, 0, 0, 0.32)' },
   components: {
     ...sharedComponents,
-    /* 弹层与面板的圆角阶梯：面板 8（全局 borderRadiusLG），弹层再大一号 */
+    /* 弹层圆角比面板再大一号（面板 10，弹层 12） */
     Modal: { borderRadiusLG: 12 },
   },
 };
