@@ -364,8 +364,14 @@ async function main(): Promise<void> {
     }
     shuttingDown = true;
     logger.info({ reason }, '开始优雅退出');
+    /*
+     * 控制台里的「停止」是明确的用户意图：不为仍在流式输出的请求拖 8 秒。
+     * 1.5s 足以让常规请求收尾；超时由 shutdownServer 强制断开。
+     * SIGTERM（systemd / 容器）仍保留完整宽限期，避免部署时掐断正常请求。
+     */
+    const graceMs = reason === 'control-api' ? 1_500 : 30_000;
     void (async () => {
-      await Promise.all([manager.closeAll(30_000), consoleManager.close(30_000)]);
+      await Promise.all([manager.closeAll(graceMs), consoleManager.close(graceMs)]);
       configStore.close();
       metaStore.close();
       await Promise.all([configStore.flush(), metaStore.flush()]);
