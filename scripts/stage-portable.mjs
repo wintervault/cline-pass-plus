@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { spawnSync } from 'node:child_process';
 /**
  * 把一个版本的可便携包放到 C:\Library\tempTools，并把上一个版本的 data 复制进去。
  *
@@ -13,7 +14,6 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
 
 const args = process.argv.slice(2);
 const option = (name, fallback = null) => {
