@@ -325,9 +325,9 @@ export function StatusBar({
         </Typography.Text>
         {/*
           语言切换：即时生效，不刷新页面。
-          **不要用 Tooltip 包这个按钮**：状态栏贴着窗口底部，菜单和提示都会被自动
-          翻到上方并重叠，提示层会截走菜单项的点击（实测：语言菜单点不动）。
-          用原生 title 即可，它不参与命中测试。
+          **不要用 Tooltip、也不要加原生 title**：状态栏贴着窗口底部，菜单和提示都会被
+          自动翻到上方并重叠；WebView2 的原生 title 是独立窗口，会直接压在菜单上，
+          antd Tooltip 则会截走菜单项的点击。这个按钮只靠图标与 aria-label。
         */}
         <Dropdown
           trigger={['click']}
@@ -341,13 +341,7 @@ export function StatusBar({
             onClick: ({ key }) => onToggleLang(key as Lang),
           }}
         >
-          <Button
-            size="small"
-            type="text"
-            icon={<TranslationOutlined />}
-            aria-label={t('app.lang.switch')}
-            title={t('app.lang.switch')}
-          />
+          <Button size="small" type="text" icon={<TranslationOutlined />} aria-label={t('app.lang.switch')} />
         </Dropdown>
         <Tooltip title={mode === 'dark' ? t('statusbar.theme.dark') : t('statusbar.theme.light')}>
           <Button

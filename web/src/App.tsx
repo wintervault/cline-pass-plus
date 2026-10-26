@@ -315,6 +315,24 @@ function Console({ mode, onToggleTheme }: { mode: ThemeMode; onToggleTheme: () =
     document.body.style.colorScheme = mode;
   }, [token.colorBgLayout, mode]);
 
+  /*
+   * WebView2 的原生 title 提示是独立窗口，会压在同一个触发器的弹出层上。
+   * antd Select 会给选中值自动加 title，悬停 Select 再打开下拉时，黑色提示框
+   * 会盖住选项（尤其靠近窗口底部时）。这里只摘掉 Select 的 title；完整值本来
+   * 在下拉里就能看到，不损失信息。
+   */
+  useEffect(() => {
+    const strip = (): void => {
+      for (const el of document.querySelectorAll('.ant-select-content[title], .ant-select-selection-item[title]')) {
+        el.removeAttribute('title');
+      }
+    };
+    strip();
+    const observer = new MutationObserver(strip);
+    observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['title'] });
+    return () => observer.disconnect();
+  }, []);
+
   // 遇到 401（远端部署且密钥缺失/失效）→ 记下状态，由面板承担输入
   useEffect(() => {
     const handler = (): void => {
