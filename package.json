@@ -25,7 +25,8 @@
     "dev:isolated": "node scripts/dev-server.mjs",
     "desktop:build": "npm run build && node scripts/prepare-runtime.mjs --with-node && cd desktop && npx tauri build && cd .. && node scripts/package-portable.mjs",
     "desktop:build:linux": "npm run build && node scripts/prepare-runtime.mjs --with-node && cd desktop && npx tauri build --bundles deb,rpm",
-    "desktop:portable": "node scripts/package-portable.mjs"
+    "desktop:portable": "node scripts/package-portable.mjs",
+    "stage:portable": "node scripts/stage-portable.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
