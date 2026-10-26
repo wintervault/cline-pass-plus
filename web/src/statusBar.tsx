@@ -315,7 +315,11 @@ export function StatusBar({
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
           v{version ?? '…'}
         </Typography.Text>
-        {/* 语言切换：即时生效，不刷新页面 */}
+        {/*
+          语言切换：即时生效，不刷新页面。
+          **不要用 Tooltip、也不要加原生 title**：状态栏贴着窗口底部，菜单和提示都会
+          向上展开并重叠；WebView2 的原生 title 是独立窗口，会直接压在菜单上。
+        */}
         <Dropdown
           trigger={['click']}
           menu={{
@@ -328,9 +332,7 @@ export function StatusBar({
             onClick: ({ key }) => onToggleLang(key as Lang),
           }}
         >
-          <Tooltip title={t('app.lang.switch')}>
-            <Button size="small" type="text" icon={<TranslationOutlined />} aria-label={t('app.lang.switch')} />
-          </Tooltip>
+          <Button size="small" type="text" icon={<TranslationOutlined />} aria-label={t('app.lang.switch')} />
         </Dropdown>
         <Tooltip title={mode === 'dark' ? t('statusbar.theme.dark') : t('statusbar.theme.light')}>
           <Button
