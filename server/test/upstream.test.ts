@@ -19,7 +19,7 @@ describe('classifyErrorKind', () => {
     'Unauthorized',
     'Please re-authenticate your account',
     'invalid api key provided',
-    'Insufficient credits, please top up',
+    'Insufficient credits',
     'You exceeded your current quota',
     'billing issue detected',
   ])('错误文本 %s → 账号级（换渠道无效）', (message) => {
@@ -59,6 +59,22 @@ describe('classifyErrorKind', () => {
     expect(classifyErrorKind({ status: 200, message: 'upstream returned 429 too many requests' })).toBe('channel');
   });
 
+  it.each([200, 429, 502])('额度已耗尽（状态码 %i）→ 账号级，不因文本里的 429 被判成限流', (status) => {
+    // Cline Pass 月度额度用尽时的实测原文：网关以 502 + 顶层 {code,message} 返回
+    const message =
+      '{"code":"INFERENCE_CAP_ERROR","message":"Error 429: You have reached your monthly Clinepass limit. The limit resets in 10d 14h, please try again later."}';
+    expect(classifyErrorKind({ status, message })).toBe('account');
+  });
+
+  it.each([
+    'You have reached your daily usage limit',
+    'Your credit balance is exhausted',
+    'insufficient_quota',
+    '额度已用完',
+  ])('额度类文本 %s → 账号级', (message) => {
+    expect(classifyErrorKind({ status: 502, message })).toBe('account');
+  });
+
   it.each([
     ['invalid JSON in request body', 400],
     ['model not found', 404],
@@ -91,6 +107,15 @@ describe('classifyChannelStatus', () => {
 
   it.each(['429 too many requests', 'rate-limited', 'temporarily rate limited'])('%s → limited', (msg) => {
     expect(classifyChannelStatus(msg)).toBe('limited');
+  });
+
+  it('额度耗尽 → quota（不是瞬时限流，换渠道无用）', () => {
+    expect(
+      classifyChannelStatus(
+        '{"code":"INFERENCE_CAP_ERROR","message":"Error 429: You have reached your monthly Clinepass limit."}',
+      ),
+    ).toBe('quota');
+    expect(classifyChannelStatus('your daily usage limit has been reached')).toBe('quota');
   });
 
   it.each(['invalid_request_error', 'failed to resolve modelid', 'no allowed providers', 'model not found'])(
@@ -147,6 +172,20 @@ describe('unwrap', () => {
   it('带 error 但也有 choices（部分成功）→ 视为成功', () => {
     const r = unwrap({ error: 'ignore me', choices: [{ message: { content: 'OK' } }] });
     expect(r.status).toBe(200);
+  });
+
+  it('顶层 {code, message} 错误体 → 识别为错误（额度耗尽的实测形状）', () => {
+    // 网关实测：HTTP 502 + {"code":"INFERENCE_CAP_ERROR","message":"Error 429: ... monthly ... limit"}
+    const r = unwrap({ code: 'INFERENCE_CAP_ERROR', message: 'Error 429: You have reached your monthly limit' });
+    expect(r.error).toContain('INFERENCE_CAP_ERROR');
+    expect(r.status).toBe(402);
+    expect(r.body['error']).toBeDefined();
+  });
+
+  it('顶层 {code, message} 但没有 choices 也按错误处理（不会被当成成功体）', () => {
+    const r = unwrap({ code: 'UPSTREAM_ERROR', message: 'upstream exploded' });
+    expect(r.status).toBe(502);
+    expect(r.error).toContain('upstream exploded');
   });
 
   it('非对象输入 → 200 空体', () => {

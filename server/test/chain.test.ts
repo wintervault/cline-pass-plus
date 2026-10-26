@@ -205,6 +205,35 @@ describe('ChatChain 故障转移', () => {
     expect(r.trace.map((t) => t.upstream)).toEqual(['ch1', 'ch1']); // 没有切渠道
   });
 
+  it('额度耗尽（502 + 顶层 code/message）→ 立即换账号，并保持在新账号上（2.1.5 回归）', async () => {
+    // 实测原文：网关以 HTTP 502 返回 {"code":"INFERENCE_CAP_ERROR","message":"Error 429: ... monthly ... limit"}
+    const cap = {
+      code: 'INFERENCE_CAP_ERROR',
+      message: 'Error 429: You have reached your monthly Clinepass limit. The limit resets in 10d 14h.',
+    };
+    upstream.script([
+      { status: 502, body: cap },
+      { status: 200, body: okBody('ch1') },
+    ]);
+    const chain = makeChain();
+    const r = asSuccess(
+      await chain.run({ modelId: 'cline-pass/x', body: bodyOf(), cfg: cfgOf(), meta: metaOf(), stream: false }),
+    );
+    expect(upstream.count).toBe(2);
+    // 账号级错误换的是账号，不是渠道：两次都钉住 ch1
+    expect(upstream.requests[1]?.auth).toBe('Bearer sk_b');
+    expect(upstream.requests[1]?.body['providerOptions']).toEqual({ gateway: { only: ['ch1'] } });
+    expect(r.accountRotations).toHaveLength(1);
+    expect(r.account?.name).toBe('B');
+
+    // 粘性位置已落到新账号：下一次请求直接用它，不再撞已耗尽的 A
+    upstream.script([{ status: 200, body: okBody('ch1') }]);
+    asSuccess(
+      await chain.run({ modelId: 'cline-pass/x', body: bodyOf(), cfg: cfgOf(), meta: metaOf(), stream: false }),
+    );
+    expect(upstream.requests[2]?.auth).toBe('Bearer sk_b');
+  });
+
   it('请求级失败（400）：同渠道重试一次后切换', async () => {
     upstream.script([
       { status: 400, body: err('messages must be an array') },

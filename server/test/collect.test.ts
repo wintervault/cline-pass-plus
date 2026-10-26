@@ -195,6 +195,17 @@ describe('StreamCollector：把 SSE 拼回非流式响应', () => {
     expect(out.error).toBe('rate limited by shared pool');
   });
 
+  it('顶层 {code, message} 错误帧 → error（额度耗尽的实测形状）', () => {
+    const c = new StreamCollector();
+    feed(c, [
+      data({ code: 'INFERENCE_CAP_ERROR', message: 'Error 429: You have reached your monthly Clinepass limit' }),
+      done,
+    ]);
+    const out = c.finish();
+    expect(out.body).toBeNull();
+    expect(out.error).toContain('INFERENCE_CAP_ERROR');
+  });
+
   it('没有 [DONE] 也没有 finish_reason = 被截断，不能当成功', () => {
     const c = new StreamCollector();
     feed(c, [data({ choices: [{ index: 0, delta: { content: 'partial' } }] })]);

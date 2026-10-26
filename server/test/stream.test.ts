@@ -137,6 +137,37 @@ describe('ChatChain 流式尝试', () => {
     }
   });
 
+  it('SSE 首帧是顶层 {code, message} 的额度错误 → 按账号级轮转，不透传给客户端（2.1.5 回归）', async () => {
+    const { upstream, chain, metaOf, cfgOf } = await chainStream();
+    try {
+      upstream.script([
+        {
+          sse: [
+            'data: {"code":"INFERENCE_CAP_ERROR","message":"Error 429: You have reached your monthly Clinepass limit. The limit resets in 10d 14h."}\n\n',
+          ],
+        },
+        {
+          sse: ['data: {"choices":[{"delta":{"content":"B"}}]}\n\n', 'data: [DONE]\n\n'],
+        },
+      ]);
+      const r = await chain.run({
+        modelId: 'cline-pass/x',
+        body: { model: 'cline-pass/x', messages: [] },
+        cfg: cfgOf(),
+        meta: metaOf(),
+        stream: true,
+      });
+      expect(r.outcome).toBe('stream');
+      if (r.outcome !== 'stream') return;
+      expect(r.head.toString('utf8')).toContain('"B"');
+      expect(upstream.count).toBe(2);
+      expect(upstream.requests[1]?.auth).toBe('Bearer sk_b');
+      expect(r.accountRotations).toHaveLength(1);
+    } finally {
+      await upstream.close();
+    }
+  });
+
   it('非 SSE 错误响应：同样能切换', async () => {
     const { upstream, chain, metaOf, cfgOf } = await chainStream();
     try {

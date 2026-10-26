@@ -2,7 +2,7 @@ import type { AccountPool, AccountRotateInfo } from '../accounts/pool.ts';
 import type { Account, FailoverConfig, PerModelConfig } from '../config/schema.ts';
 import { fetchJSON } from '../upstream/client.ts';
 import { classifyErrorKind } from '../upstream/errors.ts';
-import { unwrap } from '../upstream/response.ts';
+import { errText, unwrap } from '../upstream/response.ts';
 import { emptyRouting, injectPrefs, parseRouting, type RoutingInfo } from '../upstream/routing.ts';
 import type { ModelMeta, PinState, TraceEntry, UpstreamErrorKind } from '../upstream/types.ts';
 import { buildCandidates } from './candidates.ts';
@@ -647,12 +647,7 @@ export class ChatChain {
           const text = head.toString('utf8').trimStart();
           if (!text.startsWith('data:')) {
             isSSE = false;
-          } else if (
-            text
-              .replace(/^data:\s*/, '')
-              .slice(0, 160)
-              .startsWith('{"error"')
-          ) {
+          } else if (isErrorFrame(text.replace(/^data:\s*/, ''))) {
             // 200 + SSE 包错误体：读完整文本用于分类与学习。
             // 注意：getReader() 之后 body 已进入「已读」状态，必须继续用 reader 读，
             // 再调 response.text() 会抛 "Body is unusable"（fetch 规范行为）
@@ -747,17 +742,37 @@ async function readAll(reader: ReadableStreamDefaultReader<Uint8Array>): Promise
   return Buffer.concat(parts);
 }
 
-/** 从 SSE 错误体里提取可读消息。 */
+/**
+ * 首帧是不是错误对象（而不是真正的流式内容）。
+ *
+ * 两种形状：标准 `{"error":...}`，以及 Cline 网关的顶层
+ * `{"code":"INFERENCE_CAP_ERROR","message":"..."}`——额度用尽时实测就是这个形状。
+ * 首帧解析不出来（被网络切成半行）时按「不是错误」处理，别把正常流错杀。
+ */
+function isErrorFrame(payload: string): boolean {
+  const trimmed = payload.trim();
+  if (!trimmed.startsWith('{')) return false;
+  try {
+    return unwrap(JSON.parse(trimmed)).error !== null;
+  } catch {
+    return false;
+  }
+}
+
+/** 从 SSE 错误体里提取可读消息（只解析第一行：后面可能还有别的帧）。 */
 function extractStreamError(text: string): string | null {
   const start = text.indexOf('{');
   if (start < 0) return null;
+  const line = text.slice(start).split('\n')[0] ?? '';
   try {
-    const parsed = JSON.parse(text.slice(start)) as { error?: unknown };
+    const parsed = JSON.parse(line) as { error?: unknown; code?: unknown; message?: unknown };
     if (typeof parsed.error === 'string') return parsed.error;
     if (parsed.error && typeof parsed.error === 'object') {
       const msg = (parsed.error as { message?: unknown }).message;
       if (typeof msg === 'string') return msg;
     }
+    // Cline 网关的顶层 {code, message}：保留完整 JSON，分类要靠 code（INFERENCE_CAP_ERROR）
+    if (typeof parsed.code === 'string' && typeof parsed.message === 'string') return errText(parsed);
     return null;
   } catch {
     return null;

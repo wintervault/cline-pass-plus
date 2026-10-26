@@ -1,6 +1,7 @@
 import type { Account } from '../config/schema.ts';
 import { fetchJSON } from './client.ts';
-import { classifyChannelStatus } from './errors.ts';
+import { classifyChannelStatus, isQuotaExhausted } from './errors.ts';
+import { unwrap } from './response.ts';
 import { parsePlannedChain, parseRouting } from './routing.ts';
 import { blankModelMeta, type ModelMeta, type PinState, type UpstreamStatusKind } from './types.ts';
 
@@ -24,6 +25,8 @@ export interface ProbeResult extends ModelMeta {
   ok: boolean;
   ms: number;
   error?: string;
+  /** 已知失败原因的稳定 code（如额度用尽），界面按语言映射。 */
+  code?: string;
 }
 
 const CHAT = '/chat/completions';
@@ -114,14 +117,10 @@ async function pinProbe(
   return { pinState: 'ignored', providers: null, routedTo: routing.finalProvider };
 }
 
-function extractErrorText(shaped: { error?: unknown; data?: { error?: unknown } } | null): string | null {
-  if (!shaped || typeof shaped !== 'object') return null;
-  if (typeof shaped.error === 'string' && shaped.error) return shaped.error;
-  if (shaped.error && typeof shaped.error === 'object') return JSON.stringify(shaped.error);
-  const inner = shaped.data?.error;
-  if (typeof inner === 'string' && inner) return inner;
-  if (inner && typeof inner === 'object') return JSON.stringify(inner);
-  return null;
+function extractErrorText(json: unknown): string | null {
+  if (json === null || typeof json !== 'object') return null;
+  // unwrap 同时认标准 {error}、data 包装内的错误，以及 Cline 的顶层 {code,message}
+  return unwrap(json).error;
 }
 
 /** 规划器 tier-0 竞胜者（来自 planningReasoning，仅参考）。 */
@@ -189,6 +188,7 @@ export class ProbeService {
         ok: false,
         ms: Date.now() - started,
         error: probeError.slice(0, 400),
+        ...(isQuotaExhausted(probeError) ? { code: 'upstream.quotaExhausted' } : {}),
       };
     }
 
@@ -340,12 +340,13 @@ export class ProbeService {
 
           let status: UpstreamStatusKind = 'unknown';
           let note = '';
-          const shaped = json as { error?: unknown; data?: { choices?: unknown } } | null;
-          if (shaped && typeof shaped === 'object' && shaped.error && !shaped.data?.choices) {
-            const message = typeof shaped.error === 'string' ? shaped.error : JSON.stringify(shaped.error);
-            status = classifyChannelStatus(message);
-            note = message.slice(0, 160);
-          } else if (shaped?.data?.choices) {
+          // 统一用 unwrap 解错误体：标准 {error} 与 Cline 的顶层 {code,message} 都要认，
+          // 否则额度错误会被记成「未判定」，和故障转移的结论对不上。
+          const u = json === null || typeof json !== 'object' ? null : unwrap(json);
+          if (u?.error) {
+            status = classifyChannelStatus(u.error);
+            note = u.error.slice(0, 160);
+          } else if (u && Array.isArray(u.body['choices'])) {
             status = 'ok';
           }
           results[slug] = { status, ms: Date.now() - started, note };
