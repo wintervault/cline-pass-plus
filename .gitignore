@@ -31,6 +31,8 @@ Thumbs.db
 .playwright-mcp/
 .serena/
 .wintertemp/
+# 界面评审截图（本地比对用，不进仓库）
+review/
 
 # 桌面壳构建产物
 desktop/target/
