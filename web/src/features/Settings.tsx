@@ -41,6 +41,34 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+/**
+ * 「标签 + 值」小栅格：数据与关于两处共用。
+ * 标签列取 `minmax(64px, max-content)` 而不是固定 64——英文的 "Data directory"
+ * 比中文「数据目录」宽得多，固定宽度会把标签折成两行，值跟着错位。
+ */
+function KVGrid({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'minmax(64px, max-content) minmax(0, 1fr)',
+        gap: '8px 12px',
+        alignItems: 'baseline',
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function KVLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="cps-meta" style={{ whiteSpace: 'nowrap' }}>
+      {children}
+    </span>
+  );
+}
+
 function AutostartPanel() {
   const { t } = useI18n();
   const host = getHostBridge();
@@ -279,17 +307,8 @@ function DataPanel() {
     <Panel title={t('settings.data.title')}>
       <div style={{ display: 'grid', gap: 14 }}>
         {info ? (
-          /* 与「关于」并排：两边用同一个 64px 标签列 + 12px 等宽值，
-             并排的两个区块才会读起来像一套，而不是两种表单 */
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '64px minmax(0, 1fr)',
-              gap: '8px 12px',
-              alignItems: 'baseline',
-            }}
-          >
-            <span className="cps-meta">{t('settings.data.dir')}</span>
+          <KVGrid>
+            <KVLabel>{t('settings.data.dir')}</KVLabel>
             <Typography.Text
               copyable={{ tooltips: [t('common.copy'), t('common.copied')] }}
               className="cps-mono"
@@ -298,7 +317,7 @@ function DataPanel() {
             >
               {info.dataDir}
             </Typography.Text>
-            <span className="cps-meta">{t('settings.data.logs')}</span>
+            <KVLabel>{t('settings.data.logs')}</KVLabel>
             <Typography.Text
               className="cps-mono"
               ellipsis={{ tooltip: info.logDir }}
@@ -306,7 +325,7 @@ function DataPanel() {
             >
               {info.logDir}
             </Typography.Text>
-          </div>
+          </KVGrid>
         ) : (
           <Typography.Text type="secondary">{t('settings.data.desktopOnly')}</Typography.Text>
         )}
@@ -340,14 +359,12 @@ function AboutPanel() {
   return (
     <Panel title={t('settings.about.title')}>
       {/* 关于是三行事实，用「标签 + 值」的小栅格，而不是一句用圆点串起来的长句 */}
-      <div
-        style={{ display: 'grid', gridTemplateColumns: '64px minmax(0, 1fr)', gap: '8px 12px', alignItems: 'baseline' }}
-      >
-        <span className="cps-meta">{t('settings.about.version')}</span>
+      <KVGrid>
+        <KVLabel>{t('settings.about.version')}</KVLabel>
         <span className="cps-mono" style={{ color: 'var(--cps-text)' }}>
           v{meta.data?.version ?? '…'}
         </span>
-        <span className="cps-meta">{t('settings.about.repo')}</span>
+        <KVLabel>{t('settings.about.repo')}</KVLabel>
         <Typography.Link
           href={REPO_URL}
           target="_blank"
@@ -366,9 +383,9 @@ function AboutPanel() {
         >
           wintervault/cline-pass-plus
         </Typography.Link>
-        <span className="cps-meta">{t('settings.about.license')}</span>
+        <KVLabel>{t('settings.about.license')}</KVLabel>
         <span className="cps-body">MIT</span>
-      </div>
+      </KVGrid>
     </Panel>
   );
 }
