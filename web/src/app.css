@@ -312,6 +312,19 @@ samp {
 /* 失败行：只给一层极淡的危险底色 + 左缘 2px 标记，不再整行铺红。
    数据表里整块红底会把正常行也衬得发灰，读起来像「整页报错」。 */
 
+/* 两个短区块并排：宽窗口一行，窄窗口退回上下排。 */
+.cps-grid-2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .cps-grid-2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* ---------- 表格里的文字与对齐 ----------
    表格一行里只该有「等宽标识 / 纯文本 / 芯片」三类，且各自样式固定。 */
 .cps-mono {

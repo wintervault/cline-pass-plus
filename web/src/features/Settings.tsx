@@ -137,61 +137,34 @@ function ConsolePanel() {
   const canClearKey = !!data?.hasProxyKey && loopbackBind;
 
   return (
-    <Panel title={t('settings.console.title')}>
+    <Panel
+      title={t('settings.console.title')}
+      extra={
+        <Space size={10} wrap>
+          <Tooltip title={status.error || undefined}>
+            <span>
+              <StatusChip tone={tag.tone} small>
+                {t(tag.key)}
+              </StatusChip>
+            </span>
+          </Tooltip>
+          {data ? (
+            <Typography.Text
+              copyable={{ text: data.url, tooltips: [t('common.copy'), t('common.copied')] }}
+              className="cps-mono"
+              ellipsis={{ tooltip: data.url }}
+              style={{ fontSize: 12, maxWidth: 360, minWidth: 0 }}
+            >
+              {data.url}
+            </Typography.Text>
+          ) : null}
+          <StatusChip tone={data?.hasProxyKey ? 'ok' : 'neutral'} small>
+            {data?.hasProxyKey ? t('settings.console.keySet') : t('settings.console.keyUnset')}
+          </StatusChip>
+        </Space>
+      }
+    >
       <div style={{ display: 'grid', gap: 14 }}>
-        <Descriptions
-          size="small"
-          column={1}
-          items={[
-            {
-              key: 'url',
-              label: t('settings.console.url'),
-              children: data ? (
-                <Typography.Text
-                  copyable={{ text: data.url, tooltips: [t('common.copy'), t('common.copied')] }}
-                  className="cps-mono"
-                >
-                  {data.url}
-                </Typography.Text>
-              ) : (
-                '—'
-              ),
-            },
-            {
-              key: 'state',
-              label: t('settings.console.state'),
-              children: (
-                <Space size={8} wrap>
-                  <StatusChip tone={tag.tone} small>
-                    {t(tag.key)}
-                  </StatusChip>
-                  {status.state === 'running' && status.boundPort ? (
-                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                      {`${status.boundHost ?? '127.0.0.1'}:${status.boundPort}`}
-                    </Typography.Text>
-                  ) : null}
-                  {status.error ? (
-                    <Tooltip title={status.error}>
-                      <Typography.Text type="danger" style={{ fontSize: 12 }} ellipsis>
-                        {status.error}
-                      </Typography.Text>
-                    </Tooltip>
-                  ) : null}
-                </Space>
-              ),
-            },
-            {
-              key: 'key',
-              label: t('settings.console.key'),
-              children: (
-                <StatusChip tone={data?.hasProxyKey ? 'ok' : 'neutral'} small>
-                  {data?.hasProxyKey ? t('settings.console.keySet') : t('settings.console.keyUnset')}
-                </StatusChip>
-              ),
-            },
-          ]}
-        />
-
         <div style={{ display: 'grid', gap: 12 }}>
           <Field label={t('settings.console.port')}>
             <Space size={8} align="center">
@@ -326,7 +299,12 @@ function DataPanel() {
                 key: 'data',
                 label: t('settings.data.dir'),
                 children: (
-                  <Typography.Text copyable={{ tooltips: [t('common.copy'), t('common.copied')] }} className="cps-mono">
+                  <Typography.Text
+                    copyable={{ tooltips: [t('common.copy'), t('common.copied')] }}
+                    className="cps-mono"
+                    ellipsis={{ tooltip: info.dataDir }}
+                    style={{ minWidth: 0, maxWidth: '100%' }}
+                  >
                     {info.dataDir}
                   </Typography.Text>
                 ),
@@ -334,7 +312,15 @@ function DataPanel() {
               {
                 key: 'logs',
                 label: t('settings.data.logs'),
-                children: <Typography.Text className="cps-mono">{info.logDir}</Typography.Text>,
+                children: (
+                  <Typography.Text
+                    className="cps-mono"
+                    ellipsis={{ tooltip: info.logDir }}
+                    style={{ minWidth: 0, maxWidth: '100%' }}
+                  >
+                    {info.logDir}
+                  </Typography.Text>
+                ),
               },
             ]}
           />
@@ -417,8 +403,11 @@ export default function Settings() {
       {/* 开机自启只在桌面版有意义：浏览器/服务器部署不显示这一块 */}
       {host?.autostart ? <AutostartPanel /> : null}
       <ConsolePanel />
-      <DataPanel />
-      <AboutPanel />
+      {/* 「数据」与「关于」都是短块：并排放在一行，整页在桌面形态下也能装进默认窗口 */}
+      <div className="cps-grid-2">
+        <DataPanel />
+        <AboutPanel />
+      </div>
     </div>
   );
 }
