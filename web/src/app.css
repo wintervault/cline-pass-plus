@@ -223,6 +223,15 @@ samp {
 .cps-empty-action {
   margin-top: 4px;
 }
+/* 表格里的空行：一句说明就够（表体高度有限，整块空状态放不进去） */
+.cps-empty-line {
+  padding: 28px 16px;
+  text-align: center;
+  font-size: var(--cps-type-meta);
+  line-height: 18px;
+  color: var(--cps-text-tertiary);
+  text-wrap: pretty;
+}
 
 /* ---------- 状态（内联，而非药丸） ----------
    2.2.0 用带底色的圆角胶囊承载所有状态，一屏五六个药丸，像组件样例；

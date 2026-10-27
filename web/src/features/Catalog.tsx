@@ -1,10 +1,11 @@
 import { SearchOutlined } from '@ant-design/icons';
-import { Alert, App, Button, Empty, Input, Skeleton, Space, Table, Tooltip, Typography } from 'antd';
+import { Alert, App, Button, Input, Skeleton, Space, Table, Tooltip, Typography } from 'antd';
 import { useState } from 'react';
 
 import { useModels, useProbe } from '../api/hooks.ts';
 import type { PinState, Pipeline } from '../api/types.ts';
 import { DetectionAccountPicker, useDetectionAccount } from '../detectionScope.tsx';
+import { EmptyLine } from '../emptyState.tsx';
 import { useI18n } from '../i18n/index.tsx';
 import { PageHeader } from '../pageHeader.tsx';
 import { Panel } from '../panel.tsx';
@@ -164,7 +165,7 @@ export default function Catalog() {
             sticky
             loading={models.isLoading}
             dataSource={filtered.map((id) => ({ id }))}
-            locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('catalog.empty')} /> }}
+            locale={{ emptyText: <EmptyLine>{t('catalog.empty')}</EmptyLine> }}
             pagination={false}
             columns={[
               {

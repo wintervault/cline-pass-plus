@@ -37,3 +37,11 @@ export function EmptyState({
     </div>
   );
 }
+
+/**
+ * 表格里的空行：一句弱色说明，居中。表格高度有限，放不下整块空状态，
+ * 但也不该退回 antd 的插画 Empty——那会让同一页里出现两种「空」。
+ */
+export function EmptyLine({ children }: { children: ReactNode }) {
+  return <div className="cps-empty-line">{children}</div>;
+}

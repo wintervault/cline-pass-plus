@@ -1,22 +1,10 @@
 import { CopyOutlined, ReloadOutlined } from '@ant-design/icons';
-import {
-  Alert,
-  Badge,
-  Button,
-  Empty,
-  Segmented,
-  Select,
-  Skeleton,
-  Space,
-  Table,
-  Tooltip,
-  Typography,
-  theme,
-} from 'antd';
+import { Alert, Button, Segmented, Select, Skeleton, Space, Table, Tooltip, Typography, theme } from 'antd';
 import { useEffect, useState } from 'react';
 
 import { useGateways, useHistory } from '../api/hooks.ts';
 import type { HistoryEntry, TraceEntry } from '../api/types.ts';
+import { EmptyLine } from '../emptyState.tsx';
 import { useFeedback } from '../feedback.ts';
 import { diagnosticText } from '../i18n/codes.ts';
 import { type MsgKey, useI18n } from '../i18n/index.tsx';
@@ -67,9 +55,9 @@ function fmtMs(ms: number): string {
   return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
 }
 
-/** 尝试状态 → 圆点语义。 */
-const dotStatus = (status: number): 'success' | 'warning' | 'error' | 'default' =>
-  status === 200 ? 'success' : status === 429 ? 'warning' : status >= 500 || status === 402 ? 'error' : 'default';
+/** 尝试状态 → 圆点语气。用全站同一套 `cps-dot-*`，不要 antd Badge 的预设色。 */
+const dotTone = (status: number): 'ok' | 'warn' | 'danger' | 'neutral' =>
+  status === 200 ? 'ok' : status === 429 ? 'warn' : status >= 500 || status === 402 ? 'danger' : 'neutral';
 
 /**
  * 尝试链：渠道 + 状态点 + 耗时，**压成一行**。
@@ -108,7 +96,7 @@ function TraceChain({ trace, attempts }: { trace?: TraceEntry[]; attempts: strin
             className="cps-trace-item"
           >
             {i > 0 && <span style={{ color: token.colorTextQuaternary }}>›</span>}
-            <Badge status={dotStatus(entry.status)} />
+            <span className={`cps-dot cps-dot-${dotTone(entry.status)}`} aria-hidden />
             <span className="cps-mono">{entry.upstream ?? 'auto'}</span>
             <span style={{ color: token.colorTextTertiary, fontVariantNumeric: 'tabular-nums' }}>
               {fmtMs(entry.ms)}
@@ -266,7 +254,7 @@ export default function History() {
                改任一列宽度都要重算这里的和。 */
             scroll={{ x: 880 }}
             locale={{
-              emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('history.empty')} />,
+              emptyText: <EmptyLine>{t('history.empty')}</EmptyLine>,
             }}
             pagination={{ pageSize: 20, hideOnSinglePage: true, showSizeChanger: false }}
             onRow={(r) => ({ className: r.error ? 'cps-row-error' : undefined })}
