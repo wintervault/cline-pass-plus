@@ -255,13 +255,13 @@ export function StatusBar({
     <div
       className="cps-statusbar"
       style={{
-        height: 50,
+        height: 46,
         flex: '0 0 auto',
         display: 'flex',
         flexWrap: 'nowrap',
         alignItems: 'center',
-        gap: 8,
-        padding: '0 14px',
+        gap: 10,
+        padding: '0 16px',
         background: 'var(--cps-rail)',
         borderTop: '1px solid var(--cps-border)',
         overflowX: 'auto',

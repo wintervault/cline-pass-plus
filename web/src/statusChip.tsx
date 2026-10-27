@@ -1,16 +1,15 @@
 import type { ReactNode } from 'react';
 
 /**
- * 状态芯片 —— 全站唯一的状态表达。
+ * 状态 —— 全站唯一的状态表达（2.2.1 起是**内联状态**，不是彩色药丸）。
  *
- * 为什么不用 antd 的 `Tag color="green|red|orange"`：预设色是四套互不相干的
- * 高饱和色板（#52c41a / #ff4d4f / #faad14），同一屏里两三个一起出现就像
- * 告警灯；而且同一语义在不同页面会挑不同预设（绿 / geekblue / cyan），
- * 「同一件事只有一种表现」立刻失效。
+ * 2.2.0 用带底色的圆角胶囊承载所有状态，结果一屏出现五六个药丸，像组件样例；
+ * 真正需要被看见的异常反而被平均掉了。现在：
+ * - 状态点负责「有没有异常」（颜色只出现在 6px 的点上）；
+ * - 文字负责说清「是什么」（正常状态用次级文字色，警告/失败才用状态色）；
+ * - 没有底色、没有描边，状态只是行内的一段文字。
  *
- * 这里只有五种语气，色值来自 `theme.ts`（随亮暗主题切换）：
- * `ok` 正常 / `warn` 需要留意 / `danger` 失败或不可用 / `info` 中性信息 /
- * `neutral` 未判定、未启用。**颜色永远不是唯一信息**：文字必须自己说得清。
+ * 五种语气不变：ok / warn / danger / info / neutral。
  */
 export type ChipTone = 'ok' | 'warn' | 'danger' | 'info' | 'neutral';
 
@@ -26,13 +25,13 @@ export function StatusChip({
   dot?: boolean;
   small?: boolean;
 }) {
-  const cls = ['cps-chip', `cps-chip-${tone}`, small ? 'cps-chip-sm' : '', dot ? '' : 'cps-chip-plain']
+  const cls = ['cps-status', `cps-status-${tone}`, small ? 'cps-status-sm' : '', dot ? '' : 'cps-status-plain']
     .filter(Boolean)
     .join(' ');
   return (
     <span className={cls}>
-      {dot && <span className="cps-chip-dot" aria-hidden />}
-      {children}
+      {dot && <span className="cps-status-dot" aria-hidden />}
+      <span className="cps-status-text">{children}</span>
     </span>
   );
 }

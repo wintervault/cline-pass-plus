@@ -191,7 +191,7 @@ const enUS: Record<keyof typeof zhCN, string> = {
   'models.account.unknown': 'Unchecked',
   'models.noAccount.title': 'No account to inspect yet',
   'models.noAccount.desc':
-    'Probe and validation results only apply to the account that ran them. Add an account under Accounts, then select it here.',
+    'Probe and validation results only apply to the account that ran them. Add an account under Accounts.',
   'models.noAccount.action': 'Open Accounts',
   'models.pipeline.planner': 'Planner · Vercel',
   'models.pipeline.direct': 'Direct · OpenRouter',
@@ -228,6 +228,13 @@ const enUS: Record<keyof typeof zhCN, string> = {
   'models.chain.empty': 'No channels probed yet — use "Probe channels" above',
   'models.chain.emptyIgnored': 'Pinning is ignored, so the channel list cannot be trusted',
   'models.observe.title': 'Channels seen by this account',
+  'models.col.channel': 'Channel',
+  'models.col.state': 'State',
+  'models.col.latency': 'Latency',
+  'models.col.route': 'Route',
+  'models.col.use': 'Use',
+  'models.col.move': 'Move',
+  'models.col.exclude': 'Exclude',
   'models.observe.forAccount': 'Account: {name}',
   'models.observe.empty': 'No probe result for this account yet — use "Probe channels" above',
   'models.observe.noAccount': 'Add and select an account before probing channels',
@@ -267,7 +274,7 @@ const enUS: Record<keyof typeof zhCN, string> = {
   // ---------------- Accounts ----------------
   'accounts.title': 'Accounts',
   'accounts.desc':
-    'Accounts and keys are defined here once. Which accounts a gateway uses, and how it picks between them, is set per gateway under Gateways. Changes save immediately.',
+    'Accounts and keys are defined once here; which gateways use them, and how, is set under Gateways. Changes save immediately.',
   'accounts.add': 'Add account',
   'accounts.class.checkedAt': 'Checked {time}',
   'accounts.class.neverChecked': 'Not checked yet',
@@ -276,7 +283,7 @@ const enUS: Record<keyof typeof zhCN, string> = {
   'accounts.class.reason.quota': 'Quota exhausted',
   'accounts.class.scope':
     '"Restricted" means the gateway always routes this account to openai-compatible-private, so pinning does not work for planner models. OpenRouter-style (direct) models work on both kinds of accounts.',
-  'accounts.expiry.none': 'No expiry date set',
+  'accounts.expiry.none': 'Not set',
   'accounts.expiry.expiredTip': 'Expired on {date}. Expiry is only a reminder; it does not affect routing.',
   'accounts.expiry.expired': 'Expired {days} days ago',
   'accounts.expiry.expiredOnly': 'Expired',
@@ -290,6 +297,11 @@ const enUS: Record<keyof typeof zhCN, string> = {
   'accounts.settings.modelHint':
     'A health check sends one small request with this model and looks at where the gateway routes it: openai-compatible-private means a restricted account. Use a planner-pipeline model (cline-pass/*); each account spends one minimal request.',
   'accounts.panel.title': 'Accounts',
+  'accounts.col.account': 'Account',
+  'accounts.col.state': 'State',
+  'accounts.col.expiry': 'Expiry',
+  'accounts.col.usage': 'Usage',
+  'accounts.col.actions': 'Actions',
   'accounts.panel.unclassified': '{count} unchecked',
   'accounts.panel.noExpiry': '{count} without expiry',
   'accounts.panel.classifyAll': 'Check all',
@@ -332,6 +344,11 @@ const enUS: Record<keyof typeof zhCN, string> = {
   'gateways.create': 'New gateway',
   'gateways.create.limit': 'Up to {max} gateways',
   'gateways.list.title': 'Gateways',
+  'gateways.col.gateway': 'Gateway',
+  'gateways.col.state': 'State',
+  'gateways.col.scope': 'Account scope',
+  'gateways.col.address': 'Endpoint',
+  'gateways.col.actions': 'Actions',
   'gateways.list.hint': '{count} total · status refreshes every 2s',
   'gateways.loadFailed': 'Could not load gateways',
   'gateways.loadFailed.desc':
@@ -440,9 +457,8 @@ const enUS: Record<keyof typeof zhCN, string> = {
   // ---------------- Playground ----------------
   'playground.title': 'Playground',
   'playground.desc':
-    'Send one small request with a chosen model and channel to see where the gateway actually routes it, and how long each candidate took. Without a channel it follows the model’s routing policy.',
+    'Send one small request to see the actual route and each candidate’s latency; without a channel it follows the routing policy.',
   'playground.params.title': 'Request settings',
-  'playground.params.hint': 'One small request to see how the gateway routes it',
   'playground.field.model': 'Model',
   'playground.field.model.placeholder': 'Pick a model',
   'playground.field.channel': 'Channel',
@@ -454,6 +470,9 @@ const enUS: Record<keyof typeof zhCN, string> = {
   'playground.routing.title': 'Current routing policy for this model',
   'playground.routing.gateway': 'Managed gateway',
   'playground.account.label': 'Detect as',
+  'playground.noAccount.title': 'No account to test with yet',
+  'playground.noAccount.desc': 'A test uses the key of the selected account. Add an account under Accounts.',
+  'playground.noAccount.action': 'Go to Accounts',
   'playground.routing.strict': 'Strict: listed channels only; routing elsewhere fails',
   'playground.routing.preferred':
     'Prefer + fallback: try each candidate strictly, let the gateway choose only for the last one',
@@ -555,7 +574,7 @@ const enUS: Record<keyof typeof zhCN, string> = {
   // ---------------- Full catalog ----------------
   'catalog.title': 'Catalog',
   'catalog.desc':
-    'Every model in Cline’s public catalog; :free variants can be pinned exactly. Probe results show inline, per gateway.',
+    'Every model in Cline’s public catalog; :free variants can be pinned exactly. Probe results show inline, per account.',
   'catalog.filter.placeholder': 'Filter… e.g. free / glm / anthropic',
   'catalog.count.matched': 'Matched {matched} of {total} (showing first {limit})',
   'catalog.count.all': '{total} catalog models (showing first {limit})',

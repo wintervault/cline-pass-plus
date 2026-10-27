@@ -122,7 +122,7 @@ function TraceChain({ trace, attempts }: { trace?: TraceEntry[]; attempts: strin
 
 function Stat({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 64 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 54 }}>
       <span className="cps-stat-value" style={{ color: tone }}>
         {value}
       </span>
@@ -133,7 +133,7 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: str
 
 export default function History() {
   const { token } = theme.useToken();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const fb = useFeedback();
   const history = useHistory();
   const rows = history.data?.history ?? [];
@@ -220,7 +220,7 @@ export default function History() {
               </Tooltip>
               <Select
                 size="small"
-                style={{ width: 132 }}
+                style={{ width: 118 }}
                 value={interval}
                 onChange={setIntervalMs}
                 options={REFRESH_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) }))}
@@ -228,7 +228,7 @@ export default function History() {
               {gateways.length > 1 && (
                 <Select
                   size="small"
-                  style={{ width: 140 }}
+                  style={{ width: 122 }}
                   value={gatewayFilter}
                   onChange={setGatewayFilter}
                   options={[
@@ -251,7 +251,7 @@ export default function History() {
           }
         >
           <Table<HistoryEntry>
-            className="cps-table-center"
+            className="cps-table"
             rowKey={(r) => `${r.ts}-${r.model}-${r.attempts.join('|')}`}
             size="small"
             sticky
@@ -335,6 +335,7 @@ export default function History() {
               {
                 title: t('history.col.ms'),
                 width: 72,
+                align: 'right',
                 render: (_, r) =>
                   r.ms != null ? (
                     <Typography.Text className="cps-num">{r.ms} ms</Typography.Text>
@@ -354,16 +355,20 @@ export default function History() {
               {
                 title: t('history.col.trace'),
                 width: 140,
-                render: (_, r) =>
-                  r.error ? (
-                    <Tooltip title={r.error}>
+                render: (_, r) => {
+                  /* 失败原因来自上游/服务端，是诊断原文：英文界面里丢弃含中文的整句，
+                     宁可显示「—」，也不把中文漏进英文界面（完整原文进悬停/日志）。 */
+                  const reason = r.error ? diagnosticText(lang, r.error) : '';
+                  return reason ? (
+                    <Tooltip title={reason}>
                       <span className="cps-cell-ellipsis" style={{ color: token.colorError, fontSize: 12 }}>
-                        {r.error}
+                        {reason}
                       </span>
                     </Tooltip>
                   ) : (
                     <TraceChain trace={r.trace} attempts={r.attempts} />
-                  ),
+                  );
+                },
               },
               {
                 /* 操作列：宽度要同时容得下表头文字（英文 "Actions" ~55px）与按钮本身（24）。
@@ -372,6 +377,7 @@ export default function History() {
                    跟着滑走，也就不会被切掉一半。 */
                 title: t('history.col.actions'),
                 width: 72,
+                align: 'center',
                 fixed: 'right',
                 render: (_, r) => (
                   <Tooltip title={t('history.copy.tip')}>

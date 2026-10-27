@@ -7,6 +7,7 @@ import {
   InfoCircleOutlined,
   SearchOutlined,
   StopOutlined,
+  TeamOutlined,
 } from '@ant-design/icons';
 import { useQueryClient } from '@tanstack/react-query';
 import { Alert, Button, Card, Checkbox, Empty, Input, Skeleton, Space, Tooltip, Typography, theme } from 'antd';
@@ -22,8 +23,9 @@ import {
   type UpstreamStatusKind,
 } from '../api/types.ts';
 import { DetectionAccountPicker, useDetectionAccount } from '../detectionScope.tsx';
+import { EmptyState } from '../emptyState.tsx';
 import { diagnosticText } from '../i18n/codes.ts';
-import { type Lang, type MsgKey, useI18n, useT } from '../i18n/index.tsx';
+import { type Lang, useI18n, useT } from '../i18n/index.tsx';
 import { STATUS_TAG } from '../labels.ts';
 import { useFlipList } from '../motion.ts';
 import { PageHeader } from '../pageHeader.tsx';
@@ -37,15 +39,6 @@ export function sortedUpstreams(meta: ModelMeta | null): string[] {
   const statusOf = (u: string): UpstreamStatusKind => meta?.upstreamStatus[u]?.status ?? 'unknown';
   return [...(meta?.upstreams ?? [])].sort((a, b) => (STATUS_RANK[statusOf(a)] ?? 2) - (STATUS_RANK[statusOf(b)] ?? 2));
 }
-
-const statusTag = (kind: UpstreamStatusKind, t: (key: MsgKey) => string) => {
-  const s = STATUS_TAG[kind];
-  return (
-    <StatusChip tone={s.tone} small>
-      {t(s.labelKey)}
-    </StatusChip>
-  );
-};
 
 const fmtTime = (ts: number | null | undefined, lang: Lang): string =>
   ts
@@ -70,13 +63,12 @@ function ModelItem({
   active: boolean;
   onClick: () => void;
 }) {
-  const { token } = theme.useToken();
   const { t } = useI18n();
   const meta = row.meta;
   const cfg = row.config ?? EMPTY_PER_MODEL;
   const probed = (meta?.upstreams?.length ?? 0) > 0;
   const ignored = meta?.pinState === 'ignored';
-  const hasSecondLine = cfg.upstreams.length > 0 || cfg.exclude.length > 0 || !!meta?.lastProvider;
+  const hasSecondLine = cfg.upstreams.length > 0 || cfg.exclude.length > 0;
   return (
     <button
       type="button"
@@ -85,12 +77,13 @@ function ModelItem({
       style={{
         textAlign: 'left',
         cursor: 'pointer',
-        border: active ? '1px solid var(--cps-accent-border)' : undefined,
-        background: active ? 'var(--cps-accent-wash)' : undefined,
-        borderRadius: token.borderRadius,
-        padding: '10px 12px',
+        background: active ? 'var(--cps-wash)' : undefined,
+        border: 'none',
+        borderLeft: active ? '2px solid var(--cps-accent)' : '2px solid transparent',
+        borderRadius: 6,
+        padding: '9px 10px 9px 8px',
         display: 'grid',
-        gap: 6,
+        gap: 5,
         font: 'inherit',
         width: '100%',
         transition: 'background-color var(--cps-duration-fast) var(--cps-ease-standard)',
@@ -98,7 +91,7 @@ function ModelItem({
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
         <Tooltip title={row.id}>
-          <span className="cps-mono cps-cell-ellipsis" style={{ flex: 1, minWidth: 0 }}>
+          <span className="cps-mono cps-cell-ellipsis" style={{ flex: 1, minWidth: 0, color: 'var(--cps-text)' }}>
             {row.id.slice(prefix.length)}
           </span>
         </Tooltip>
@@ -108,17 +101,17 @@ function ModelItem({
             {t('models.tag.ignored')}
           </StatusChip>
         ) : probed ? (
-          <StatusChip tone="neutral" small dot={false}>
+          <span className="cps-meta" style={{ flex: '0 0 auto' }}>
             {t('models.tag.channels', { count: meta?.upstreams?.length ?? 0 })}
-          </StatusChip>
+          </span>
         ) : (
-          <Typography.Text type="secondary" style={{ fontSize: 12, flex: '0 0 auto' }}>
+          <span className="cps-meta" style={{ flex: '0 0 auto' }}>
             {t('models.tag.untested')}
-          </Typography.Text>
+          </span>
         )}
       </div>
       {hasSecondLine && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
           {cfg.upstreams.length > 0 && (
             <StatusChip tone="info" small dot={false}>
               {t('models.tag.using', { count: cfg.upstreams.length })}
@@ -128,15 +121,6 @@ function ModelItem({
             <StatusChip tone="warn" small dot={false}>
               {t('models.tag.excluded', { count: cfg.exclude.length })}
             </StatusChip>
-          )}
-          {meta?.lastProvider && (
-            <Typography.Text type="secondary" style={{ fontSize: 12 }} className="cps-cell-ellipsis">
-              {t('models.item.last', {
-                provider: meta.lastProvider,
-                /* 列表里不重复毫秒：它属于右侧详情的元信息，放这里只会和两个计数芯片抢宽度 */
-                suffix: '',
-              })}
-            </Typography.Text>
           )}
         </div>
       )}
@@ -221,7 +205,7 @@ function UpstreamRow({
 
   return (
     <li
-      className={`cps-chain-row${drag.isDragging ? ' cps-dragging' : ''}${drag.isDropTarget ? ' cps-drop-target' : ''}`}
+      className={`cps-route-row cps-route-grid${drag.isDragging ? ' cps-dragging' : ''}${drag.isDropTarget ? ' cps-drop-target' : ''}`}
       data-flip-key={upstream}
       data-state={excluded ? 'excluded' : selected ? 'on' : 'off'}
       onDragOver={
@@ -241,13 +225,16 @@ function UpstreamRow({
           : undefined
       }
     >
-      {/* 序号节点只属于「链上」的渠道；离线项用一个小灰点占位——
-          空心圆看起来像单选按钮，而这里根本没有可点的东西。 */}
-      {selected ? (
-        <span className="cps-chain-node">{order + 1}</span>
-      ) : (
-        <span className="cps-chain-node cps-chain-node-off" aria-hidden />
-      )}
+      <span
+        className="cps-num"
+        style={{
+          textAlign: 'center',
+          color: selected ? 'var(--cps-text)' : 'var(--cps-text-quaternary)',
+          fontWeight: selected ? 600 : 400,
+        }}
+      >
+        {selected ? order + 1 : '—'}
+      </span>
       {selected ? (
         <button
           type="button"
@@ -263,27 +250,41 @@ function UpstreamRow({
           <HolderOutlined />
         </button>
       ) : (
-        <span style={{ width: 16 }} />
+        <span />
       )}
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 8 }}>
-        <Typography.Text code style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+      <div style={{ minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        <span
+          className="cps-mono"
+          style={{ whiteSpace: 'nowrap', color: selected ? 'var(--cps-text)' : 'var(--cps-text-secondary)' }}
+        >
           {upstream}
-        </Typography.Text>
-        {detail?.name && (
-          <Typography.Text type="secondary" style={{ fontSize: 12 }} ellipsis>
+        </span>
+        {detail?.name && detail.name.toLowerCase() !== upstream.toLowerCase() && (
+          <span className="cps-meta cps-cell-ellipsis">
             {detail.name}
             {detail.endpoints !== undefined && detail.endpoints > 1 ? ` ×${detail.endpoints}` : ''}
-          </Typography.Text>
+          </span>
         )}
       </div>
-      {status ? statusTag(status, t) : null}
+      <span style={{ justifySelf: 'start' }}>
+        {status ? (
+          <StatusChip tone={STATUS_TAG[status].tone} small>
+            {t(STATUS_TAG[status].labelKey)}
+          </StatusChip>
+        ) : (
+          <span className="cps-meta">{t('labels.upstream.unknown')}</span>
+        )}
+      </span>
       <Tooltip title={t('models.upstream.use.tip')}>
-        <Checkbox checked={selected} disabled={excluded} onChange={toggleSelect}>
-          {t('models.upstream.use')}
-        </Checkbox>
+        <Checkbox
+          checked={selected}
+          disabled={excluded}
+          aria-label={t('models.upstream.use')}
+          onChange={toggleSelect}
+        />
       </Tooltip>
       {selected ? (
-        <Space size={2}>
+        <Space size={0}>
           <Button
             size="small"
             type="text"
@@ -302,7 +303,7 @@ function UpstreamRow({
           />
         </Space>
       ) : (
-        <span style={{ width: 48 }} />
+        <span />
       )}
       <Tooltip title={excluded ? t('models.upstream.unexclude.tip') : t('models.upstream.exclude.tip')}>
         <Button
@@ -442,24 +443,23 @@ export default function Models() {
         }
       />
 
-      {accounts.length === 0 && (
-        <Alert
-          type="warning"
-          showIcon
-          message={t('models.noAccount.title')}
-          description={t('models.noAccount.desc')}
-          action={
-            <Button
-              size="small"
-              onClick={() => window.dispatchEvent(new CustomEvent('cps:navigate', { detail: 'accounts' }))}
-            >
-              {t('models.noAccount.action')}
-            </Button>
-          }
-        />
-      )}
-
-      {models.isError ? (
+      {accounts.length === 0 ? (
+        <Panel title={t('models.noAccount.title')}>
+          <EmptyState
+            minHeight={220}
+            icon={<TeamOutlined />}
+            desc={t('models.noAccount.desc')}
+            action={
+              <Button
+                type="primary"
+                onClick={() => window.dispatchEvent(new CustomEvent('cps:navigate', { detail: 'accounts' }))}
+              >
+                {t('models.noAccount.action')}
+              </Button>
+            }
+          />
+        </Panel>
+      ) : models.isError ? (
         <Alert
           type="error"
           showIcon
@@ -610,7 +610,7 @@ export default function Models() {
                   </Space>
                 }
               >
-                <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, gap: 12 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, gap: 10 }}>
                   {pinIgnored && (
                     <Tooltip
                       title={
@@ -684,75 +684,89 @@ export default function Models() {
 
                   <div style={{ flex: 1, minHeight: 0, overflow: 'auto', overscrollBehavior: 'contain' }}>
                     {ups.length ? (
-                      <ul className="cps-observe" ref={observeRef}>
-                        {ups.map((u) => {
-                          const s = meta?.upstreamStatus[u];
-                          const detail = meta?.upstreamDetail[u];
-                          const order = cfg.upstreams.indexOf(u);
-                          const excluded = cfg.exclude.includes(u);
-                          const state = excluded ? 'excluded' : order >= 0 ? 'on' : 'off';
-                          const tone = s ? STATUS_TAG[s.status].tone : 'neutral';
-                          return (
-                            <li key={u} className="cps-observe-row" data-flip-key={u} data-state={state}>
-                              <span className={`cps-dot cps-dot-${tone}`} aria-hidden />
-                              {/* 两行结构：第一行是渠道标识与状态，第二行是渠道的说明。
-                                  英文的 “Not pinnable” 比状态列宽，硬塞会把说明挤掉；
-                                  换行后两边都不再互相争宽度。 */}
-                              <div style={{ flex: 1, minWidth: 0, display: 'grid', gap: 2 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                                  <span className="cps-mono cps-cell-ellipsis" style={{ minWidth: 0 }}>
-                                    {u}
-                                  </span>
+                      <>
+                        <div className="cps-observe-head cps-observe-grid">
+                          <span className="cps-label">{t('models.col.channel')}</span>
+                          <span className="cps-label">{t('models.col.state')}</span>
+                          <span className="cps-label" style={{ textAlign: 'right' }}>
+                            {t('models.col.latency')}
+                          </span>
+                          <span className="cps-label" style={{ textAlign: 'right' }}>
+                            {t('models.col.route')}
+                          </span>
+                        </div>
+                        <ul className="cps-observe" ref={observeRef}>
+                          {ups.map((u) => {
+                            const s = meta?.upstreamStatus[u];
+                            const detail = meta?.upstreamDetail[u];
+                            const order = cfg.upstreams.indexOf(u);
+                            const excluded = cfg.exclude.includes(u);
+                            const state = excluded ? 'excluded' : order >= 0 ? 'on' : 'off';
+                            const tone = s ? STATUS_TAG[s.status].tone : 'neutral';
+                            return (
+                              <li
+                                key={u}
+                                className="cps-observe-row cps-observe-grid"
+                                data-flip-key={u}
+                                data-state={state}
+                              >
+                                <Tooltip
+                                  title={[
+                                    u,
+                                    detail?.name,
+                                    detail?.context
+                                      ? t('playground.channel.context', { k: Math.round(detail.context / 1000) })
+                                      : '',
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' · ')}
+                                >
+                                  <div className="cps-observe-channel">
+                                    <span className={`cps-dot cps-dot-${tone}`} aria-hidden />
+                                    <span className="cps-mono cps-cell-ellipsis" style={{ minWidth: 0 }}>
+                                      {u}
+                                    </span>
+                                    {detail?.name && detail.name.toLowerCase() !== u.toLowerCase() && (
+                                      <span className="cps-meta cps-cell-ellipsis" style={{ flex: '0 1 auto' }}>
+                                        {detail.name}
+                                        {detail.endpoints !== undefined && detail.endpoints > 1
+                                          ? ` ×${detail.endpoints}`
+                                          : ''}
+                                      </span>
+                                    )}
+                                  </div>
+                                </Tooltip>
+                                <span>
                                   {s ? (
                                     <Tooltip title={diagnosticText(lang, s.note) || undefined}>
-                                      <span style={{ flex: '0 0 auto' }}>
-                                        <StatusChip tone={STATUS_TAG[s.status].tone} small>
+                                      <span>
+                                        <StatusChip tone={tone} small dot={false}>
                                           {t(STATUS_TAG[s.status].labelKey)}
                                         </StatusChip>
                                       </span>
                                     </Tooltip>
                                   ) : (
-                                    <span style={{ flex: '0 0 auto' }}>
-                                      <StatusChip tone="neutral" small>
-                                        {t('labels.upstream.unknown')}
-                                      </StatusChip>
-                                    </span>
+                                    <span className="cps-meta">{t('labels.upstream.unknown')}</span>
                                   )}
-                                </div>
-                                {(detail?.name || detail?.context) && (
-                                  <span className="cps-meta cps-cell-ellipsis">
-                                    {detail?.name}
-                                    {detail?.endpoints !== undefined && detail.endpoints > 1
-                                      ? ` ×${detail.endpoints}`
-                                      : ''}
-                                    {detail?.context
-                                      ? ` · ${t('playground.channel.context', { k: Math.round(detail.context / 1000) })}`
-                                      : ''}
-                                  </span>
-                                )}
-                              </div>
-                              <span
-                                className="cps-num"
-                                style={{
-                                  width: 58,
-                                  textAlign: 'right',
-                                  flex: '0 0 auto',
-                                  color: 'var(--cps-text-tertiary)',
-                                }}
-                              >
-                                {s?.ms != null ? `${s.ms} ms` : '—'}
-                              </span>
-                              <span className="cps-meta" style={{ width: 64, textAlign: 'right', flex: '0 0 auto' }}>
-                                {state === 'on'
-                                  ? t('models.observe.inRoute')
-                                  : state === 'excluded'
-                                    ? t('models.observe.excluded')
-                                    : t('models.observe.notUsed')}
-                              </span>
-                            </li>
-                          );
-                        })}
-                      </ul>
+                                </span>
+                                <span
+                                  className="cps-num"
+                                  style={{ textAlign: 'right', color: 'var(--cps-text-tertiary)' }}
+                                >
+                                  {s?.ms != null ? `${s.ms} ms` : '—'}
+                                </span>
+                                <span className="cps-meta" style={{ textAlign: 'right' }}>
+                                  {state === 'on'
+                                    ? t('models.observe.inRoute')
+                                    : state === 'excluded'
+                                      ? t('models.observe.excluded')
+                                      : t('models.observe.notUsed')}
+                                </span>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </>
                     ) : (
                       <Empty
                         image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -820,48 +834,65 @@ export default function Models() {
                   </Space>
                 </div>
 
-                <div style={{ maxHeight: 160, overflow: 'auto', overscrollBehavior: 'contain' }}>
+                <div style={{ maxHeight: 170, overflow: 'auto', overscrollBehavior: 'contain' }}>
                   {chainRows.length ? (
-                    <ul className="cps-chain" ref={chainRef}>
-                      {chainRows.map((u) => {
-                        const rowOrder = cfg.upstreams.indexOf(u);
-                        return (
-                          <UpstreamRow
-                            key={u}
-                            upstream={u}
-                            cfg={cfg}
-                            meta={meta}
-                            onSave={(patch, note) => saveConfig(current.id, patch, note)}
-                            drag={{
-                              isDragging: dragFrom !== null && dragFrom === rowOrder,
-                              isDropTarget: dragTo !== null && dragTo === rowOrder && dragFrom !== rowOrder,
-                              onDragStartRow: (o) => setDragFrom(o),
-                              onDragOverRow: (o) => setDragTo((cur) => (cur === o ? cur : o)),
-                              onDropRow: (o) => {
-                                if (dragFrom !== null && dragFrom !== o) {
-                                  const list = [...cfg.upstreams];
-                                  const [item] = list.splice(dragFrom, 1);
-                                  if (item) {
-                                    list.splice(o, 0, item);
-                                    saveConfig(
-                                      current.id,
-                                      { upstreams: list },
-                                      t('models.note.dragged', { name: item, index: o + 1 }),
-                                    );
+                    <>
+                      <div className="cps-route-head cps-route-grid">
+                        <span className="cps-label" style={{ textAlign: 'center' }}>
+                          #
+                        </span>
+                        <span />
+                        <span className="cps-label">{t('models.col.channel')}</span>
+                        <span className="cps-label">{t('models.col.state')}</span>
+                        <span className="cps-label" style={{ textAlign: 'center' }}>
+                          {t('models.col.use')}
+                        </span>
+                        <span className="cps-label" style={{ textAlign: 'center' }}>
+                          {t('models.col.move')}
+                        </span>
+                        <span />
+                      </div>
+                      <ul className="cps-route" ref={chainRef}>
+                        {chainRows.map((u) => {
+                          const rowOrder = cfg.upstreams.indexOf(u);
+                          return (
+                            <UpstreamRow
+                              key={u}
+                              upstream={u}
+                              cfg={cfg}
+                              meta={meta}
+                              onSave={(patch, note) => saveConfig(current.id, patch, note)}
+                              drag={{
+                                isDragging: dragFrom !== null && dragFrom === rowOrder,
+                                isDropTarget: dragTo !== null && dragTo === rowOrder && dragFrom !== rowOrder,
+                                onDragStartRow: (o) => setDragFrom(o),
+                                onDragOverRow: (o) => setDragTo((cur) => (cur === o ? cur : o)),
+                                onDropRow: (o) => {
+                                  if (dragFrom !== null && dragFrom !== o) {
+                                    const list = [...cfg.upstreams];
+                                    const [item] = list.splice(dragFrom, 1);
+                                    if (item) {
+                                      list.splice(o, 0, item);
+                                      saveConfig(
+                                        current.id,
+                                        { upstreams: list },
+                                        t('models.note.dragged', { name: item, index: o + 1 }),
+                                      );
+                                    }
                                   }
-                                }
-                                setDragFrom(null);
-                                setDragTo(null);
-                              },
-                              onDragEndRow: () => {
-                                setDragFrom(null);
-                                setDragTo(null);
-                              },
-                            }}
-                          />
-                        );
-                      })}
-                    </ul>
+                                  setDragFrom(null);
+                                  setDragTo(null);
+                                },
+                                onDragEndRow: () => {
+                                  setDragFrom(null);
+                                  setDragTo(null);
+                                },
+                              }}
+                            />
+                          );
+                        })}
+                      </ul>
+                    </>
                   ) : (
                     <div className="cps-notice">
                       <span>{pinIgnored ? t('models.chain.emptyIgnored') : t('models.chain.empty')}</span>

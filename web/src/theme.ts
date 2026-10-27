@@ -40,86 +40,93 @@ export const FONT_MONO =
  */
 export const PALETTE = {
   dark: {
-    canvas: '#0a0c10',
-    rail: '#0e1117',
-    surface: '#141821',
-    raised: '#1a1f2a',
-    overlay: '#202633',
+    canvas: '#0b0d11',
+    rail: '#0f1217',
+    surface: '#161a21',
+    raised: '#1c212a',
+    overlay: '#222833',
     /* 输入框是「凹槽」：比面板与弹层都暗，边界靠描边而不是靠更亮 */
-    well: '#0f1319',
-    border: '#242b37',
-    borderStrong: '#313a49',
-    text: '#e8ecf4',
-    textSecondary: '#a9b3c4',
-    textTertiary: '#7f899c',
-    textQuaternary: '#5f6a7d',
-    primary: '#5b93ff',
-    success: '#45c08a',
+    well: '#101419',
+    border: '#252b36',
+    borderStrong: '#343c4a',
+    text: '#eef1f7',
+    textSecondary: '#aab4c4',
+    textTertiary: '#7d8798',
+    textQuaternary: '#5d6778',
+    primary: '#3b6fdf',
+    accent: '#7aa9ff',
+    success: '#4cc38a',
     warning: '#e3a95c',
     error: '#f0756c',
     info: '#5b93ff',
-    mask: 'rgba(0, 0, 0, 0.58)',
+    mask: 'rgba(0, 0, 0, 0.6)',
     /** 面板顶部那道 1px 内高光 */
-    highlight: 'rgba(255, 255, 255, 0.045)',
+    highlight: 'rgba(255, 255, 255, 0.05)',
     /** 画布上的一层极淡冷光，只落在留白处 */
-    glow: 'rgba(91, 147, 255, 0.06)',
+    glow: 'rgba(91, 147, 255, 0.065)',
     /** 选中用的薄晕染 */
-    wash: 'rgba(91, 147, 255, 0.10)',
-    washStrong: 'rgba(91, 147, 255, 0.16)',
-    washBorder: 'rgba(91, 147, 255, 0.32)',
+    wash: 'rgba(91, 147, 255, 0.085)',
+    washStrong: 'rgba(91, 147, 255, 0.13)',
+    washBorder: 'rgba(91, 147, 255, 0.28)',
     rowHover: 'rgba(255, 255, 255, 0.035)',
-    headTint: 'rgba(255, 255, 255, 0.025)',
+    headTint: 'rgba(255, 255, 255, 0.022)',
     shadow: 'none',
   },
   light: {
-    canvas: '#edeff3',
-    rail: '#f8f9fb',
+    canvas: '#eceef2',
+    rail: '#f7f8fa',
     surface: '#ffffff',
     raised: '#ffffff',
     overlay: '#ffffff',
     /* 亮色下「凹槽」是一层极淡的灰，白面板上的输入框才读得出可编辑 */
-    well: '#f6f7f9',
-    border: '#e5e8ee',
-    borderStrong: '#d3d9e3',
-    text: '#151a23',
-    textSecondary: '#5b6473',
-    textTertiary: '#67707f',
-    textQuaternary: '#8b94a3',
-    primary: '#3d7bfd',
+    well: '#f4f6f9',
+    border: '#e3e7ee',
+    borderStrong: '#cfd6e0',
+    text: '#161b24',
+    textSecondary: '#59616f',
+    textTertiary: '#6b7483',
+    textQuaternary: '#99a2b0',
+    primary: '#2f6fe0',
+    accent: '#2f6fe0',
     success: '#0f7a50',
     warning: '#96610f',
     error: '#c1362f',
-    info: '#3d7bfd',
+    info: '#2f6fe0',
     mask: 'rgba(15, 23, 42, 0.34)',
     highlight: 'rgba(255, 255, 255, 0.9)',
-    glow: 'rgba(61, 123, 253, 0.05)',
-    wash: 'rgba(61, 123, 253, 0.075)',
-    washStrong: 'rgba(61, 123, 253, 0.12)',
-    washBorder: 'rgba(61, 123, 253, 0.26)',
-    rowHover: 'rgba(15, 23, 42, 0.032)',
-    headTint: 'rgba(15, 23, 42, 0.022)',
+    glow: 'rgba(59, 120, 246, 0.045)',
+    wash: 'rgba(59, 120, 246, 0.065)',
+    washStrong: 'rgba(59, 120, 246, 0.11)',
+    washBorder: 'rgba(59, 120, 246, 0.24)',
+    rowHover: 'rgba(15, 23, 42, 0.03)',
+    headTint: 'rgba(15, 23, 42, 0.018)',
     shadow: '0 1px 2px rgba(16, 24, 40, 0.05), 0 1px 3px rgba(16, 24, 40, 0.03)',
   },
 } as const;
 
 /**
- * 由表面色推导出的语义色阶（状态芯片、行高亮用）。
- * 用 color-mix 而不是手工 rgba：色值只在这里出现一次，改主色时不会漏。
+ * 状态色的三种用途（2.2.1）：
+ * - `fg`：状态文字（只在需要强调时用；日常状态文字仍是次级色）
+ * - `dot`：状态点
+ * - `bg` / `bd`：只给提示条（`.cps-notice`）用，不再做「彩色药丸」
+ *
+ * 为什么去掉彩色底盘：满屏小药丸会让界面像组件样例，而不是一台仪器。
+ * 状态的第一层信息是「有没有异常」，一个点就够了；文字负责说清是什么。
  */
 export const STATUS_TONE_CSS = {
   dark: {
-    ok: { fg: '#6fe0aa', bg: 'rgba(69, 192, 138, 0.13)', bd: 'rgba(69, 192, 138, 0.26)' },
-    warn: { fg: '#f0c07a', bg: 'rgba(227, 169, 92, 0.13)', bd: 'rgba(227, 169, 92, 0.26)' },
-    danger: { fg: '#ff9088', bg: 'rgba(240, 117, 108, 0.13)', bd: 'rgba(240, 117, 108, 0.26)' },
-    info: { fg: '#8fb6ff', bg: 'rgba(91, 147, 255, 0.13)', bd: 'rgba(91, 147, 255, 0.26)' },
-    neutral: { fg: '#a9b3c4', bg: 'rgba(255, 255, 255, 0.06)', bd: 'rgba(255, 255, 255, 0.10)' },
+    ok: { fg: '#7fd6a8', dot: '#4cc38a', bg: 'rgba(76, 195, 138, 0.10)', bd: 'rgba(76, 195, 138, 0.24)' },
+    warn: { fg: '#f0c07a', dot: '#e3a95c', bg: 'rgba(227, 169, 92, 0.11)', bd: 'rgba(227, 169, 92, 0.26)' },
+    danger: { fg: '#ff938b', dot: '#f0756c', bg: 'rgba(240, 117, 108, 0.11)', bd: 'rgba(240, 117, 108, 0.28)' },
+    info: { fg: '#9dbcff', dot: '#5b93ff', bg: 'rgba(91, 147, 255, 0.10)', bd: 'rgba(91, 147, 255, 0.26)' },
+    neutral: { fg: '#aab4c4', dot: '#7d8798', bg: 'rgba(255, 255, 255, 0.05)', bd: 'rgba(255, 255, 255, 0.10)' },
   },
   light: {
-    ok: { fg: '#0b6b45', bg: 'rgba(15, 122, 80, 0.08)', bd: 'rgba(15, 122, 80, 0.20)' },
-    warn: { fg: '#7d500a', bg: 'rgba(150, 97, 15, 0.08)', bd: 'rgba(150, 97, 15, 0.22)' },
-    danger: { fg: '#a52a24', bg: 'rgba(193, 54, 47, 0.07)', bd: 'rgba(193, 54, 47, 0.22)' },
-    info: { fg: '#2158c9', bg: 'rgba(61, 123, 253, 0.08)', bd: 'rgba(61, 123, 253, 0.22)' },
-    neutral: { fg: '#4d5665', bg: 'rgba(15, 23, 42, 0.05)', bd: 'rgba(15, 23, 42, 0.10)' },
+    ok: { fg: '#0b6b45', dot: '#0f7a50', bg: 'rgba(15, 122, 80, 0.06)', bd: 'rgba(15, 122, 80, 0.20)' },
+    warn: { fg: '#7d500a', dot: '#96610f', bg: 'rgba(150, 97, 15, 0.06)', bd: 'rgba(150, 97, 15, 0.22)' },
+    danger: { fg: '#a52a24', dot: '#c1362f', bg: 'rgba(193, 54, 47, 0.05)', bd: 'rgba(193, 54, 47, 0.22)' },
+    info: { fg: '#2158c9', dot: '#3b78f6', bg: 'rgba(59, 120, 246, 0.06)', bd: 'rgba(59, 120, 246, 0.22)' },
+    neutral: { fg: '#59616f', dot: '#8f98a6', bg: 'rgba(15, 23, 42, 0.04)', bd: 'rgba(15, 23, 42, 0.10)' },
   },
 } as const;
 
@@ -128,15 +135,25 @@ export const STATUS_TONE_CSS = {
  *
  * 首帧之前调用一次，切换主题时再调用一次——两处共用这一个入口，
  * 避免「CSS 变量只在启动时写」导致切主题后面板/芯片不跟着变。
+ *
+ * **命名只有一种**：驼峰键转 kebab（`textSecondary` → `--cps-text-secondary`）。
+ * 之前直接 `toLowerCase()`，写出的是 `--cps-textsecondary`，而 CSS 里写的是
+ * `--cps-text-secondary`——变量没定义时浏览器**不报错**，只是静默退回继承色，
+ * 于是「第四级文字」全站都没生效过（2.2.1 发现）。名字在两端必须逐字一致。
  */
+export function cssVarName(key: string): string {
+  return key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
+}
+
 export function applyThemeVars(mode: ThemeMode): void {
   const root = document.documentElement;
   root.dataset.theme = mode;
   for (const [name, value] of Object.entries(PALETTE[mode])) {
-    root.style.setProperty(`--cps-${name.toLowerCase()}`, value);
+    root.style.setProperty(`--cps-${cssVarName(name)}`, value);
   }
   for (const [tone, colors] of Object.entries(STATUS_TONE_CSS[mode])) {
     root.style.setProperty(`--cps-${tone}-fg`, colors.fg);
+    root.style.setProperty(`--cps-${tone}-dot`, colors.dot);
     root.style.setProperty(`--cps-${tone}-bg`, colors.bg);
     root.style.setProperty(`--cps-${tone}-bd`, colors.bd);
   }
@@ -144,10 +161,10 @@ export function applyThemeVars(mode: ThemeMode): void {
 
 const sharedToken = {
   colorPrimary: PALETTE.dark.primary,
-  colorInfo: PALETTE.dark.info,
+  colorInfo: PALETTE.dark.accent,
   borderRadius: 6,
-  borderRadiusLG: 10,
-  fontSizeHeading3: 20,
+  borderRadiusLG: 8,
+  fontSizeHeading3: 22,
   fontFamily: FONT_SANS,
   fontFamilyCode: FONT_MONO,
   wireframe: false,
@@ -170,11 +187,11 @@ const sharedToken = {
 const darkToken = {
   ...sharedToken,
   colorPrimary: PALETTE.dark.primary,
-  colorInfo: PALETTE.dark.info,
+  colorInfo: PALETTE.dark.accent,
   colorSuccess: PALETTE.dark.success,
   colorWarning: PALETTE.dark.warning,
   colorError: PALETTE.dark.error,
-  colorLink: PALETTE.dark.primary,
+  colorLink: PALETTE.dark.accent,
   colorBgLayout: PALETTE.dark.canvas,
   colorBgContainer: PALETTE.dark.surface,
   colorBgElevated: PALETTE.dark.overlay,
@@ -194,11 +211,11 @@ const darkToken = {
 const lightToken = {
   ...sharedToken,
   colorPrimary: PALETTE.light.primary,
-  colorInfo: PALETTE.light.info,
+  colorInfo: PALETTE.light.accent,
   colorSuccess: PALETTE.light.success,
   colorWarning: PALETTE.light.warning,
   colorError: PALETTE.light.error,
-  colorLink: PALETTE.light.primary,
+  colorLink: PALETTE.light.accent,
   colorBgLayout: PALETTE.light.canvas,
   colorBgContainer: PALETTE.light.surface,
   colorBgElevated: PALETTE.light.overlay,
@@ -230,7 +247,7 @@ function components(palette: (typeof PALETTE)['dark' | 'light']) {
     DatePicker: { colorBgContainer: palette.well, activeShadow: '0 0 0 3px rgba(91, 147, 255, 0.14)' },
     Table: {
       headerSplitColor: 'transparent',
-      headerBg: palette.headTint,
+      headerBg: 'transparent',
       headerColor: palette.textTertiary,
       borderColor: palette.border,
       rowHoverBg: palette.rowHover,

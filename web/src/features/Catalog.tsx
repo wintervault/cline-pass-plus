@@ -158,7 +158,7 @@ export default function Catalog() {
           <Skeleton active paragraph={{ rows: 8 }} />
         ) : (
           <Table
-            className="cps-table-center"
+            className="cps-table"
             rowKey="id"
             size="small"
             sticky
@@ -201,6 +201,7 @@ export default function Catalog() {
               {
                 title: t('catalog.col.actions'),
                 width: 76,
+                align: 'center',
                 render: (_, r) => (
                   <Button
                     size="small"

@@ -12,7 +12,7 @@ import {
   TeamOutlined,
 } from '@ant-design/icons';
 import { useQueryClient } from '@tanstack/react-query';
-import { Alert, App as AntdApp, Button, ConfigProvider, Layout, Tooltip, theme } from 'antd';
+import { App as AntdApp, Button, ConfigProvider, Layout, Tooltip, theme } from 'antd';
 import enUS from 'antd/es/locale/en_US';
 import zhCN from 'antd/es/locale/zh_CN';
 import { type ComponentType, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -85,12 +85,12 @@ function SideNav({
   const btnBase = { height: 40, width: '100%', gap: 10, paddingInline: collapsed ? 0 : 10 } as const;
   const gutter = collapsed ? '0 10px' : '0 12px';
   /**
-   * 选中底色：全站只有一块，在导航项之间**滑过去**（180ms），
-   * 而不是每一项各画一条、切换时瞬间闪现。位置由 active 项的实际几何决定，
-   * 折叠/展开、彩蛋页出现导致的重排都能自动跟上。
+   * 选中标记：一根 2px 的主色竖条在导航项之间**滑过去**（180ms），
+   * 选中项本身只有一层极淡的表面。2.2.0 的整块圆角 pill 太像「组件样例」，
+   * 而且和内容区的选中浓度互相打架；一根竖条足够说明位置，也不需要底色。
    */
   const listRef = useRef<HTMLDivElement>(null);
-  const [pill, setPill] = useState<{ top: number; height: number } | null>(null);
+  const [marker, setMarker] = useState<{ top: number; height: number } | null>(null);
   const [indicatorReady, setIndicatorReady] = useState(false);
   // biome-ignore lint/correctness/useExhaustiveDependencies: collapsed 与 pages.length 改变导航几何，必须重新测量
   useLayoutEffect(() => {
@@ -98,12 +98,13 @@ function SideNav({
     if (!list) return;
     const item = list.querySelector<HTMLElement>(`[data-nav-key="${nav}"]`);
     if (!item) {
-      setPill(null);
+      setMarker(null);
       return;
     }
     const listBox = list.getBoundingClientRect();
     const box = item.getBoundingClientRect();
-    setPill({ top: box.top - listBox.top, height: box.height });
+    const barHeight = 18;
+    setMarker({ top: box.top - listBox.top + (box.height - barHeight) / 2, height: barHeight });
   }, [nav, collapsed, pages.length]);
   // 首帧直接落位，不做一次「从顶部滑下来」的假动画
   useEffect(() => {
@@ -142,15 +143,14 @@ function SideNav({
         </Tooltip>
       </div>
       <div ref={listRef} style={{ position: 'relative', display: 'grid', gap: 4, padding: gutter, marginTop: 8 }}>
-        {pill && (
+        {marker && (
           <span
             aria-hidden
-            className="cps-nav-pill"
+            className="cps-nav-marker"
             style={{
-              left: collapsed ? 10 : 12,
-              right: collapsed ? 10 : 12,
-              height: pill.height,
-              transform: `translateY(${pill.top}px)`,
+              left: collapsed ? 11 : 13,
+              height: marker.height,
+              transform: `translateY(${marker.top}px)`,
               transition: indicatorReady ? undefined : 'none',
             }}
           />
@@ -179,14 +179,22 @@ function SideNav({
                     ...btnBase,
                     justifyContent: collapsed ? 'center' : 'flex-start',
                     fontSize: 17,
-                    color: active ? token.colorPrimary : token.colorTextSecondary,
-                    /* 选中底色由滑动的 pill 承担（见 .cps-nav-pill），按钮本身透明 */
-                    background: active ? 'transparent' : undefined,
+                    color: active ? token.colorText : token.colorTextSecondary,
+                    /* 选中项只有一层薄表面；位置由滑动的竖条承担 */
+                    background: active ? 'var(--cps-wash)' : undefined,
                   }}
                   icon={<Comp />}
                 >
                   {!collapsed && (
-                    <span className="cps-nav-label" style={{ fontSize: 13.5, paddingRight: 18, whiteSpace: 'nowrap' }}>
+                    <span
+                      className="cps-nav-label"
+                      style={{
+                        fontSize: 13.5,
+                        fontWeight: active ? 600 : 400,
+                        paddingRight: 18,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
                       {t(p.labelKey)}
                     </span>
                   )}
@@ -447,20 +455,6 @@ function Console({ mode, onToggleTheme }: { mode: ThemeMode; onToggleTheme: () =
                   ) : (
                     <>
                       <ServiceBanner control={host} />
-                      {meta.data && meta.data.accounts.usable === 0 && (
-                        <Alert
-                          type="error"
-                          showIcon
-                          style={{ marginBottom: 16 }}
-                          message={t('app.notConfigured.title')}
-                          description={t('app.notConfigured.desc')}
-                          action={
-                            <Button size="small" danger onClick={() => setNav('accounts')}>
-                              {t('app.notConfigured.action')}
-                            </Button>
-                          }
-                        />
-                      )}
                       {pages.map((p) => (
                         /* 页面包装层可拉伸、不可压缩：需要「填满内容列」的页面（订阅模型）
                        把这一层当高度来源；内容更高的页面保持自然高度、由内容区滚动。

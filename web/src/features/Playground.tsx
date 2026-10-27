@@ -4,20 +4,9 @@ import {
   InfoCircleOutlined,
   PlayCircleOutlined,
   SettingOutlined,
+  TeamOutlined,
 } from '@ant-design/icons';
-import {
-  Alert,
-  Badge,
-  Button,
-  Descriptions,
-  InputNumber,
-  Select,
-  Space,
-  Switch,
-  Table,
-  Tooltip,
-  Typography,
-} from 'antd';
+import { Alert, Button, Descriptions, InputNumber, Select, Space, Switch, Table, Tooltip, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 
 import { useModels, useSaveModelConfig, useTest } from '../api/hooks.ts';
@@ -29,12 +18,13 @@ import {
   type TraceEntry,
 } from '../api/types.ts';
 import { DetectionAccountPicker, useDetectionAccount } from '../detectionScope.tsx';
+import { EmptyState } from '../emptyState.tsx';
 import { useFeedback } from '../feedback.ts';
 import { codeText, diagnosticText } from '../i18n/codes.ts';
 import { useI18n } from '../i18n/index.tsx';
 import { STATUS_TAG } from '../labels.ts';
 import { PageHeader } from '../pageHeader.tsx';
-import { Panel, PanelHint } from '../panel.tsx';
+import { Panel } from '../panel.tsx';
 import { RoutingGatewayPicker, useRoutingGateway } from '../routingGateway.tsx';
 import { StatusChip } from '../statusChip.tsx';
 import { RoutingFields } from './routingFields.tsx';
@@ -124,6 +114,7 @@ function RoutingPanel({ model, cfg, meta }: { model: string; cfg: PerModelConfig
         </div>
       ) : (
         <Table
+          className="cps-table"
           size="small"
           rowKey="key"
           pagination={false}
@@ -145,20 +136,23 @@ function RoutingPanel({ model, cfg, meta }: { model: string; cfg: PerModelConfig
             {
               title: t('playground.col.channel'),
               dataIndex: 'name',
-              align: 'center',
+              /* 渠道是一个标识符，不是一枚标签：等宽字 + 复制，与订阅模型的路由表同一种写法 */
               render: (v: string, r) => (
-                <Space size={6}>
+                <Space size={8}>
                   <Typography.Text
-                    code
                     copyable={{ text: v, tooltips: [t('playground.copyChannel'), t('common.copied')] }}
-                    style={r.enabled ? undefined : { opacity: 0.5 }}
+                    className="cps-mono"
+                    style={{
+                      whiteSpace: 'nowrap',
+                      color: r.enabled ? 'var(--cps-text)' : 'var(--cps-text-quaternary)',
+                    }}
                   >
                     {v}
                   </Typography.Text>
                   {r.detail?.context ? (
-                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    <span className="cps-meta" style={{ whiteSpace: 'nowrap' }}>
                       {t('playground.channel.context', { k: Math.round(r.detail.context / 1000) })}
-                    </Typography.Text>
+                    </span>
                   ) : null}
                 </Space>
               ),
@@ -166,7 +160,6 @@ function RoutingPanel({ model, cfg, meta }: { model: string; cfg: PerModelConfig
             {
               title: t('playground.col.health'),
               width: 130,
-              align: 'center',
               render: (_, r) => {
                 const s = r.status;
                 if (!s) return <Typography.Text type="secondary">{t('labels.upstream.unknown')}</Typography.Text>;
@@ -185,7 +178,7 @@ function RoutingPanel({ model, cfg, meta }: { model: string; cfg: PerModelConfig
             {
               title: t('playground.col.lastMs'),
               width: 104,
-              align: 'center',
+              align: 'right',
               /* 来自「校验渠道」的实测往返（那是小请求，只用于渠道之间的相对比较）。
                  以前这里恒为「—」——列头写着耗时却没有数据，等于没有这一列。 */
               render: (_, r) =>
@@ -231,7 +224,7 @@ function RoutingPanel({ model, cfg, meta }: { model: string; cfg: PerModelConfig
 }
 
 function TraceTable({ trace, targets }: { trace?: TraceEntry[]; targets: string[] }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const list = trace ?? [];
   if (!list.length) {
     return (
@@ -244,7 +237,7 @@ function TraceTable({ trace, targets }: { trace?: TraceEntry[]; targets: string[
   }
   return (
     <Table<TraceEntry>
-      className="cps-table-center cps-trace-in"
+      className="cps-table cps-trace-in"
       size="small"
       rowKey={(r, i) => `${r.upstream ?? 'auto'}-${i}`}
       pagination={false}
@@ -253,6 +246,7 @@ function TraceTable({ trace, targets }: { trace?: TraceEntry[]; targets: string[
         {
           title: t('playground.col.order'),
           width: 64,
+          align: 'center',
           render: (_, __, i) => (
             <Typography.Text type="secondary" className="cps-num">
               {i + 1}
@@ -273,27 +267,34 @@ function TraceTable({ trace, targets }: { trace?: TraceEntry[]; targets: string[
         },
         {
           title: t('playground.col.result'),
-          width: 120,
+          width: 130,
           render: (_, r) => (
-            <Badge status={r.status === 200 ? 'success' : 'error'} text={t('playground.http', { status: r.status })} />
+            /* 结果是一枚内联状态，和全站其它状态同一种写法（点 + 文字，不做徽标胶囊） */
+            <StatusChip tone={r.status === 200 ? 'ok' : 'danger'} small>
+              {t('playground.http', { status: r.status })}
+            </StatusChip>
           ),
         },
         {
           title: t('playground.col.lastMs'),
           width: 100,
+          align: 'right',
           render: (_, r) => <Typography.Text className="cps-num">{r.ms} ms</Typography.Text>,
         },
         {
           title: t('playground.col.note'),
           dataIndex: 'note',
-          render: (v: string) =>
-            v ? (
+          /* 备注是上游诊断原文：英文界面里丢弃含中文的部分，不把中文漏出去 */
+          render: (v: string) => {
+            const text = diagnosticText(lang, v);
+            return text ? (
               <span className="cps-cell-ellipsis" style={{ fontSize: 12 }}>
-                {v}
+                {text}
               </span>
             ) : (
               <Typography.Text type="secondary">—</Typography.Text>
-            ),
+            );
+          },
         },
       ]}
     />
@@ -303,7 +304,7 @@ function TraceTable({ trace, targets }: { trace?: TraceEntry[]; targets: string[
 export default function Playground() {
   const { gatewayId } = useRoutingGateway();
   const { t } = useI18n();
-  const { account: activeAccount } = useDetectionAccount();
+  const { account: activeAccount, accounts } = useDetectionAccount();
   const models = useModels({ gatewayId, account: activeAccount });
   const test = useTest(gatewayId, activeAccount);
   const fb = useFeedback();
@@ -367,200 +368,221 @@ export default function Playground() {
         actions={<DetectionAccountPicker label={t('playground.account.label')} />}
       />
 
-      <Panel title={t('playground.params.title')} extra={<PanelHint>{t('playground.params.hint')}</PanelHint>}>
-        <Space wrap size={16} align="center">
-          <Space size={6} align="center">
-            <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-              {t('playground.field.model')}
-            </Typography.Text>
-            <Select
-              showSearch
-              /* 250 / 180 / 96 是按**英文界面**量的：这一行的控件在 890 宽的内容列里
+      {accounts.length === 0 ? (
+        <Panel title={t('playground.noAccount.title')}>
+          <EmptyState
+            minHeight={260}
+            icon={<TeamOutlined />}
+            desc={t('playground.noAccount.desc')}
+            action={
+              <Button
+                type="primary"
+                onClick={() => window.dispatchEvent(new CustomEvent('cps:navigate', { detail: 'accounts' }))}
+              >
+                {t('playground.noAccount.action')}
+              </Button>
+            }
+          />
+        </Panel>
+      ) : (
+        <>
+          {/* 页头已经说过「发一次最小请求」；这里不再重复一句自述，面板头只留标题 */}
+          <Panel title={t('playground.params.title')}>
+            <Space wrap size={16} align="center">
+              <Space size={6} align="center">
+                <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+                  {t('playground.field.model')}
+                </Typography.Text>
+                <Select
+                  showSearch
+                  /* 250 / 180 / 96 是按**英文界面**量的：这一行的控件在 890 宽的内容列里
                  必须排成一行（折行 = 凭空长高 48px）。英文标签比中文长，
                  改宽度或文案前先把窗口缩到 1170 复测。 */
-              style={{ width: 250, fontFamily: 'var(--cps-font-mono)' }}
-              placeholder={t('playground.field.model.placeholder')}
-              value={active || undefined}
-              onChange={(v) => {
-                setModel(v);
-                setUpstream('');
-                setResult(null);
-              }}
-              options={rows.map((r) => ({ value: r.id, label: r.id }))}
-            />
-          </Space>
-          <Space size={6} align="center">
-            <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-              {t('playground.field.channel')}
-            </Typography.Text>
-            <Select style={{ width: 190 }} value={upstream} onChange={setUpstream} options={upstreamOptions} />
-          </Space>
-          <Space size={6} align="center">
-            <Tooltip title={t('playground.field.maxTokens.tip')}>
-              <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-                {t('playground.field.maxTokens')}
-              </Typography.Text>
-            </Tooltip>
-            <InputNumber
-              min={16}
-              max={4096}
-              step={64}
-              value={maxTokens}
-              onChange={(v) => setMaxTokens(v ?? 256)}
-              style={{ width: 96 }}
-            />
-          </Space>
-          <Button
-            type="primary"
-            icon={<PlayCircleOutlined />}
-            loading={test.isPending}
-            disabled={!activeAccount}
-            onClick={run}
-            style={{ marginLeft: 'auto' }}
-          >
-            {t('playground.send')}
-          </Button>
-        </Space>
-      </Panel>
-
-      {active && <RoutingPanel model={active} cfg={cfg} meta={activeRow?.meta ?? null} />}
-
-      {/* 结果区：始终在位（空态也属于这块区域），避免「点完才长出一块」的跳动。
-          它吃满剩余高度——结果区是这一页的终点，空着也应该是一块完整的区域。 */}
-      <Panel
-        style={{ flex: '1 1 auto', minHeight: 140 }}
-        bodyStyle={!result ? { display: 'flex', alignItems: 'center', justifyContent: 'center' } : undefined}
-        title={
-          result ? (
-            <Space size={8}>
-              {result.ok ? (
-                <StatusChip tone="ok" small>
-                  {t('playground.result.success')}
-                </StatusChip>
-              ) : (
-                <StatusChip tone="danger" small>
-                  {t('playground.result.failed')}
-                </StatusChip>
-              )}
-              <Typography.Text code style={{ fontSize: 13 }}>
-                {active}
-              </Typography.Text>
-              {result.ok && (
-                <StatusChip tone={hit ? 'ok' : 'warn'} small dot={false}>
-                  {hit ? t('playground.result.hit') : t('playground.result.miss')}
-                </StatusChip>
-              )}
-              {result.degraded && (
-                <Tooltip title={t('playground.result.degraded.tip')}>
-                  <span>
-                    <StatusChip tone="warn" small>
-                      {t('playground.result.degraded')}
-                    </StatusChip>
-                  </span>
-                </Tooltip>
-              )}
-            </Space>
-          ) : (
-            <span>{t('playground.result.title')}</span>
-          )
-        }
-        extra={
-          result ? (
-            <Tooltip title={t('playground.result.copy.tip')}>
-              <Button
-                size="small"
-                type="text"
-                icon={<CopyOutlined />}
-                aria-label={t('playground.result.copy')}
-                onClick={() =>
-                  void navigator.clipboard.writeText(JSON.stringify(result, null, 2)).then(
-                    () => fb.copy(t('playground.result.title')),
-                    () => fb.fail(t('common.copyFailed'), t('common.clipboardUnavailable')),
-                  )
-                }
-              />
-            </Tooltip>
-          ) : undefined
-        }
-      >
-        {!result ? (
-          /* 空态是一块安静的「目的地」：一个图标、一句标题、一句怎么做。
-             不占满、不插图，也不在点完之后才长出这一块。 */
-          <div style={{ display: 'grid', justifyItems: 'center', gap: 6, textAlign: 'center', padding: '28px 0' }}>
-            <InfoCircleOutlined style={{ fontSize: 20, color: 'var(--cps-text-quaternary)', marginBottom: 2 }} />
-            <span className="cps-body" style={{ color: 'var(--cps-text-secondary)', fontWeight: 500 }}>
-              {t('playground.result.emptyTitle')}
-            </span>
-            <span className="cps-meta" style={{ maxWidth: 460 }}>
-              {t('playground.result.empty')}
-            </span>
-          </div>
-        ) : !result.ok ? (
-          <Alert
-            type="error"
-            showIcon
-            message={t('playground.result.error', {
-              error: codeText(t, result.code) || result.error || t('playground.result.unknownError'),
-            })}
-          />
-        ) : (
-          <div style={{ display: 'grid', gap: 16 }}>
-            <Descriptions
-              size="small"
-              column={3}
-              items={[
-                {
-                  key: 'actual',
-                  label: t('playground.desc.actual'),
-                  children: result.actual ?? result.actualName ?? '—',
-                },
-                {
-                  key: 'ms',
-                  label: t('playground.desc.ms'),
-                  children: result.ms != null ? t('common.ms', { value: result.ms }) : '—',
-                },
-                { key: 'account', label: t('playground.desc.account'), children: result.account ?? '—' },
-                {
-                  key: 'targets',
-                  label: t('playground.desc.targets'),
-                  children: result.targets.length ? result.targets.join(' → ') : t('playground.desc.targets.auto'),
-                },
-                {
-                  key: 'pipeline',
-                  label: t('playground.desc.pipeline'),
-                  children: result.pipeline ? `/${result.pipeline}` : t('playground.desc.pipeline.unknown'),
-                },
-                {
-                  key: 'pin',
-                  label: t('playground.desc.pinnable'),
-                  children:
-                    result.pinnable == null
-                      ? t('playground.desc.unknown')
-                      : result.pinnable
-                        ? t('playground.desc.yes')
-                        : t('playground.desc.no'),
-                },
-              ]}
-            />
-            {result.content && (
-              <div>
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  {t('playground.content')}
+                  style={{ width: 250, fontFamily: 'var(--cps-font-mono)' }}
+                  placeholder={t('playground.field.model.placeholder')}
+                  value={active || undefined}
+                  onChange={(v) => {
+                    setModel(v);
+                    setUpstream('');
+                    setResult(null);
+                  }}
+                  options={rows.map((r) => ({ value: r.id, label: r.id }))}
+                />
+              </Space>
+              <Space size={6} align="center">
+                <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+                  {t('playground.field.channel')}
                 </Typography.Text>
-                <pre className="cps-pre">{result.content}</pre>
+                <Select style={{ width: 190 }} value={upstream} onChange={setUpstream} options={upstreamOptions} />
+              </Space>
+              <Space size={6} align="center">
+                <Tooltip title={t('playground.field.maxTokens.tip')}>
+                  <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+                    {t('playground.field.maxTokens')}
+                  </Typography.Text>
+                </Tooltip>
+                <InputNumber
+                  min={16}
+                  max={4096}
+                  step={64}
+                  value={maxTokens}
+                  onChange={(v) => setMaxTokens(v ?? 256)}
+                  style={{ width: 96 }}
+                />
+              </Space>
+              <Button
+                type="primary"
+                icon={<PlayCircleOutlined />}
+                loading={test.isPending}
+                disabled={!activeAccount}
+                onClick={run}
+                style={{ marginLeft: 'auto' }}
+              >
+                {t('playground.send')}
+              </Button>
+            </Space>
+          </Panel>
+
+          {active && <RoutingPanel model={active} cfg={cfg} meta={activeRow?.meta ?? null} />}
+
+          {/* 结果区：始终在位（空态也属于这块区域），避免「点完才长出一块」的跳动。
+          它吃满剩余高度——结果区是这一页的终点，空着也应该是一块完整的区域。 */}
+          <Panel
+            style={{ flex: '1 1 auto', minHeight: 140 }}
+            bodyStyle={!result ? { display: 'flex', alignItems: 'center', justifyContent: 'center' } : undefined}
+            title={
+              result ? (
+                <Space size={8}>
+                  {result.ok ? (
+                    <StatusChip tone="ok" small>
+                      {t('playground.result.success')}
+                    </StatusChip>
+                  ) : (
+                    <StatusChip tone="danger" small>
+                      {t('playground.result.failed')}
+                    </StatusChip>
+                  )}
+                  <span className="cps-mono" style={{ color: 'var(--cps-text)' }}>
+                    {active}
+                  </span>
+                  {result.ok && (
+                    <StatusChip tone={hit ? 'ok' : 'warn'} small dot={false}>
+                      {hit ? t('playground.result.hit') : t('playground.result.miss')}
+                    </StatusChip>
+                  )}
+                  {result.degraded && (
+                    <Tooltip title={t('playground.result.degraded.tip')}>
+                      <span>
+                        <StatusChip tone="warn" small>
+                          {t('playground.result.degraded')}
+                        </StatusChip>
+                      </span>
+                    </Tooltip>
+                  )}
+                </Space>
+              ) : (
+                <span>{t('playground.result.title')}</span>
+              )
+            }
+            extra={
+              result ? (
+                <Tooltip title={t('playground.result.copy.tip')}>
+                  <Button
+                    size="small"
+                    type="text"
+                    icon={<CopyOutlined />}
+                    aria-label={t('playground.result.copy')}
+                    onClick={() =>
+                      void navigator.clipboard.writeText(JSON.stringify(result, null, 2)).then(
+                        () => fb.copy(t('playground.result.title')),
+                        () => fb.fail(t('common.copyFailed'), t('common.clipboardUnavailable')),
+                      )
+                    }
+                  />
+                </Tooltip>
+              ) : undefined
+            }
+          >
+            {!result ? (
+              /* 空态是一块安静的「目的地」：一个图标、一句标题、一句怎么做。
+             不占满、不插图，也不在点完之后才长出这一块。 */
+              <div style={{ display: 'grid', justifyItems: 'center', gap: 6, textAlign: 'center', padding: '28px 0' }}>
+                <InfoCircleOutlined style={{ fontSize: 20, color: 'var(--cps-text-quaternary)', marginBottom: 2 }} />
+                <span className="cps-body" style={{ color: 'var(--cps-text-secondary)', fontWeight: 500 }}>
+                  {t('playground.result.emptyTitle')}
+                </span>
+                <span className="cps-meta" style={{ maxWidth: 520, textWrap: 'pretty' }}>
+                  {t('playground.result.empty')}
+                </span>
+              </div>
+            ) : !result.ok ? (
+              <Alert
+                type="error"
+                showIcon
+                message={t('playground.result.error', {
+                  error: codeText(t, result.code) || result.error || t('playground.result.unknownError'),
+                })}
+              />
+            ) : (
+              <div style={{ display: 'grid', gap: 16 }}>
+                <Descriptions
+                  size="small"
+                  column={3}
+                  items={[
+                    {
+                      key: 'actual',
+                      label: t('playground.desc.actual'),
+                      children: result.actual ?? result.actualName ?? '—',
+                    },
+                    {
+                      key: 'ms',
+                      label: t('playground.desc.ms'),
+                      children: result.ms != null ? t('common.ms', { value: result.ms }) : '—',
+                    },
+                    { key: 'account', label: t('playground.desc.account'), children: result.account ?? '—' },
+                    {
+                      key: 'targets',
+                      label: t('playground.desc.targets'),
+                      children: result.targets.length ? result.targets.join(' → ') : t('playground.desc.targets.auto'),
+                    },
+                    {
+                      key: 'pipeline',
+                      label: t('playground.desc.pipeline'),
+                      children: result.pipeline ? `/${result.pipeline}` : t('playground.desc.pipeline.unknown'),
+                    },
+                    {
+                      key: 'pin',
+                      label: t('playground.desc.pinnable'),
+                      children:
+                        result.pinnable == null
+                          ? t('playground.desc.unknown')
+                          : result.pinnable
+                            ? t('playground.desc.yes')
+                            : t('playground.desc.no'),
+                    },
+                  ]}
+                />
+                {result.content && (
+                  <div>
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      {t('playground.content')}
+                    </Typography.Text>
+                    <pre className="cps-pre">{result.content}</pre>
+                  </div>
+                )}
+                <div>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    {t('playground.trace')}
+                  </Typography.Text>
+                  <div style={{ marginTop: 6 }}>
+                    <TraceTable key={runSeq} trace={result.trace} targets={result.targets} />
+                  </div>
+                </div>
               </div>
             )}
-            <div>
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                {t('playground.trace')}
-              </Typography.Text>
-              <div style={{ marginTop: 6 }}>
-                <TraceTable key={runSeq} trace={result.trace} targets={result.targets} />
-              </div>
-            </div>
-          </div>
-        )}
-      </Panel>
+          </Panel>
+        </>
+      )}
     </div>
   );
 }

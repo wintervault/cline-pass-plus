@@ -1,17 +1,5 @@
 import { InfoCircleOutlined, SaveOutlined } from '@ant-design/icons';
-import {
-  Alert,
-  Button,
-  Descriptions,
-  Input,
-  InputNumber,
-  Popconfirm,
-  Space,
-  Switch,
-  Tooltip,
-  Typography,
-  theme,
-} from 'antd';
+import { Alert, Button, Input, InputNumber, Popconfirm, Space, Switch, Tooltip, Typography, theme } from 'antd';
 import { useEffect, useState } from 'react';
 
 import { setAuthKey } from '../api/client.ts';
@@ -291,39 +279,34 @@ function DataPanel() {
     <Panel title={t('settings.data.title')}>
       <div style={{ display: 'grid', gap: 14 }}>
         {info ? (
-          <Descriptions
-            size="small"
-            column={1}
-            items={[
-              {
-                key: 'data',
-                label: t('settings.data.dir'),
-                children: (
-                  <Typography.Text
-                    copyable={{ tooltips: [t('common.copy'), t('common.copied')] }}
-                    className="cps-mono"
-                    ellipsis={{ tooltip: info.dataDir }}
-                    style={{ minWidth: 0, maxWidth: '100%' }}
-                  >
-                    {info.dataDir}
-                  </Typography.Text>
-                ),
-              },
-              {
-                key: 'logs',
-                label: t('settings.data.logs'),
-                children: (
-                  <Typography.Text
-                    className="cps-mono"
-                    ellipsis={{ tooltip: info.logDir }}
-                    style={{ minWidth: 0, maxWidth: '100%' }}
-                  >
-                    {info.logDir}
-                  </Typography.Text>
-                ),
-              },
-            ]}
-          />
+          /* 与「关于」并排：两边用同一个 64px 标签列 + 12px 等宽值，
+             并排的两个区块才会读起来像一套，而不是两种表单 */
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '64px minmax(0, 1fr)',
+              gap: '8px 12px',
+              alignItems: 'baseline',
+            }}
+          >
+            <span className="cps-meta">{t('settings.data.dir')}</span>
+            <Typography.Text
+              copyable={{ tooltips: [t('common.copy'), t('common.copied')] }}
+              className="cps-mono"
+              ellipsis={{ tooltip: info.dataDir }}
+              style={{ display: 'block', minWidth: 0, maxWidth: '100%' }}
+            >
+              {info.dataDir}
+            </Typography.Text>
+            <span className="cps-meta">{t('settings.data.logs')}</span>
+            <Typography.Text
+              className="cps-mono"
+              ellipsis={{ tooltip: info.logDir }}
+              style={{ display: 'block', minWidth: 0, maxWidth: '100%' }}
+            >
+              {info.logDir}
+            </Typography.Text>
+          </div>
         ) : (
           <Typography.Text type="secondary">{t('settings.data.desktopOnly')}</Typography.Text>
         )}
@@ -356,39 +339,35 @@ function AboutPanel() {
   const host = getHostBridge();
   return (
     <Panel title={t('settings.about.title')}>
-      {/* 关于只是三行事实，不值得占一块表单的高度：压成一行，按「标签 + 值」排列。 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap', rowGap: 8 }}>
-        <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8 }}>
-          <span className="cps-meta">{t('settings.about.version')}</span>
-          <span className="cps-mono" style={{ color: 'var(--cps-text)' }}>
-            v{meta.data?.version ?? '…'}
-          </span>
+      {/* 关于是三行事实，用「标签 + 值」的小栅格，而不是一句用圆点串起来的长句 */}
+      <div
+        style={{ display: 'grid', gridTemplateColumns: '64px minmax(0, 1fr)', gap: '8px 12px', alignItems: 'baseline' }}
+      >
+        <span className="cps-meta">{t('settings.about.version')}</span>
+        <span className="cps-mono" style={{ color: 'var(--cps-text)' }}>
+          v{meta.data?.version ?? '…'}
         </span>
-        <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8 }}>
-          <span className="cps-meta">{t('settings.about.repo')}</span>
-          <Typography.Link
-            href={REPO_URL}
-            target="_blank"
-            rel="noreferrer"
-            style={{ fontSize: 12 }}
-            onClick={(e) => {
-              /*
-               * 控制台在桌面壳里是外部 WebView，target=_blank 不会被处理
-               * （点击看起来毫无反应）。壳把「用系统浏览器打开仓库」暴露成
-               * 控制通道动作；浏览器直开时仍走普通链接。
-               */
-              if (!host?.openRepo) return;
-              e.preventDefault();
-              void host.openRepo().catch(() => {});
-            }}
-          >
-            wintervault/cline-pass-plus
-          </Typography.Link>
-        </span>
-        <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8 }}>
-          <span className="cps-meta">{t('settings.about.license')}</span>
-          <span className="cps-body">MIT</span>
-        </span>
+        <span className="cps-meta">{t('settings.about.repo')}</span>
+        <Typography.Link
+          href={REPO_URL}
+          target="_blank"
+          rel="noreferrer"
+          style={{ fontSize: 12 }}
+          onClick={(e) => {
+            /*
+             * 控制台在桌面壳里是外部 WebView，target=_blank 不会被处理
+             * （点击看起来毫无反应）。壳把「用系统浏览器打开仓库」暴露成
+             * 控制通道动作；浏览器直开时仍走普通链接。
+             */
+            if (!host?.openRepo) return;
+            e.preventDefault();
+            void host.openRepo().catch(() => {});
+          }}
+        >
+          wintervault/cline-pass-plus
+        </Typography.Link>
+        <span className="cps-meta">{t('settings.about.license')}</span>
+        <span className="cps-body">MIT</span>
       </div>
     </Panel>
   );

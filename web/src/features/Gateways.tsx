@@ -248,77 +248,86 @@ function GatewayRow({
   const state = STATE_TAG[gateway.status.state];
   const modeKey = MODE_SHORT[gateway.accountMode] ?? 'gateways.modeShort.sticky';
   return (
-    <div className="cps-list-row" data-flip-key={gateway.id}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, width: '100%' }}>
-        <div style={{ flex: 1, minWidth: 0, display: 'grid', gap: 6 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <Typography.Text strong>{gateway.name}</Typography.Text>
-            <Tooltip title={gateway.status.error ?? undefined}>
+    <div className="cps-list-row cps-gateway-row" data-flip-key={gateway.id}>
+      <div className="cps-gateway-grid" style={{ width: '100%' }}>
+        <div style={{ minWidth: 0, display: 'grid', gap: 3 }}>
+          <span
+            style={{
+              fontSize: 13.5,
+              fontWeight: 600,
+              color: 'var(--cps-text)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {gateway.name}
+          </span>
+          <span className="cps-meta" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span className="cps-mono" style={{ color: 'var(--cps-text-tertiary)' }}>
+              {gateway.id}
+            </span>
+            {' · '}
+            {t('gateways.accountCount', { count: gateway.accountCount })}
+            {' · '}
+            {t('gateways.modelCount', { count: gateway.modelCount })}
+          </span>
+        </div>
+
+        <div style={{ display: 'grid', gap: 2, justifyItems: 'start' }}>
+          <Tooltip title={gateway.status.error ?? undefined}>
+            <span>
+              <StatusChip tone={state.tone} small>
+                {t(state.labelKey)}
+              </StatusChip>
+            </span>
+          </Tooltip>
+          {gateway.accountState.code === 'empty_scope' && gateway.status.state !== 'disabled' && (
+            <Tooltip
+              title={t('gateways.accountState.empty_scope.tip', {
+                inScope: gateway.accountState.inScope,
+                total: gateway.accountState.usableTotal,
+              })}
+            >
               <span>
-                <StatusChip tone={state.tone} small>
-                  {t(state.labelKey)}
-                  {gateway.status.state === 'running' && gateway.status.boundPort
-                    ? ` :${gateway.status.boundPort}`
-                    : ''}
+                <StatusChip tone="warn" small>
+                  {t('gateways.accountState.empty_scope')}
                 </StatusChip>
               </span>
             </Tooltip>
-            {gateway.accountState.code === 'empty_scope' && gateway.status.state !== 'disabled' && (
-              <Tooltip
-                title={t('gateways.accountState.empty_scope.tip', {
-                  inScope: gateway.accountState.inScope,
-                  total: gateway.accountState.usableTotal,
-                })}
-              >
-                <span>
-                  <StatusChip tone="warn" small>
-                    {t('gateways.accountState.empty_scope')}
-                  </StatusChip>
-                </span>
-              </Tooltip>
-            )}
-            {gateway.accountState.code === 'no_accounts' && gateway.status.state !== 'disabled' && (
-              <Tooltip title={t('gateways.accountState.no_accounts.tip')}>
-                <span>
-                  <StatusChip tone="warn" small>
-                    {t('gateways.accountState.no_accounts')}
-                  </StatusChip>
-                </span>
-              </Tooltip>
-            )}
-            {gateway.status.state === 'error' && (
-              <Typography.Text type="danger" style={{ fontSize: 12 }} ellipsis={{ tooltip: gateway.status.error }}>
-                {gateway.status.error}
-              </Typography.Text>
-            )}
-          </div>
-          <Space size={16} wrap>
-            <StatusChip tone="neutral" small dot={false}>
-              {t(`gateways.scope.${gateway.accountScope}` as MsgKey)}
-            </StatusChip>
-            <StatusChip tone="neutral" small dot={false}>
-              {t(modeKey)}
-            </StatusChip>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {gateway.id}
-            </Typography.Text>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {t('gateways.accountCount', { count: gateway.accountCount })}
-            </Typography.Text>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {t('gateways.modelCount', { count: gateway.modelCount })}
-            </Typography.Text>
-            <Typography.Text
-              copyable={{ text: gateway.proxyBase, tooltips: [t('gateways.copy.address'), t('common.copied')] }}
-            >
-              <span className="cps-mono" style={{ fontSize: 12 }}>
-                {gateway.proxyBase}
+          )}
+          {gateway.accountState.code === 'no_accounts' && gateway.status.state !== 'disabled' && (
+            <Tooltip title={t('gateways.accountState.no_accounts.tip')}>
+              <span>
+                <StatusChip tone="warn" small>
+                  {t('gateways.accountState.no_accounts')}
+                </StatusChip>
               </span>
-            </Typography.Text>
-          </Space>
+            </Tooltip>
+          )}
         </div>
 
-        <Space size={6}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
+          <span className="cps-body" style={{ color: 'var(--cps-text-secondary)', whiteSpace: 'nowrap' }}>
+            {t(`gateways.scope.${gateway.accountScope}` as MsgKey)}
+          </span>
+          <span className="cps-meta" style={{ whiteSpace: 'nowrap' }}>
+            · {t(modeKey)}
+          </span>
+        </div>
+
+        <div style={{ minWidth: 0 }}>
+          <Typography.Text
+            ellipsis={{ tooltip: gateway.proxyBase }}
+            copyable={{ text: gateway.proxyBase, tooltips: [t('gateways.copy.address'), t('common.copied')] }}
+            className="cps-data"
+            style={{ minWidth: 0, maxWidth: '100%' }}
+          >
+            {gateway.proxyBase}
+          </Typography.Text>
+        </div>
+
+        <Space size={4} style={{ justifySelf: 'end' }}>
           <Tooltip title={gateway.enabled === false ? t('gateways.action.enable') : t('gateways.action.disable')}>
             <Switch
               size="small"
@@ -516,6 +525,15 @@ export default function Gateways() {
           </div>
         ) : (
           <div ref={listRef} className="cps-fade-in">
+            <div className="cps-list-head cps-gateway-grid">
+              <span className="cps-label">{t('gateways.col.gateway')}</span>
+              <span className="cps-label">{t('gateways.col.state')}</span>
+              <span className="cps-label">{t('gateways.col.scope')}</span>
+              <span className="cps-label">{t('gateways.col.address')}</span>
+              <span className="cps-label" style={{ textAlign: 'right' }}>
+                {t('gateways.col.actions')}
+              </span>
+            </div>
             {list.map((gateway) => (
               <GatewayRow
                 key={gateway.id}

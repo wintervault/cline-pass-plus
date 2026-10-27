@@ -1,11 +1,10 @@
-import { DeleteOutlined, EditOutlined, MedicineBoxOutlined, PlusOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, MedicineBoxOutlined, PlusOutlined, TeamOutlined } from '@ant-design/icons';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   App,
   Button,
   DatePicker,
-  Empty,
   Input,
   Modal,
   Popconfirm,
@@ -20,7 +19,7 @@ import { useState } from 'react';
 
 import { qk, useAccounts, useClassifyAccounts, useModels, useSaveAccounts, useTestAccount } from '../api/hooks.ts';
 import type { AccountClassRecord, AccountsResponse, AccountView, ExpiryState } from '../api/types.ts';
-
+import { EmptyState } from '../emptyState.tsx';
 import { diagnosticText } from '../i18n/codes.ts';
 import { type Lang, useI18n } from '../i18n/index.tsx';
 import { ACCOUNT_CLASS_TAG } from '../labels.ts';
@@ -93,7 +92,7 @@ function ClassifyTag({ record }: { record: AccountClassRecord | null }) {
     </span>
   );
   return (
-    <Space size={4} wrap>
+    <div style={{ display: 'grid', gap: 2, justifyItems: 'start' }}>
       <Tooltip title={tip}>
         <span>
           <StatusChip tone={tag.tone} small>
@@ -110,7 +109,7 @@ function ClassifyTag({ record }: { record: AccountClassRecord | null }) {
           </span>
         </Tooltip>
       )}
-    </Space>
+    </div>
   );
 }
 
@@ -152,9 +151,11 @@ function ExpiryTag({ expiry, expiresAt }: { expiry: ExpiryState; expiresAt: stri
     );
   }
   return (
-    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-      {t('accounts.expiry.on', { date: expiresAt })}
-    </Typography.Text>
+    <Tooltip title={t('accounts.expiry.on', { date: expiresAt })}>
+      <span className="cps-body" style={{ color: 'var(--cps-text-secondary)' }}>
+        {expiresAt}
+      </span>
+    </Tooltip>
   );
 }
 
@@ -275,47 +276,52 @@ export default function Accounts() {
       />
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {/* 体检设置：判定模型是全局的（判定的是账号，不是网关） */}
-        <Panel title={t('accounts.settings.title')} extra={<PanelHint>{t('accounts.settings.hint')}</PanelHint>}>
-          <div className="cps-field">
-            <div className="cps-field-label">
-              <span className="cps-body" style={{ color: 'var(--cps-text-secondary)' }}>
-                {t('accounts.settings.model')}
-              </span>
+        {/* 体检设置：判定模型是全局的（判定的是账号，不是网关）。
+            没有任何账号时不显示——体检对象都还没有，这一块没有意义。 */}
+        {rows.length > 0 && (
+          <Panel title={t('accounts.settings.title')} extra={<PanelHint>{t('accounts.settings.hint')}</PanelHint>}>
+            <div className="cps-field">
+              <div className="cps-field-label">
+                <span className="cps-body" style={{ color: 'var(--cps-text-secondary)' }}>
+                  {t('accounts.settings.model')}
+                </span>
+              </div>
+              <div className="cps-field-body">
+                <Select
+                  style={{ width: 280, fontFamily: 'var(--cps-font-mono)' }}
+                  showSearch
+                  value={classifyModel || undefined}
+                  onChange={(v: string) => commit({ classifyModel: v }, t('accounts.note.modelChanged', { model: v }))}
+                  options={classifyOptions}
+                />
+                <p className="cps-meta" style={{ margin: '6px 0 0' }}>
+                  {t('accounts.settings.modelHint')}
+                </p>
+              </div>
             </div>
-            <div className="cps-field-body">
-              <Select
-                style={{ width: 280, fontFamily: 'var(--cps-font-mono)' }}
-                showSearch
-                value={classifyModel || undefined}
-                onChange={(v: string) => commit({ classifyModel: v }, t('accounts.note.modelChanged', { model: v }))}
-                options={classifyOptions}
-              />
-              <p className="cps-meta" style={{ margin: '6px 0 0' }}>
-                {t('accounts.settings.modelHint')}
-              </p>
-            </div>
-          </div>
-        </Panel>
+          </Panel>
+        )}
 
         {/* 账号名单 */}
         <Panel
           title={t('accounts.panel.title')}
           extra={
-            <Space size={12} align="center">
-              <PanelHint>{t('common.count', { count: rows.length })}</PanelHint>
-              {unclassified > 0 && <PanelHint>{t('accounts.panel.unclassified', { count: unclassified })}</PanelHint>}
-              {noExpiry > 0 && <PanelHint>{t('accounts.panel.noExpiry', { count: noExpiry })}</PanelHint>}
-              <Button
-                size="small"
-                icon={<MedicineBoxOutlined />}
-                loading={classify.isPending}
-                disabled={rows.length === 0}
-                onClick={() => classify.mutate({})}
-              >
-                {t('accounts.panel.classifyAll')}
-              </Button>
-            </Space>
+            rows.length > 0 ? (
+              <Space size={12} align="center">
+                <PanelHint>{t('common.count', { count: rows.length })}</PanelHint>
+                {unclassified > 0 && <PanelHint>{t('accounts.panel.unclassified', { count: unclassified })}</PanelHint>}
+                {noExpiry > 0 && <PanelHint>{t('accounts.panel.noExpiry', { count: noExpiry })}</PanelHint>}
+                <Button
+                  size="small"
+                  icon={<MedicineBoxOutlined />}
+                  loading={classify.isPending}
+                  disabled={rows.length === 0}
+                  onClick={() => classify.mutate({})}
+                >
+                  {t('accounts.panel.classifyAll')}
+                </Button>
+              </Space>
+            ) : undefined
           }
           flush
         >
@@ -337,8 +343,11 @@ export default function Accounts() {
               <Skeleton active paragraph={{ rows: 4 }} />
             </div>
           ) : rows.length === 0 ? (
-            <div style={{ padding: '32px 16px' }}>
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('accounts.empty')}>
+            <EmptyState
+              minHeight={240}
+              icon={<TeamOutlined />}
+              desc={t('accounts.empty')}
+              action={
                 <Button
                   type="primary"
                   icon={<PlusOutlined />}
@@ -346,46 +355,68 @@ export default function Accounts() {
                 >
                   {t('accounts.add')}
                 </Button>
-              </Empty>
-            </div>
+              }
+            />
           ) : (
             <div ref={listRef} className="cps-fade-in">
+              <div className="cps-list-head cps-account-grid">
+                <span className="cps-label">{t('accounts.col.account')}</span>
+                <span className="cps-label">{t('accounts.col.state')}</span>
+                <span className="cps-label">{t('accounts.col.expiry')}</span>
+                <span className="cps-label" style={{ textAlign: 'right' }}>
+                  {t('accounts.col.usage')}
+                </span>
+                <span className="cps-label" style={{ textAlign: 'right' }}>
+                  {t('accounts.col.actions')}
+                </span>
+              </div>
               {rows.map((a, i) => {
                 const st = data?.stats[a.name];
                 const testingThis =
                   classify.isPending &&
                   ((classify.variables?.names?.length ?? 0) > 0 ? classify.variables?.names?.includes(a.name) : true);
                 return (
-                  <div key={`${a.name}-${a.keyMasked}`} className="cps-list-row" data-flip-key={a.name}>
-                    {/* width:100% 让名字列（flex:1）吃掉空白，操作按钮才落在右缘 */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 16, width: '100%' }}>
-                      <div style={{ flex: 1, minWidth: 0, display: 'grid', gap: 6 }}>
-                        {/* 名称行带两个徽标：扫一眼就知道「这个号能不能用 / 什么时候到期」 */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0 }}>
-                          <Typography.Text strong>{a.name || t('accounts.unnamed')}</Typography.Text>
-                          <ClassifyTag record={a.classify} />
-                          <ExpiryTag expiry={a.expiry} expiresAt={a.expiresAt} />
-                        </div>
-                        <span className="cps-data" style={{ color: 'var(--cps-text-tertiary)' }}>
+                  <div key={`${a.name}-${a.keyMasked}`} className="cps-list-row cps-account-row" data-flip-key={a.name}>
+                    <div className="cps-account-grid" style={{ width: '100%' }}>
+                      <div style={{ minWidth: 0, display: 'grid', gap: 3 }}>
+                        <span
+                          style={{
+                            fontSize: 13.5,
+                            fontWeight: 600,
+                            color: 'var(--cps-text)',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {a.name || t('accounts.unnamed')}
+                        </span>
+                        <span className="cps-data" style={{ fontSize: 11.5, color: 'var(--cps-text-tertiary)' }}>
                           {a.keyMasked}
                         </span>
                       </div>
 
-                      <div style={{ display: 'grid', gap: 4, justifyItems: 'end', minWidth: 118 }}>
-                        <Typography.Text style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
+                      <ClassifyTag record={a.classify} />
+
+                      <ExpiryTag expiry={a.expiry} expiresAt={a.expiresAt} />
+
+                      <div style={{ display: 'grid', gap: 2, justifyItems: 'end' }}>
+                        <span className="cps-num" style={{ color: 'var(--cps-text)' }}>
                           {t('common.requests', { count: st?.requests ?? 0 })}
-                        </Typography.Text>
-                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                        </span>
+                        <span className="cps-meta">
                           {st?.lastUsed ? fmtUsed(st.lastUsed, lang) : t('accounts.usage.neverUsed')}
-                        </Typography.Text>
+                        </span>
                         {st?.lastError && (
-                          <Typography.Text type="danger" style={{ fontSize: 12 }} ellipsis={{ tooltip: st.lastError }}>
-                            {t('accounts.usage.error')}
-                          </Typography.Text>
+                          <Tooltip title={st.lastError}>
+                            <span className="cps-status cps-status-danger" style={{ gap: 0, fontSize: 11.5 }}>
+                              {t('accounts.usage.error')}
+                            </span>
+                          </Tooltip>
                         )}
                       </div>
 
-                      <Space size={4}>
+                      <Space size={2} style={{ justifySelf: 'end' }}>
                         <Tooltip title={t('accounts.action.test.tip')}>
                           <Button
                             size="small"

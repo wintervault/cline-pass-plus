@@ -27,8 +27,7 @@ body {
  * 画布上的一层极淡冷光：从顶部中央往下衰减。
  * 它不改变任何布局，也不随鼠标移动——只是让近黑的底不至于像一块死板；
  * 面板与侧栏是不透明的，光只落在内容区的留白上。
- */
-body::before {
+ */ body::before {
   content: "";
   position: fixed;
   inset: 0;
@@ -56,9 +55,9 @@ samp {
   --cps-thumb-hover: rgba(127, 127, 127, 0.42);
 
   /* 排版角色（全站只用这五种，组件里不许再发明第六种字号） */
-  --cps-type-display: 20px;
-  --cps-type-title: 13.5px;
-  --cps-type-body: 13px;
+  --cps-type-display: 22px;
+  --cps-type-title: 14px;
+  --cps-type-body: 13.5px;
   --cps-type-meta: 12px;
   --cps-type-label: 11px;
 }
@@ -69,15 +68,16 @@ samp {
    列与列之间才对得齐。 */
 .cps-display {
   font-size: var(--cps-type-display);
-  line-height: 28px;
+  line-height: 30px;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
   color: var(--cps-text);
 }
 .cps-title {
   font-size: var(--cps-type-title);
   line-height: 20px;
   font-weight: 600;
+  letter-spacing: 0.005em;
   color: var(--cps-text);
 }
 .cps-body {
@@ -93,7 +93,8 @@ samp {
 .cps-label {
   font-size: var(--cps-type-label);
   line-height: 16px;
-  letter-spacing: 0.06em;
+  font-weight: 500;
+  letter-spacing: 0.05em;
   color: var(--cps-text-tertiary);
 }
 .cps-data {
@@ -145,7 +146,7 @@ samp {
   min-height: 0;
   background: var(--cps-surface);
   border: 1px solid var(--cps-border);
-  border-radius: 10px;
+  border-radius: 8px;
   /* 顶部一道 1px 内高光：像被同一盏灯照着的表面，暗色下尤其明显 */
   box-shadow:
     inset 0 1px 0 0 var(--cps-highlight),
@@ -158,10 +159,10 @@ samp {
   flex-wrap: wrap;
   gap: 8px 12px;
   flex: 0 0 auto;
-  min-height: 48px;
-  padding: 8px 16px;
+  min-height: 50px;
+  padding: 9px 18px;
   /* 极淡的顶部提亮：让标题栏像一条「工具条」，而不是正文的第一行 */
-  background: linear-gradient(180deg, var(--cps-headtint), transparent);
+  background: linear-gradient(180deg, var(--cps-head-tint), transparent);
   border-bottom: 1px solid var(--cps-border);
 }
 .cps-panel-title {
@@ -185,7 +186,7 @@ samp {
 .cps-panel-body {
   flex: 1 1 auto;
   min-height: 0;
-  padding: 16px;
+  padding: 18px;
 }
 .cps-panel-body-flush {
   padding: 0;
@@ -196,70 +197,127 @@ samp {
   overscroll-behavior: contain;
 }
 
-/* ---------- 状态芯片 ----------
-   全站的状态只有这一种画法：一枚小点 + 一行字，底色是状态色的 10% 晕染。
-   以前用 antd 的预设 Tag（#52c41a / #ff4d4f），同一个屏幕上红绿一起喊，
-   数据反而没人看。芯片的颜色只表达「状态类别」，文字永远说清是什么。 */
-.cps-chip {
+/* ---------- 空状态（唯一拼法） ----------
+   线性图标 + 一句说明 + 一个明确的下一步，居中；说明文案限宽在 460，
+   长句在宽面板里不会拉成一行难读的长条。 */
+.cps-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 40px 16px;
+  text-align: center;
+}
+.cps-empty-icon {
+  font-size: 22px;
+  line-height: 1;
+  color: var(--cps-text-quaternary);
+}
+.cps-empty-desc {
+  max-width: 460px;
+  font-size: var(--cps-type-body);
+  line-height: 20px;
+  color: var(--cps-text-secondary);
+  text-wrap: pretty;
+}
+.cps-empty-action {
+  margin-top: 4px;
+}
+
+/* ---------- 状态（内联，而非药丸） ----------
+   2.2.0 用带底色的圆角胶囊承载所有状态，一屏五六个药丸，像组件样例；
+   真正需要被看见的异常反而被平均掉了。现在状态只是行内的一段文字：
+   6px 的点表达「有没有异常」，文字表达「是什么」。警告与失败才用状态色；
+   正常与信息保持次级文字，界面自然安静下来。 */
+.cps-status {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 22px;
-  padding: 0 9px;
-  border-radius: 999px;
-  border: 1px solid var(--cps-neutral-bd);
-  background: var(--cps-neutral-bg);
-  color: var(--cps-neutral-fg);
+  gap: 7px;
   font-size: var(--cps-type-meta);
-  line-height: 1;
+  line-height: 18px;
+  color: var(--cps-text-secondary);
   white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-  transition:
-    color var(--cps-duration-base) var(--cps-ease-standard),
-    background-color var(--cps-duration-base) var(--cps-ease-standard),
-    border-color var(--cps-duration-base) var(--cps-ease-standard);
+  transition: color var(--cps-duration-base) var(--cps-ease-standard);
 }
-.cps-chip-dot {
+.cps-status-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: currentColor;
   flex: 0 0 auto;
-  opacity: 0.9;
+  background: var(--cps-neutral-dot);
 }
-.cps-chip-sm {
-  height: 20px;
-  padding: 0 8px;
+.cps-status-text {
+  white-space: nowrap;
+}
+.cps-status-sm {
   font-size: 11.5px;
+  gap: 6px;
 }
-.cps-chip-ok {
-  color: var(--cps-ok-fg);
-  background: var(--cps-ok-bg);
-  border-color: var(--cps-ok-bd);
+.cps-status-plain {
+  gap: 0;
 }
-.cps-chip-warn {
+.cps-status-ok .cps-status-dot {
+  background: var(--cps-ok-dot);
+}
+.cps-status-warn {
   color: var(--cps-warn-fg);
-  background: var(--cps-warn-bg);
-  border-color: var(--cps-warn-bd);
 }
-.cps-chip-danger {
+.cps-status-warn .cps-status-dot {
+  background: var(--cps-warn-dot);
+}
+.cps-status-danger {
   color: var(--cps-danger-fg);
-  background: var(--cps-danger-bg);
-  border-color: var(--cps-danger-bd);
 }
-.cps-chip-info {
-  color: var(--cps-info-fg);
-  background: var(--cps-info-bg);
-  border-color: var(--cps-info-bd);
+.cps-status-danger .cps-status-dot {
+  background: var(--cps-danger-dot);
 }
-.cps-chip-neutral {
-  color: var(--cps-neutral-fg);
-  background: var(--cps-neutral-bg);
-  border-color: var(--cps-neutral-bd);
+.cps-status-info .cps-status-dot {
+  background: var(--cps-info-dot);
 }
-/* 无点版本：纯计数、纯说明（如「3 个渠道」） */
-.cps-chip-plain .cps-chip-dot {
-  display: none;
+.cps-status-neutral {
+  color: var(--cps-text-tertiary);
+}
+.cps-status-neutral .cps-status-dot {
+  background: var(--cps-neutral-dot);
+}
+
+/* ---------- 名单（账号 / 网关）：带列头的行式表格 ----------
+   2.2.0 把身份、状态、到期、用量和操作揉在同一行里，行与行之间对不齐。
+   现在用固定的列栅格 + 一行列头：每一列的起点一致，扫读时眼睛不需要重新定位。 */
+.cps-list-head {
+  padding: 8px 18px;
+  border-bottom: 1px solid var(--cps-border);
+  background: var(--cps-head-tint);
+}
+.cps-account-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px 120px 118px 136px;
+  gap: 16px;
+  align-items: start;
+}
+.cps-account-row {
+  padding: 12px 18px;
+}
+@media (max-width: 1240px) {
+  .cps-account-grid {
+    grid-template-columns: minmax(0, 1fr) 88px 104px 100px 128px;
+    gap: 12px;
+  }
+}
+.cps-gateway-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) 104px 144px minmax(0, 1fr) 96px;
+  gap: 16px;
+  align-items: start;
+}
+.cps-gateway-row {
+  padding: 12px 18px;
+}
+@media (max-width: 1240px) {
+  .cps-gateway-grid {
+    grid-template-columns: minmax(0, 1.35fr) 96px 128px minmax(0, 1fr) 88px;
+    gap: 12px;
+  }
 }
 
 /* 区块内的行（账号名单、网关名单）：靠分隔线成行，而不是每行再加一层边框卡片
@@ -268,7 +326,7 @@ samp {
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 14px 16px;
+  padding: 14px 18px;
   border-bottom: 1px solid var(--cps-border);
   transition: background-color var(--cps-duration-fast) var(--cps-ease-standard);
 }
@@ -276,7 +334,7 @@ samp {
   border-bottom: none;
 }
 .cps-list-row:hover {
-  background: var(--cps-rowhover);
+  background: var(--cps-row-hover);
 }
 /* 当前生效的那一行：左侧一道主色标记 */
 .cps-list-row-active {
@@ -290,14 +348,40 @@ samp {
   top: 0;
   bottom: 0;
   width: 2px;
-  background: var(--cps-primary);
+  background: var(--cps-accent);
+}
+
+/* 数据表：默认左对齐文本、右对齐数字（列上单独声明），表头用一条底线而不是底色。 */
+.cps-table .ant-table-thead > tr > th.ant-table-cell {
+  background: transparent;
+  border-bottom: 1px solid var(--cps-border);
+  font-size: var(--cps-type-label);
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--cps-text-tertiary);
+  padding-block: 10px;
+}
+.cps-table .ant-table-thead > tr > th.ant-table-cell::before {
+  display: none;
+}
+.cps-table .ant-table-tbody > tr > td {
+  font-size: var(--cps-type-body);
+  padding-block: 10px;
+}
+.cps-table .ant-table-tbody > tr:hover > td {
+  background: var(--cps-row-hover);
+}
+.cps-table .ant-table-placeholder .ant-empty-description {
+  font-size: var(--cps-type-meta);
+  color: var(--cps-text-tertiary);
 }
 
 /* 请求历史的统计条：数字是主角（等宽、大一号），标签是小号弱色。
    一条竖线分一组，比四个「数字 + 文字」挤在一起更有仪表盘的秩序。 */
 .cps-stat-value {
-  font-size: 17px;
-  line-height: 22px;
+  font-size: 19px;
+  line-height: 25px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
@@ -315,7 +399,7 @@ samp {
 /* 两个短区块并排：宽窗口一行，窄窗口退回上下排。 */
 .cps-grid-2 {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
   gap: 16px;
   align-items: start;
 }
@@ -372,39 +456,14 @@ samp {
   line-height: 18px;
 }
 
-/* 数据表：单元格内容**水平 + 垂直居中**（用户要求）。
-   用类而不是全局改 .ant-table —— 只作用于我们标记过的数据表。
-   注意：列上如果写了 align，antd 会打内联 style，比这条规则优先；
-   标记了本类的表格就不要再给列写 align。 */
-.cps-table-center .ant-table-thead > tr > th,
-.cps-table-center .ant-table-tbody > tr > td {
-  text-align: center;
-  vertical-align: middle;
-}
-/* 表头：小号、字距略开、弱色——它是「列的名牌」，不该和正文抢 */
-.cps-table-center .ant-table-thead > tr > th {
-  font-size: var(--cps-type-label);
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--cps-text-tertiary);
-}
-.cps-table-center .ant-table-tbody > tr > td {
-  font-size: var(--cps-type-body);
-}
-/* 空表也保持安静：不要一排大字「暂无数据」占半屏 */
-.cps-table-center .ant-table-placeholder .ant-empty-description {
-  font-size: var(--cps-type-meta);
-  color: var(--cps-text-tertiary);
-}
 /* 失败行（放在基础表格规则之后：更具体的选择器必须后出现，否则不生效） */
-.cps-table-center .ant-table-tbody > tr.cps-row-error > td {
+.cps-table .ant-table-tbody > tr.cps-row-error > td {
   background: color-mix(in srgb, var(--cps-danger-fg) 6%, transparent);
 }
-.cps-table-center .ant-table-tbody > tr.cps-row-error > td:first-child {
+.cps-table .ant-table-tbody > tr.cps-row-error > td:first-child {
   box-shadow: inset 2px 0 0 var(--cps-danger-fg);
 }
-.cps-table-center .ant-table-tbody > tr.cps-row-error:hover > td {
+.cps-table .ant-table-tbody > tr.cps-row-error:hover > td {
   background: color-mix(in srgb, var(--cps-danger-fg) 10%, transparent);
 }
 
@@ -459,11 +518,11 @@ samp {
     color var(--cps-duration-fast) var(--cps-ease-standard);
 }
 .cps-wbtn:hover {
-  background: var(--cps-rowhover);
+  background: var(--cps-row-hover);
   color: var(--cps-text);
 }
 .cps-wbtn:active {
-  background: var(--cps-headtint);
+  background: var(--cps-head-tint);
 }
 .cps-wbtn-close:hover {
   background: #e81123;
@@ -532,7 +591,7 @@ samp {
 .cps-pre {
   margin: 0;
   padding: 10px 12px;
-  background: var(--cps-headtint);
+  background: var(--cps-head-tint);
   border: 1px solid var(--cps-border);
   border-radius: 6px;
   font-size: var(--cps-type-meta);
@@ -558,7 +617,7 @@ samp {
 }
 
 ::selection {
-  background: var(--cps-washborder, rgba(79, 140, 255, 0.25));
+  background: var(--cps-wash-border, rgba(79, 140, 255, 0.25));
 }
 
 /* 幽灵列表项（模型列表）：默认安静无面，悬停浮现浅底，选中态由内联样式接管 */
@@ -570,10 +629,10 @@ samp {
     border-color var(--cps-duration-fast) var(--cps-ease-standard);
 }
 .cps-ghost:hover {
-  background: var(--cps-rowhover);
+  background: var(--cps-row-hover);
 }
 .cps-ghost:focus-visible {
-  outline: 2px solid var(--cps-primary);
+  outline: 2px solid var(--cps-accent);
   outline-offset: 1px;
 }
 
@@ -582,25 +641,22 @@ samp {
   transition: background-color var(--cps-duration-fast) var(--cps-ease-standard);
 }
 .cps-row:hover {
-  background: var(--cps-rowhover);
+  background: var(--cps-row-hover);
 }
 
-/* 侧栏导航：**一块**选中底色在项与项之间滑动（位置由 App.tsx 计算）。
-   以前每一项各画一条指示线、切换时瞬间闪现；滑动让「当前在哪个区域」
-   变成一次可被眼睛跟随的动作，而不是一次闪烁。 */
-.cps-nav-pill {
+/* 侧栏选中：一根 2px 的主色竖条在项与项之间滑动（位置由 App.tsx 计算）。
+   2.2.0 的整块圆角 pill 像组件样例，也和内容区的选中浓度互相打架；
+   选中项只留一层极淡表面，位置交给这根竖条。 */
+.cps-nav-marker {
   position: absolute;
   top: 0;
-  border-radius: 8px;
-  /* 与渠道链的选中行同一层薄晕染：全站的「选中」只有一种浓度 */
-  background: var(--cps-washstrong);
-  box-shadow: inset 0 0 0 1px var(--cps-washborder);
+  width: 2px;
+  border-radius: 1px;
+  background: var(--cps-accent);
   pointer-events: none;
-  z-index: 0;
+  z-index: 2;
   transition:
     transform var(--cps-duration-base) var(--cps-ease-standard),
-    left var(--cps-duration-fast) var(--cps-ease-standard),
-    right var(--cps-duration-fast) var(--cps-ease-standard),
     height var(--cps-duration-fast) var(--cps-ease-standard);
 }
 /* 展开/收起时文字重新挂载：淡入，而不是闪一下出现 */
@@ -640,12 +696,12 @@ samp {
   opacity: 1;
 }
 .cps-pin:hover {
-  background: var(--cps-rowhover);
+  background: var(--cps-row-hover);
   color: var(--cps-text);
 }
 .cps-pin.cps-pinned {
   opacity: 1;
-  color: var(--cps-primary);
+  color: var(--cps-accent);
 }
 /* 窄栏（收起态）：已钉项在图标右上角显示小圆点 */
 .cps-nav-pinned-dot::after {
@@ -656,7 +712,7 @@ samp {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--cps-primary);
+  background: var(--cps-accent);
 }
 
 /* 模型列表：窄窗口下收窄，避免挤压右侧详情区 */
@@ -678,29 +734,49 @@ samp {
   }
 }
 
-/* ---------- 观测到的渠道（只读列表） ----------
-   它不是可编辑的链路，所以不画序号节点与连接线——那套是「路由顺序」的语言。
-   这里是一张数据清单：状态点 + 渠道 + 状态 + 耗时，列宽固定，扫读才对得齐。 */
+/* ---------- 观测到的渠道（只读表格）与路由顺序（可编辑表格） ----------
+   两处都是「渠道 × 状态 × 耗时/顺序」的二维数据，用同一套列栅格和一行列头。
+   2.2.0 把它们画成两种不同的列表（圆点 + 说明 / 链条 + 空心圆），同屏两种语言，
+   眼睛每换一处都要重新学一遍。现在它们是同一张表的不同部分。 */
+.cps-observe-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px 62px 64px;
+  gap: 12px;
+  align-items: center;
+}
+.cps-observe-head,
+.cps-route-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 5px 8px 6px;
+  background: var(--cps-surface);
+  border-bottom: 1px solid var(--cps-border);
+}
 .cps-observe {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: grid;
-  gap: 1px;
 }
 .cps-observe-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
   padding: 7px 8px;
-  border-radius: 6px;
+  border-bottom: 1px solid var(--cps-border);
   transition: background-color var(--cps-duration-fast) var(--cps-ease-standard);
 }
+.cps-observe-row:last-child {
+  border-bottom: none;
+}
 .cps-observe-row:hover {
-  background: var(--cps-rowhover);
+  background: var(--cps-row-hover);
 }
 .cps-observe-row[data-state="excluded"] {
   opacity: 0.6;
+}
+.cps-observe-channel {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
 }
 /* 状态点：颜色的唯一用法是「这一格的类别」，旁边永远有文字 */
 .cps-dot {
@@ -708,104 +784,68 @@ samp {
   height: 7px;
   border-radius: 50%;
   flex: 0 0 auto;
-  background: var(--cps-neutral-fg);
+  background: var(--cps-neutral-dot);
   opacity: 0.85;
 }
 .cps-dot-ok {
-  background: var(--cps-ok-fg);
+  background: var(--cps-ok-dot);
 }
 .cps-dot-warn {
-  background: var(--cps-warn-fg);
+  background: var(--cps-warn-dot);
 }
 .cps-dot-danger {
-  background: var(--cps-danger-fg);
+  background: var(--cps-danger-dot);
 }
 .cps-dot-info {
-  background: var(--cps-info-fg);
+  background: var(--cps-info-dot);
 }
 
-/* ---------- 路由管线（渠道尝试链） ----------
-   产品的灵魂是「请求沿有序渠道链流动、命中钉住目标」——把它画出来：
-   使用中的渠道串成一条纵向链（序号节点 + 连接线），未使用的离线在链尾。 */
-.cps-chain {
-  position: relative;
-  display: grid;
-  gap: 2px;
+/* 路由顺序表：序号 / 拖拽 / 渠道 / 状态 / 使用 / 调整 / 排除 */
+.cps-route {
   list-style: none;
   margin: 0;
   padding: 0;
 }
-.cps-chain-row {
-  position: relative;
-  display: flex;
+.cps-route-grid {
+  display: grid;
+  grid-template-columns: 26px 18px minmax(0, 1fr) 72px 44px 62px 30px;
+  gap: 8px;
   align-items: center;
-  gap: 12px;
-  margin-left: 30px;
-  padding: 8px 12px;
-  border-radius: 6px;
+}
+.cps-route-row {
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--cps-border);
   transition: background-color var(--cps-duration-fast) var(--cps-ease-standard);
 }
-.cps-chain-row:hover {
-  background: var(--cps-rowhover);
+/* 复选框的标签不允许折行：58px 的列会把「使用」挤成「使 / 用」，行高也跟着翻倍 */
+.cps-route-row .ant-checkbox-wrapper {
+  white-space: nowrap;
+  font-size: 12px;
 }
-/* 选中行用一层薄薄的主色晕染，而不是整块实色——链路是内容，不该比操作按钮更抢眼 */
-.cps-chain-row[data-state="on"] {
-  background: var(--cps-wash);
+.cps-route-row:last-child {
+  border-bottom: none;
 }
-.cps-chain-row[data-state="on"]:hover {
-  background: var(--cps-washstrong);
+.cps-route-row:hover {
+  background: var(--cps-row-hover);
 }
-/* 选中 = 加粗高亮；位置不许变（视觉焦点靠字重与颜色，不靠位移） */
-.cps-chain-row[data-state="on"] code {
-  font-weight: 600;
-  color: var(--cps-primary);
-}
-.cps-chain-row[data-state="excluded"] {
+.cps-route-row[data-state="excluded"] {
   opacity: 0.55;
 }
-/* 节点：链上 = 实心主色带序号；离线 = 空心 */
-.cps-chain-node {
-  position: absolute;
-  left: -30px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1;
-  z-index: 1;
+.cps-route-row.cps-dragging {
+  opacity: 0.4;
 }
-.cps-chain-row[data-state="on"] .cps-chain-node {
-  background: var(--cps-primary);
-  color: #fff;
+.cps-route-row.cps-drop-target {
+  box-shadow: inset 0 2px 0 0 var(--cps-accent);
 }
-.cps-chain-row[data-state="off"] .cps-chain-node,
-.cps-chain-row[data-state="excluded"] .cps-chain-node {
-  background: var(--cps-surface);
-  border: 2px solid var(--cps-borderstrong);
-}
-/* 离线渠道的代位点：小、灰、无描边——不参与链路，也不假装能被选中 */
-.cps-chain-node-off {
-  left: -23px;
-  width: 6px;
-  height: 6px;
-  background: var(--cps-borderstrong);
-  border: none;
-}
-/* 拖拽排序：手柄 / 被拖行 / 落点指示 */
+/* 拖拽手柄：只在可排序的行上出现，默认安静 */
 .cps-grip {
   cursor: grab;
   color: var(--cps-text-quaternary);
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   padding: 0;
   border: none;
   background: transparent;
@@ -817,24 +857,6 @@ samp {
 .cps-grip:active {
   cursor: grabbing;
 }
-.cps-chain-row.cps-dragging {
-  opacity: 0.4;
-}
-.cps-chain-row.cps-drop-target {
-  box-shadow: inset 0 3px 0 0 var(--cps-primary);
-}
-
-/* 连接线：相邻两个链上节点之间的实线（含行距补偿，视觉连续） */
-.cps-chain-row[data-state="on"] + .cps-chain-row[data-state="on"]::before {
-  content: "";
-  position: absolute;
-  left: -21px;
-  top: calc(-50% - 3px);
-  height: calc(100% + 6px);
-  width: 2px;
-  background: var(--cps-primary);
-  opacity: 0.45;
-}
 
 /* ---------- 交互状态与入场（2.2） ----------
    按压下沉 0.5px：不影响布局的触觉反馈，比放大/发光安静得多。 */
@@ -844,7 +866,7 @@ samp {
 .cps-wbtn:focus-visible,
 .cps-pin:focus-visible,
 .cps-grip:focus-visible {
-  outline: 2px solid var(--cps-primary);
+  outline: 2px solid var(--cps-accent);
   outline-offset: 1px;
 }
 .cps-wbtn:focus-visible {
@@ -901,7 +923,7 @@ samp {
   right: 0;
   top: 0;
   height: 2px;
-  background: linear-gradient(90deg, transparent, var(--cps-primary), transparent);
+  background: linear-gradient(90deg, transparent, var(--cps-accent), transparent);
   opacity: 0.85;
   pointer-events: none;
   animation: cps-scan 1.4s var(--cps-ease-standard) infinite;

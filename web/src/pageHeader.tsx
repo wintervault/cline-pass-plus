@@ -17,6 +17,10 @@ export function PageHeader({ title, desc, actions }: { title: ReactNode; desc?: 
         alignItems: 'flex-start',
         gap: 16,
         flexWrap: 'wrap',
+        /* 一条页头分隔线：标题区与工具区之间的「面」从这里开始。
+           只加在页头内部，不引入 margin，页面间距仍由父级 gap 统一。 */
+        paddingBottom: 14,
+        borderBottom: '1px solid var(--cps-border)',
       }}
     >
       {/* flex-basis 必须是 0：用 auto 时标题块的基准宽度是「文案的 max-content」，
@@ -27,7 +31,10 @@ export function PageHeader({ title, desc, actions }: { title: ReactNode; desc?: 
           {title}
         </h1>
         {desc && (
-          <p className="cps-body" style={{ margin: '5px 0 0', maxWidth: 720, color: 'var(--cps-text-secondary)' }}>
+          <p
+            className="cps-body"
+            style={{ margin: '5px 0 0', maxWidth: 720, color: 'var(--cps-text-secondary)', textWrap: 'pretty' }}
+          >
             {desc}
           </p>
         )}
