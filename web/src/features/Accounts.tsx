@@ -82,20 +82,31 @@ function ClassifyTag({ record }: { record: AccountClassRecord | null }) {
     ? t('accounts.class.checkedAt', { time: fmtUsed(record.checkedAt, lang) })
     : t('accounts.class.neverChecked');
   const note = diagnosticText(lang, record?.note);
+  const reason = record?.reason === 'quota' ? t('accounts.class.reason.quota') : '';
+  const explain = reason ? t('accounts.class.reason', { reason }) : note ? t('accounts.class.note', { note }) : '';
   const tip = (
     <span>
       {checked}
-      {note ? t('accounts.class.note', { note }) : ''}
+      {explain}
       <br />
       {t('accounts.class.scope')}
     </span>
   );
   return (
-    <Tooltip title={tip}>
-      <Tag color={tag.color} style={{ margin: 0 }}>
-        {t(tag.labelKey)}
-      </Tag>
-    </Tooltip>
+    <Space size={4} wrap>
+      <Tooltip title={tip}>
+        <Tag color={tag.color} style={{ margin: 0 }}>
+          {t(tag.labelKey)}
+        </Tag>
+      </Tooltip>
+      {record?.reason === 'quota' && (
+        <Tooltip title={tip}>
+          <Tag color="magenta" style={{ margin: 0 }}>
+            {t('accounts.class.reason.quota')}
+          </Tag>
+        </Tooltip>
+      )}
+    </Space>
   );
 }
 

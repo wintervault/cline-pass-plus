@@ -14,8 +14,8 @@ export type Pipeline = 'planner' | 'direct';
  */
 export type PinState = 'enforced' | 'ignored' | 'unknown';
 
-/** 渠道校验后的状态。 */
-export type UpstreamStatusKind = 'ok' | 'limited' | 'bad' | 'auth' | 'unknown';
+/** 渠道校验后的状态。`quota` = 账号额度用尽（换渠道无用），`limited` = 瞬时限流。 */
+export type UpstreamStatusKind = 'ok' | 'limited' | 'quota' | 'bad' | 'auth' | 'unknown';
 
 export interface UpstreamDetail {
   /** 渠道显示名（来自 OpenRouter endpoints）。 */

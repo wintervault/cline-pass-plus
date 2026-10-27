@@ -29,6 +29,8 @@ import type { ChainResult } from '../../proxy/chain.ts';
 import { bindingsConflict } from '../../security/bind.ts';
 import { isLoopbackHost, maskSecret } from '../../security/compare.ts';
 import { fetchJSON } from '../../upstream/client.ts';
+import { isQuotaExhausted } from '../../upstream/errors.ts';
+import { unwrap } from '../../upstream/response.ts';
 import type { RoutingInfo } from '../../upstream/routing.ts';
 import { accountModels, gatewayModels } from '../../upstream/types.ts';
 import { sendError, sendJSON } from '../respond.ts';
@@ -570,7 +572,7 @@ export function registerApiRoutes(
       sendError(c.res, 409, outcome.reason, 'invalid_request_error', outcome.code);
       return;
     }
-    const summary: Record<string, number> = { ok: 0, limited: 0, bad: 0, auth: 0, unknown: 0 };
+    const summary: Record<string, number> = { ok: 0, limited: 0, quota: 0, bad: 0, auth: 0, unknown: 0 };
     for (const r of Object.values(outcome.results)) summary[r.status] = (summary[r.status] ?? 0) + 1;
     sendJSON(c.res, 200, {
       ok: true,
@@ -654,6 +656,8 @@ export function registerApiRoutes(
       sendJSON(c.res, 200, {
         ok: false,
         error: message.slice(0, 400),
+        // 额度用尽给稳定 code，控制台按语言给出「额度已用尽」，而不是让用户读原始 JSON
+        ...(result.outcome === 'failure' && isQuotaExhausted(message) ? { code: 'upstream.quotaExhausted' } : {}),
         targets,
         exclude: cfg.exclude,
         trace,
@@ -795,7 +799,7 @@ export function registerApiRoutes(
     const started = Date.now();
     const gateway = primaryGateway(config());
     const model = gateway.knownModels[0] ?? 'cline-pass/glm-5.3-flash';
-    const { json } = await fetchJSON(
+    const { status, json } = await fetchJSON(
       `${config().upstreamBase}/chat/completions`,
       {
         method: 'POST',
@@ -805,31 +809,48 @@ export function registerApiRoutes(
       },
       120_000,
     );
-    const shaped = json as { error?: unknown } | null;
-    if (shaped && typeof shaped === 'object' && shaped.error) {
-      const message = typeof shaped.error === 'string' ? shaped.error : JSON.stringify(shaped.error);
-      const authFail = /unauthorized|re-authenticate|invalid\s*api|401/i.test(message);
-      // 密钥无效直接 Unauthorized；其他错误（如推理模型耗尽 max_tokens 的 empty response）
-      // 说明鉴权已通过，不应误报为密钥问题
-      return sendJSON(
-        c.res,
-        200,
-        authFail
-          ? {
-              ok: false,
-              ms: Date.now() - started,
-              error: `密钥无效或未授权：${message.slice(0, 160)}`,
-              notice: { code: 'account.keyInvalid', params: { message: message.slice(0, 160) } },
-            }
-          : {
-              ok: true,
-              ms: Date.now() - started,
-              model,
-              // 用户可见文案不在服务端拼：给稳定的 code + params，前端按语言映射
-              notice: { code: 'account.keyOkGatewayNotice', params: { message: message.slice(0, 120) } },
-            },
-      );
+    // 上游的错误体有两种形状（标准 {error} 与 Cline 的顶层 {code,message}），
+    // 统一用 unwrap 解；只认 {error} 会把额度错误当成「测试通过」
+    const message = json !== null && typeof json === 'object' ? unwrap(json).error : null;
+    if (message !== null) {
+      // 额度用尽、限流、密钥失效都不是「可用」：连通性测试只该在请求真正成功时通过。
+      // 唯一的例外是推理模型把 max_tokens 烧完的 empty response——鉴权已经通过。
+      const code = isQuotaExhausted(message)
+        ? 'account.quotaExhausted'
+        : /unauthorized|re-?authenticate|invalid\s*api|401/i.test(message)
+          ? 'account.keyInvalid'
+          : /empty response content/i.test(message)
+            ? null
+            : /429|rate[\s_-]?limit|too many requests|overloaded/i.test(message)
+              ? 'account.rateLimited'
+              : 'account.upstreamError';
+      if (code === null)
+        return sendJSON(c.res, 200, {
+          ok: true,
+          ms: Date.now() - started,
+          model,
+          notice: { code: 'account.keyOkGatewayNotice', params: { message: message.slice(0, 120) } },
+        });
+      return sendJSON(c.res, 200, {
+        ok: false,
+        ms: Date.now() - started,
+        model,
+        error: message.slice(0, 160),
+        notice: {
+          code,
+          ...(code === 'account.quotaExhausted' ? {} : { params: { message: message.slice(0, 160) } }),
+        },
+      });
     }
+    // 非 JSON / 空体的 4xx：没有错误文本可分类，如实报上游状态码
+    if (status >= 400)
+      return sendJSON(c.res, 200, {
+        ok: false,
+        ms: Date.now() - started,
+        model,
+        error: `HTTP ${status}`,
+        notice: { code: 'account.upstreamError', params: { message: `HTTP ${status}` } },
+      });
     sendJSON(c.res, 200, { ok: true, ms: Date.now() - started, model });
   });
 

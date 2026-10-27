@@ -3,7 +3,8 @@
 export type Pipeline = 'planner' | 'direct';
 /** 钉住参数是否被网关读取（探针判定，见 docs/pinning.md D1）。 */
 export type PinState = 'enforced' | 'ignored' | 'unknown';
-export type UpstreamStatusKind = 'ok' | 'limited' | 'bad' | 'auth' | 'unknown';
+/** 渠道校验状态。`quota` = 账号额度用尽（换渠道无用），`limited` = 瞬时限流。 */
+export type UpstreamStatusKind = 'ok' | 'limited' | 'quota' | 'bad' | 'auth' | 'unknown';
 export type PinMode = 'strict' | 'preferred';
 export type SortKey = 'cost' | 'ttft' | 'tps';
 export type AccountMode = 'sticky' | 'single' | 'roundrobin';
@@ -117,6 +118,8 @@ export interface AccountClassRecord {
   class: AccountClassKind;
   checkedAt: number | null;
   note?: string;
+  /** 能归类的原因，界面据此给出与其它检测一致的提示（原始原文仍在 note）。 */
+  reason?: 'quota';
 }
 
 export type ExpiryKind = 'none' | 'active' | 'soon' | 'expired';
@@ -274,6 +277,8 @@ export interface TestResult {
   account?: string | null;
   trace?: TraceEntry[];
   error?: string;
+  /** 已知失败原因的稳定 code（如额度用尽），界面按语言映射。 */
+  code?: string;
   degraded?: boolean;
 }
 
@@ -281,6 +286,8 @@ export interface ProbeResult extends ModelMeta {
   ok: boolean;
   ms: number;
   error?: string;
+  /** 已知失败原因的稳定 code（如额度用尽），界面按语言映射。 */
+  code?: string;
 }
 
 export interface ValidationResult {
@@ -302,4 +309,11 @@ export interface MetaInfo {
 }
 
 /** 校验状态排序权重：可用优先、不可钉最后。 */
-export const STATUS_RANK: Record<UpstreamStatusKind, number> = { ok: 0, limited: 1, unknown: 2, auth: 3, bad: 4 };
+export const STATUS_RANK: Record<UpstreamStatusKind, number> = {
+  ok: 0,
+  limited: 1,
+  quota: 2,
+  unknown: 3,
+  auth: 4,
+  bad: 5,
+};

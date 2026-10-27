@@ -184,4 +184,29 @@ describe('validateUpstreams 防假绿闸（D5）', () => {
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.results['deepseek']?.status).toBe('ok');
   });
+
+  it('额度用尽 → 该渠道记为 quota，而不是「限流」（与故障转移的结论一致）', async () => {
+    upstream.script([
+      {
+        status: 502,
+        body: {
+          code: 'INFERENCE_CAP_ERROR',
+          message: 'Error 429: You have reached your monthly Clinepass limit.',
+        },
+      },
+    ]);
+    const { probe, store } = makeService();
+    store.set('cline-pass/x', {
+      ...blankModelMeta(),
+      pipeline: 'planner',
+      pinState: 'enforced',
+      upstreams: ['deepseek'],
+    });
+    const r = await probe.validateUpstreams('cline-pass/x', ACCOUNT);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.results['deepseek']?.status).toBe('quota');
+      expect(r.results['deepseek']?.note).toContain('INFERENCE_CAP_ERROR');
+    }
+  });
 });

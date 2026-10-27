@@ -77,7 +77,7 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
     let code: string | undefined;
     let params: Record<string, string | number> | undefined;
     try {
-      const parsed = JSON.parse(raw) as { error?: unknown; message?: unknown };
+      const parsed = JSON.parse(raw) as { error?: unknown; message?: unknown; code?: unknown; params?: unknown };
       if (typeof parsed.error === 'string') detail = parsed.error;
       else if (parsed.error && typeof parsed.error === 'object') {
         const e = parsed.error as { message?: unknown; code?: unknown; params?: unknown };
@@ -85,6 +85,10 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
         if (typeof e.code === 'string') code = e.code;
         if (e.params && typeof e.params === 'object') params = e.params as Record<string, string | number>;
       } else if (typeof parsed.message === 'string') detail = parsed.message;
+      // 有些接口（探测）把结果对象整个作为错误体返回：code 在顶层
+      if (!code && typeof parsed.code === 'string') code = parsed.code;
+      if (params === undefined && parsed.params && typeof parsed.params === 'object')
+        params = parsed.params as Record<string, string | number>;
     } catch {
       /* 非 JSON 错误体，用原文 */
     }

@@ -20,4 +20,9 @@ export interface AccountClassRecord {
   checkedAt: number | null;
   /** 最近一次体检的失败原因（成功时缺省）。不覆盖已有结论，只作解释。 */
   note?: string;
+  /**
+   * 失败原因中**能归成一类**的那种，供界面给出一致提示（原始原文仍在 note）。
+   * `quota` = 额度已用尽：这次体检不可能得出结论，换渠道也无用。
+   */
+  reason?: 'quota';
 }

@@ -36,13 +36,12 @@
 
 安装包都在 [Releases](../../releases/latest) 页面，按系统选择即可。
 
-| 系统 | 推荐下载 | 也提供 | 说明 |
-|---|---|---|---|
-| **Windows 10/11 (x64)** | [安装版 `.exe`](../../releases/latest) | [便携版 `.zip`](../../releases/latest) | **已内置 Node 22**，无需另装；便携版解压即用，数据在目录下的 `data/` |
-| **Ubuntu 22.04+ / Debian 12+** | [`.deb`](../../releases/latest) | — | **已内置 Node 22**，无需另装 |
-| **Fedora 38+** | [`.rpm`](../../releases/latest) | — | **已内置 Node 22**，无需另装 |
-| macOS | 暂未支持 | — | 计划中 |
-
+| 系统                           | 推荐下载                               | 也提供                                 | 说明                                                                 |
+| ------------------------------ | -------------------------------------- | -------------------------------------- | -------------------------------------------------------------------- |
+| **Windows 10/11 (x64)**        | [安装版 `.exe`](../../releases/latest) | [便携版 `.zip`](../../releases/latest) | **已内置 Node 22**，无需另装；便携版解压即用，数据在目录下的 `data/` |
+| **Ubuntu 22.04+ / Debian 12+** | [`.deb`](../../releases/latest)        | —                                      | **已内置 Node 22**，无需另装                                         |
+| **Fedora 38+**                 | [`.rpm`](../../releases/latest)        | —                                      | **已内置 Node 22**，无需另装                                         |
+| macOS                          | 暂未支持                               | —                                      | 计划中                                                               |
 - Linux：`sudo apt install ./cline-pass-plus_*.deb` 或 `sudo dnf install ./cline-pass-plus-*.rpm`
 - 在 Releases 页面按文件名选择：Windows `..._x64-setup.exe`（安装）或 `...-portable.zip`（便携）；
   Ubuntu/Debian `..._amd64.deb`；Fedora `...x86_64.rpm`
@@ -160,7 +159,6 @@ npm run dev:isolated      # 隔离实例：http://127.0.0.1:3133
 npm run desktop:build     # Windows：NSIS + 便携版
 npm run desktop:build:linux  # Linux：deb + rpm（只能在 Linux 上构建）
 ```
-
 
 ---
 

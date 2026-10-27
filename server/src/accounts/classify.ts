@@ -1,5 +1,6 @@
 import type { Account } from '../config/schema.ts';
 import { fetchJSON } from '../upstream/client.ts';
+import { isQuotaExhausted } from '../upstream/errors.ts';
 import { errText, unwrap } from '../upstream/response.ts';
 import type { AccountClassKind, AccountClassRecord } from './types.ts';
 
@@ -92,7 +93,7 @@ export class ClassifyService {
     const deps = this.#deps();
     const prior = deps.get(account.name);
 
-    let verdict: { kind: AccountClassKind; note?: string };
+    let verdict: { kind: AccountClassKind; note?: string; reason?: 'quota' };
     try {
       const res = await fetchJSON(
         `${deps.upstreamBase}/chat/completions`,
@@ -111,18 +112,30 @@ export class ClassifyService {
         },
         CLASSIFY_TIMEOUT_MS,
       );
-      if (res.status >= 400) {
-        verdict = { kind: 'unknown', note: `上游返回 HTTP ${res.status}` };
+      // 先看响应体再看状态码：网关会把额度错误包在 HTTP 502 里（实测），
+      // 只看状态码会把手里的真实原因丢掉，只能显示「HTTP 502」。
+      const u = res.json === null ? null : unwrap(res.json);
+      const message = u?.error ?? null;
+      if (message !== null) {
+        verdict = {
+          kind: 'unknown',
+          // 状态码与错误原文都留着：状态码解释「网关怎么回的」，原文才是原因
+          note: res.status >= 400 ? `上游返回 HTTP ${res.status}：${message}` : message,
+          ...(isQuotaExhausted(message) ? { reason: 'quota' as const } : {}),
+        };
+      } else if (res.status >= 400) {
+        verdict = {
+          kind: 'unknown',
+          note: `上游返回 HTTP ${res.status}`,
+          // 402 Payment Required 就是额度/付费问题；429 既可能是瞬时限流也可能是额度，
+          // 没有错误文本时不猜（note 里已经写明状态码）
+          ...(res.status === 402 ? { reason: 'quota' as const } : {}),
+        };
       } else if (res.json === null) {
         verdict = { kind: 'unknown', note: '上游响应不是 JSON' };
       } else {
-        const u = unwrap(res.json);
-        if (u.error) {
-          verdict = { kind: 'unknown', note: u.error };
-        } else {
-          const kind = classifyFromProvider(u.routing.finalProvider);
-          verdict = kind === 'unknown' ? { kind, note: '网关没有返回路由信息（finalProvider 为空）' } : { kind };
-        }
+        const kind = classifyFromProvider(u?.routing.finalProvider);
+        verdict = kind === 'unknown' ? { kind, note: '网关没有返回路由信息（finalProvider 为空）' } : { kind };
       }
     } catch (err) {
       // 客户端离开不是「体检失败」：不写任何结论，交给批量循环收尾
@@ -134,7 +147,10 @@ export class ClassifyService {
     let fresh: boolean;
     if (verdict.kind === 'unknown') {
       const base: AccountClassRecord = prior ?? { class: 'unknown', checkedAt: null };
-      record = verdict.note ? withNote(base, verdict.note) : base;
+      record = verdict.note ? withNote(base, verdict.note) : { ...base };
+      // reason 只解释「最近一次体检」：这次不是额度问题就清掉上一次的
+      if (verdict.reason) record.reason = verdict.reason;
+      else delete record.reason;
       fresh = false;
     } else {
       record = { class: verdict.kind, checkedAt: Date.now() };

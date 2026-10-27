@@ -37,13 +37,12 @@
 
 Installers live on the [Releases](../../releases/latest) page. Pick the package for your OS.
 
-| OS | Recommended | Also available | Notes |
-|---|---|---|---|
-| **Windows 10/11 (x64)** | [Installer `.exe`](../../releases/latest) | [Portable `.zip`](../../releases/latest) | **Node 22 is bundled.** The portable build runs after extraction and keeps data in the `data/` folder under it. |
-| **Ubuntu 22.04+ / Debian 12+** | [`.deb`](../../releases/latest) | — | **Node 22 is bundled.** No separate Node.js install needed. |
-| **Fedora 38+** | [`.rpm`](../../releases/latest) | — | **Node 22 is bundled.** No separate Node.js install needed. |
-| macOS | Not yet | — | Planned. |
-
+| OS                             | Recommended                               | Also available                           | Notes                                                                                                           |
+| ------------------------------ | ----------------------------------------- | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| **Windows 10/11 (x64)**        | [Installer `.exe`](../../releases/latest) | [Portable `.zip`](../../releases/latest) | **Node 22 is bundled.** The portable build runs after extraction and keeps data in the `data/` folder under it. |
+| **Ubuntu 22.04+ / Debian 12+** | [`.deb`](../../releases/latest)           | —                                        | **Node 22 is bundled.** No separate Node.js install needed.                                                     |
+| **Fedora 38+**                 | [`.rpm`](../../releases/latest)           | —                                        | **Node 22 is bundled.** No separate Node.js install needed.                                                     |
+| macOS                          | Not yet                                   | —                                        | Planned.                                                                                                        |
 - Linux: `sudo apt install ./cline-pass-plus_*.deb` or `sudo dnf install ./cline-pass-plus-*.rpm`
 - Match the file name on the Releases page: Windows `..._x64-setup.exe` (installer) or
   `...-portable.zip` (portable); Ubuntu/Debian `..._amd64.deb`; Fedora `...x86_64.rpm`

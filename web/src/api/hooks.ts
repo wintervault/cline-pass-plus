@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef } from 'react';
 
 import { type Feedback, useFeedback } from '../feedback.ts';
-import { noticeText } from '../i18n/codes.ts';
+import { codeText, noticeText } from '../i18n/codes.ts';
 import { useI18n } from '../i18n/index.tsx';
 import { api } from './client.ts';
 import type {
@@ -119,7 +119,7 @@ export function useProbe(account: string) {
     onSuccess: (r) => {
       refresh();
       if (r.ok) fb.ok(t('toast.probe.done', { count: r.upstreams.length }));
-      else fb.fail(t('toast.probe.failed'), r.error ?? t('toast.probe.noChannels'));
+      else fb.fail(t('toast.probe.failed'), codeText(t, r.code) || r.error || t('toast.probe.noChannels'));
     },
     onError: (err) => fb.fail(t('toast.probe.failed'), err),
   });
@@ -139,6 +139,7 @@ export function useValidate(account: string) {
         t('toast.validate.done', {
           ok: s.ok ?? 0,
           limited: s.limited ?? 0,
+          quota: s.quota ?? 0,
           bad: s.bad ?? 0,
           auth: s.auth ?? 0,
         }),
@@ -164,7 +165,7 @@ export function useTest(gatewayId: string, account: string) {
             suffix: r.ms ? t('toast.test.msSuffix', { ms: r.ms }) : '',
           }),
         );
-      else fb.fail(t('toast.test.failed'), r.error ?? t('toast.test.notSuccessful'));
+      else fb.fail(t('toast.test.failed'), codeText(t, r.code) || r.error || t('toast.test.notSuccessful'));
     },
     onError: (err) => fb.fail(t('toast.test.failed'), err),
   });

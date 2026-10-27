@@ -50,6 +50,8 @@ async function harness(
 
   const config = defaultConfig();
   config.accounts = accounts;
+  // 连通性测试会请求 config.upstreamBase：指向本地假上游，测试永不触网
+  config.upstreamBase = upstreamBase;
   const configStore = new JsonStore(path.join(dir, 'config.json'), config, { debounceMs: 1 });
   const meta = defaultMeta();
   options.meta?.(meta);
@@ -331,5 +333,35 @@ describe('POST /api/accounts/classify', () => {
     const { port } = await harness([acc('off', { key: '' })]);
     const res = await request(port, '/api/accounts/classify', { method: 'POST', body: {} });
     expect(res.status).toBe(400);
+  });
+});
+
+describe('POST /api/accounts/test', () => {
+  it('额度用尽 → 不通过，并给出稳定 code（不再报「可用 + 网关提示 429」）', async () => {
+    const { port } = await harness([acc('a')], {
+      script: [
+        {
+          status: 502,
+          body: {
+            code: 'INFERENCE_CAP_ERROR',
+            message: 'Error 429: You have reached your monthly Clinepass limit.',
+          },
+        },
+      ],
+    });
+    const res = await request(port, '/api/accounts/test', { method: 'POST', body: { name: 'a' } });
+    const body = res.json<{ ok: boolean; notice?: { code: string } }>();
+    expect(body.ok).toBe(false);
+    expect(body.notice?.code).toBe('account.quotaExhausted');
+  });
+
+  it('推理模型耗尽 max_tokens 的 empty response → 仍算通过（鉴权已过）', async () => {
+    const { port } = await harness([acc('a')], {
+      script: [{ status: 500, body: { error: 'empty response content from model' } }],
+    });
+    const res = await request(port, '/api/accounts/test', { method: 'POST', body: { name: 'a' } });
+    const body = res.json<{ ok: boolean; notice?: { code: string } }>();
+    expect(body.ok).toBe(true);
+    expect(body.notice?.code).toBe('account.keyOkGatewayNotice');
   });
 });

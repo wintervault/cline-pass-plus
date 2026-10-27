@@ -115,6 +115,36 @@ describe('ClassifyService.classify', () => {
     expect(r.note).toContain('500');
   });
 
+  it('额度用尽 → 保留旧结论，并标记 reason=quota（界面据此给出「额度已用尽」）', async () => {
+    const { upstream, service, store } = await setup([
+      {
+        status: 502,
+        body: {
+          code: 'INFERENCE_CAP_ERROR',
+          message: 'Error 429: You have reached your monthly Clinepass limit.',
+        },
+      },
+    ]);
+    open = upstream;
+    store.set('a', { class: 'normal', checkedAt: 12345 });
+    const r = await service.classify(account('a'));
+    expect(r.class).toBe('normal');
+    expect(r.checkedAt).toBe(12345);
+    expect(r.fresh).toBe(false);
+    expect(r.reason).toBe('quota');
+    expect(r.note).toContain('INFERENCE_CAP_ERROR');
+  });
+
+  it('恢复后清掉上一次的额度原因', async () => {
+    const { upstream, service, store } = await setup([{ body: plannerBody('deepseek') }]);
+    open = upstream;
+    store.set('a', { class: 'normal', checkedAt: 12345, note: 'quota', reason: 'quota' });
+    const r = await service.classify(account('a'));
+    expect(r.fresh).toBe(true);
+    expect(r.reason).toBeUndefined();
+    expect(r.note).toBeUndefined();
+  });
+
   it('响应里没有路由信息 → unknown（不猜）', async () => {
     const { upstream, service } = await setup([{ body: { choices: [{ message: { content: 'ok' } }] } }]);
     open = upstream;

@@ -56,5 +56,22 @@ export function unwrap(json: unknown): Unwrapped {
     };
   }
 
+  // Cline 网关的额度/上游错误是顶层 `{"code":"INFERENCE_CAP_ERROR","message":"..."}`：
+  // 既没有 error 包装，也没有 choices。不识别就会被当成成功体交给客户端，而且
+  // 链上的分类看不到错误文本——额度耗尽的账号因此一直粘着不切（2.1.5 修）。
+  const code = d['code'];
+  if (!hasChoices && typeof code === 'string' && code !== '' && typeof d['message'] === 'string') {
+    const msg = errText(d);
+    // 额度/付费类 code 用 402（Payment Required）：即便文本以后变了，
+    // 「状态码 → 账号级」这条兜底仍然成立。
+    const status = /cap|quota|credit|limit|billing|payment/i.test(code) ? 402 : 502;
+    return {
+      status,
+      body: { error: { message: msg, type: 'upstream_error' } },
+      routing: parseRouting(d),
+      error: msg,
+    };
+  }
+
   return { status: 200, body: d, routing: parseRouting(d), error: null };
 }

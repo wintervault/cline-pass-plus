@@ -11,6 +11,7 @@ import type { MsgKey } from './i18n/index.tsx';
 export const STATUS_TAG: Record<UpstreamStatusKind, { labelKey: MsgKey; color: string }> = {
   ok: { labelKey: 'labels.upstream.ok', color: 'green' },
   limited: { labelKey: 'labels.upstream.limited', color: 'gold' },
+  quota: { labelKey: 'labels.upstream.quota', color: 'magenta' },
   bad: { labelKey: 'labels.upstream.bad', color: 'red' },
   auth: { labelKey: 'labels.upstream.auth', color: 'volcano' },
   unknown: { labelKey: 'labels.upstream.unknown', color: 'default' },

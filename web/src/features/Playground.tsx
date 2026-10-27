@@ -31,7 +31,7 @@ import {
 } from '../api/types.ts';
 import { DetectionAccountPicker, useDetectionAccount } from '../detectionScope.tsx';
 import { useFeedback } from '../feedback.ts';
-import { diagnosticText } from '../i18n/codes.ts';
+import { codeText, diagnosticText } from '../i18n/codes.ts';
 import { useI18n } from '../i18n/index.tsx';
 import { STATUS_TAG } from '../labels.ts';
 import { PageHeader } from '../pageHeader.tsx';
@@ -465,7 +465,9 @@ export default function Playground() {
           <Alert
             type="error"
             showIcon
-            message={t('playground.result.error', { error: result.error ?? t('playground.result.unknownError') })}
+            message={t('playground.result.error', {
+              error: codeText(t, result.code) || result.error || t('playground.result.unknownError'),
+            })}
           />
         ) : (
           <div style={{ display: 'grid', gap: 16 }}>

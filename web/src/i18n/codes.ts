@@ -11,6 +11,10 @@ import type { Lang, MsgKey } from './index.tsx';
 const CODE_KEYS: Record<string, MsgKey> = {
   'account.keyOkGatewayNotice': 'toast.account.notice',
   'account.keyInvalid': 'api.account.keyInvalid',
+  'account.quotaExhausted': 'api.account.quotaExhausted',
+  'account.rateLimited': 'api.account.rateLimited',
+  'account.upstreamError': 'api.account.upstreamError',
+  'upstream.quotaExhausted': 'api.upstream.quotaExhausted',
   'accounts.classify.noTargets': 'api.accounts.noTargets',
   'accounts.classify.noEnabled': 'api.accounts.noEnabled',
   'accounts.classify.busy': 'api.accounts.busy',
@@ -46,9 +50,18 @@ export function noticeText(
   notice: Notice | undefined,
 ): string {
   if (!notice) return '';
-  const key = CODE_KEYS[notice.code];
-  if (!key) return '';
-  return t(key, notice.params);
+  return codeText(t, notice.code, notice.params);
+}
+
+/** 稳定 code → 当前语言文案（没有映射返回空串）。接口返回 code、而不是拼好的文案。 */
+export function codeText(
+  t: (key: MsgKey, params?: Record<string, string | number>) => string,
+  code: string | null | undefined,
+  params?: Record<string, string | number>,
+): string {
+  if (!code) return '';
+  const key = CODE_KEYS[code];
+  return key ? t(key, params) : '';
 }
 
 /** 接口错误里已知的 code → 当前语言文案；未知 code 返回 null（调用方用原 message 兜底）。 */

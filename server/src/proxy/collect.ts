@@ -164,6 +164,18 @@ export class StreamCollector {
       this.#error = errText(chunk['error']);
       return;
     }
+    // Cline 网关把额度/上游错误作为顶层 `{"code","message"}` 的 data 帧发出来（实测）：
+    // 它不是 `error` 包装，也不会带 choices，不识别就会被当成「空流」丢掉真实原因。
+    const code = chunk['code'];
+    if (
+      !Array.isArray(chunk['choices']) &&
+      typeof code === 'string' &&
+      code !== '' &&
+      typeof chunk['message'] === 'string'
+    ) {
+      this.#error = errText(chunk);
+      return;
+    }
 
     for (const key of ['id', 'model', 'created', 'provider', 'system_fingerprint', 'service_tier'] as const) {
       const value = chunk[key];
