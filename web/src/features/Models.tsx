@@ -10,7 +10,7 @@ import {
   TeamOutlined,
 } from '@ant-design/icons';
 import { useQueryClient } from '@tanstack/react-query';
-import { Alert, Button, Card, Checkbox, Empty, Input, Skeleton, Space, Tooltip, Typography, theme } from 'antd';
+import { Alert, Button, Card, Checkbox, Input, Skeleton, Space, Tooltip, Typography, theme } from 'antd';
 import { useEffect, useState } from 'react';
 import { qk, useFetchOfficial, useModels, useProbe, useSaveModelConfig, useTest, useValidate } from '../api/hooks.ts';
 import {
@@ -768,16 +768,17 @@ export default function Models() {
                         </ul>
                       </>
                     ) : (
-                      <Empty
-                        image={Empty.PRESENTED_IMAGE_SIMPLE}
-                        description={
-                          !activeAccount
+                      /* 面板内的空：一句说明就够，不再放插画式 Empty——
+                         它在这个高度里比正片还重，而且和全站的空状态是两套语言 */
+                      <div style={{ display: 'grid', placeItems: 'center', padding: '28px 16px' }}>
+                        <span className="cps-meta" style={{ maxWidth: 380, textAlign: 'center', textWrap: 'pretty' }}>
+                          {!activeAccount
                             ? t('models.observe.noAccount')
                             : pinIgnored
                               ? t('models.chain.emptyIgnored')
-                              : t('models.observe.empty')
-                        }
-                      />
+                              : t('models.observe.empty')}
+                        </span>
+                      </div>
                     )}
                   </div>
                 </div>

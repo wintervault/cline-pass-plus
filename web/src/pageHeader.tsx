@@ -1,4 +1,3 @@
-import { Typography } from 'antd';
 import type { ReactNode } from 'react';
 
 /**
@@ -58,24 +57,6 @@ export function PageHeader({ title, desc, actions }: { title: ReactNode; desc?: 
 }
 
 /**
- * 区块标题。之前每个页面用不同的字号/间距/分隔线做「小节」，
- * 现在统一成：小标题 + 可选右侧操作，上方留白由调用方用 GAP_SECTION 控制。
+ * 页头之后的区块标题由 `Panel` 的标题栏承担（2.2.1 起不再有独立的 SectionTitle）：
+ * 一个页面里出现「页头 + 区块 + 区块内小标题」三层标题，层级反而读不清。
  */
-export function SectionTitle({ title, extra }: { title: ReactNode; extra?: ReactNode }) {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        marginBottom: 12,
-        minHeight: 28,
-      }}
-    >
-      <Typography.Text strong style={{ fontSize: 14 }}>
-        {title}
-      </Typography.Text>
-      {extra && <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>{extra}</div>}
-    </div>
-  );
-}
