@@ -1,9 +1,10 @@
-import { Select, Space, Tag, Typography } from 'antd';
+import { Select, Space, Typography } from 'antd';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useAccounts } from './api/hooks.ts';
 import type { AccountView } from './api/types.ts';
 import { useI18n } from './i18n/index.tsx';
+import { type ChipTone, StatusChip } from './statusChip.tsx';
 
 /**
  * 检测账号（订阅模型 / 测试台 / 完整目录共用）。
@@ -97,6 +98,11 @@ export function useDetectionAccount(): DetectionAccountValue {
  * 页头的账号选择器。所有检测页共用同一个控件，避免三个页面各写一套
  * 「选中值/回退/风险标签」。
  */
+const CLASS_TONE: Record<'normal' | 'private' | 'unknown', ChipTone> = {
+  normal: 'ok',
+  private: 'warn',
+  unknown: 'neutral',
+};
 export function DetectionAccountPicker({ label, showClass = false }: { label: string; showClass?: boolean }) {
   const { t } = useI18n();
   const { account, current, accounts, setAccount } = useDetectionAccount();
@@ -116,13 +122,9 @@ export function DetectionAccountPicker({ label, showClass = false }: { label: st
         onChange={setAccount}
       />
       {showClass && account ? (
-        kind === 'normal' ? (
-          <Tag color="green">{t('models.account.normal')}</Tag>
-        ) : kind === 'private' ? (
-          <Tag color="orange">{t('models.account.private')}</Tag>
-        ) : (
-          <Tag>{t('models.account.unknown')}</Tag>
-        )
+        <StatusChip tone={CLASS_TONE[kind]} small>
+          {t(`models.account.${kind}`)}
+        </StatusChip>
       ) : null}
     </Space>
   );

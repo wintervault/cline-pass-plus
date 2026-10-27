@@ -1,8 +1,13 @@
 /**
- * 「浏览器表面」的主题化：滚动条 / 文本选中 / 焦点环 / 原生列表项反馈。
- * 这些默认值不属于任何设计系统，是「被设计过而非拼装出来」的最便宜信号。
- * 颜色优先走 antd CSS 变量（antd 6 默认注入，亮暗自动跟随），
- * 带亮暗通用的半透明兜底，避免元素落在变量作用域之外时样式失效。
+ * Cline Pass+ 的表面、排版与状态体系（2.2）。
+ *
+ * 色值不在这里写死：`theme.ts` 是唯一来源，`main.tsx` 把表面色与状态色写成
+ * `--cps-*` 变量。这个文件只负责「谁用哪一层表面、谁用哪一种字级」。
+ *
+ * 三条贯穿全站的原则：
+ * 1. 区域 = 面 + 1px 描边 + 分隔线（见 panel.tsx），不靠留白猜边界；
+ * 2. 层次 = 亮度差 + 顶部 1px 高光，暗色不用投影，亮色用极淡投影；
+ * 3. 状态 = 点 + 文字（chip），不靠一整块高饱和底色喊人。
  */
 
 /* 全局 reset：浏览器默认给 body 8px 外边距，会让整个布局超出视口 16px
@@ -28,7 +33,7 @@ body::before {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  background: radial-gradient(1100px 520px at 50% -8%, var(--cps-canvas-glow), transparent 65%);
+  background: radial-gradient(1100px 520px at 50% -8%, var(--cps-glow), transparent 65%);
   z-index: 0;
 }
 #root {
@@ -46,37 +51,67 @@ samp {
 }
 
 :root {
-  /* 滚动条：一条低对比度的细线，不抢视线（苹果那种「安静存在」的做法）。
-     比原值更淡，悬停才提亮。 */
-  --cps-thumb: rgba(127, 127, 127, 0.26);
-  --cps-thumb-hover: rgba(127, 127, 127, 0.48);
+  /* 滚动条：一条低对比度的细线，不抢视线，悬停才提亮。 */
+  --cps-thumb: rgba(127, 127, 127, 0.22);
+  --cps-thumb-hover: rgba(127, 127, 127, 0.42);
 
-  /* 表面与光：暗色靠 1px 顶部内高光 + 亮度阶梯，不用投影。
-     主题切换时由 [data-theme="light"] 覆盖。 */
-  --cps-surface-highlight: rgba(255, 255, 255, 0.04);
-  --cps-canvas-glow: rgba(79, 140, 255, 0.055);
-  --cps-accent-wash: rgba(79, 140, 255, 0.11);
-  --cps-accent-wash-strong: rgba(79, 140, 255, 0.16);
-  --cps-accent-border: rgba(79, 140, 255, 0.34);
+  /* 排版角色（全站只用这五种，组件里不许再发明第六种字号） */
+  --cps-type-display: 20px;
+  --cps-type-title: 13.5px;
+  --cps-type-body: 13px;
+  --cps-type-meta: 12px;
+  --cps-type-label: 11px;
 }
 
-[data-theme="light"] {
-  --cps-surface-highlight: rgba(255, 255, 255, 0.85);
-  --cps-canvas-glow: rgba(79, 140, 255, 0.045);
-  --cps-accent-wash: rgba(79, 140, 255, 0.08);
-  --cps-accent-wash-strong: rgba(79, 140, 255, 0.13);
-  --cps-accent-border: rgba(79, 140, 255, 0.26);
+/* ---------- 排版角色 ----------
+   页标题 20/600、区块标题 13.5/600、正文 13/400、说明 12/400、数据 12 等宽。
+   小标签加字距，让它「像标签」而不是「更小的正文」；数字一律等宽字形，
+   列与列之间才对得齐。 */
+.cps-display {
+  font-size: var(--cps-type-display);
+  line-height: 28px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--cps-text);
+}
+.cps-title {
+  font-size: var(--cps-type-title);
+  line-height: 20px;
+  font-weight: 600;
+  color: var(--cps-text);
+}
+.cps-body {
+  font-size: var(--cps-type-body);
+  line-height: 20px;
+  color: var(--cps-text);
+}
+.cps-meta {
+  font-size: var(--cps-type-meta);
+  line-height: 18px;
+  color: var(--cps-text-tertiary);
+}
+.cps-label {
+  font-size: var(--cps-type-label);
+  line-height: 16px;
+  letter-spacing: 0.06em;
+  color: var(--cps-text-tertiary);
+}
+.cps-data {
+  font-family: var(--cps-font-mono);
+  font-size: var(--cps-type-meta);
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+  color: var(--cps-text-secondary);
+}
+.cps-num {
+  font-size: var(--cps-type-meta);
+  font-variant-numeric: tabular-nums;
 }
 
-/*
- * 细滚动条。
- *
- * 注意：**不要**在这里写标准的 `scrollbar-width` / `scrollbar-color`——
- * 一旦设了它们，Chromium 会忽略下面全部 `::-webkit-scrollbar` 规则，
- * 退回系统原生滚动条（带两端的箭头按钮、还压不住轨道底色）。
- * 这正是「双滚动条 + 箭头」那种粗糙观感的来源。标准的两个属性只留给
- * 不支持 webkit 伪元素的浏览器（Firefox），见文件末尾的 @supports。
- */
+/* ---------- 细滚动条 ----------
+ * 不要写标准的 `scrollbar-width` / `scrollbar-color`：一旦设了它们，
+ * Chromium 会忽略下面全部 `::-webkit-scrollbar` 规则，退回系统原生滚动条
+ * （带两端箭头、压不住轨道底色）。标准的两个属性只留给 Firefox，见文件末尾。 */
 *::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -86,7 +121,6 @@ samp {
 *::-webkit-scrollbar-corner {
   background: transparent;
 }
-/* 两端不加箭头按钮 */
 *::-webkit-scrollbar-button {
   display: none;
 }
@@ -109,18 +143,14 @@ samp {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  background: var(--ant-color-bg-container);
-  border: 1px solid var(--ant-color-border-secondary);
-  border-radius: var(--ant-border-radius-lg);
+  background: var(--cps-surface);
+  border: 1px solid var(--cps-border);
+  border-radius: 10px;
   /* 顶部一道 1px 内高光：像被同一盏灯照着的表面，暗色下尤其明显 */
-  box-shadow: inset 0 1px 0 0 var(--cps-surface-highlight);
-  overflow: hidden;
-}
-[data-theme="light"] .cps-panel {
-  /* 亮色下用极淡投影代替高光，边界才立得住 */
   box-shadow:
-    0 1px 2px rgba(15, 23, 42, 0.04),
-    inset 0 1px 0 0 var(--cps-surface-highlight);
+    inset 0 1px 0 0 var(--cps-highlight),
+    var(--cps-shadow);
+  overflow: hidden;
 }
 .cps-panel-head {
   display: flex;
@@ -129,21 +159,19 @@ samp {
   gap: 8px 12px;
   flex: 0 0 auto;
   min-height: 48px;
-  padding: 10px 16px;
+  padding: 8px 16px;
   /* 极淡的顶部提亮：让标题栏像一条「工具条」，而不是正文的第一行 */
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0));
-  border-bottom: 1px solid var(--ant-color-border-secondary);
-}
-[data-theme="light"] .cps-panel-head {
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.018), rgba(15, 23, 42, 0));
+  background: linear-gradient(180deg, var(--cps-headtint), transparent);
+  border-bottom: 1px solid var(--cps-border);
 }
 .cps-panel-title {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
+  font-size: var(--cps-type-title);
   font-weight: 600;
-  color: var(--ant-color-text);
+  letter-spacing: 0.005em;
+  color: var(--cps-text);
   min-width: 0;
 }
 .cps-panel-extra {
@@ -168,26 +196,92 @@ samp {
   overscroll-behavior: contain;
 }
 
-/* 区块内的行（账号名单等）：靠分隔线成行，而不是每行再加一层边框卡片
+/* ---------- 状态芯片 ----------
+   全站的状态只有这一种画法：一枚小点 + 一行字，底色是状态色的 10% 晕染。
+   以前用 antd 的预设 Tag（#52c41a / #ff4d4f），同一个屏幕上红绿一起喊，
+   数据反而没人看。芯片的颜色只表达「状态类别」，文字永远说清是什么。 */
+.cps-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid var(--cps-neutral-bd);
+  background: var(--cps-neutral-bg);
+  color: var(--cps-neutral-fg);
+  font-size: var(--cps-type-meta);
+  line-height: 1;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  transition:
+    color var(--cps-duration-base) var(--cps-ease-standard),
+    background-color var(--cps-duration-base) var(--cps-ease-standard),
+    border-color var(--cps-duration-base) var(--cps-ease-standard);
+}
+.cps-chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: 0 0 auto;
+  opacity: 0.9;
+}
+.cps-chip-sm {
+  height: 20px;
+  padding: 0 8px;
+  font-size: 11.5px;
+}
+.cps-chip-ok {
+  color: var(--cps-ok-fg);
+  background: var(--cps-ok-bg);
+  border-color: var(--cps-ok-bd);
+}
+.cps-chip-warn {
+  color: var(--cps-warn-fg);
+  background: var(--cps-warn-bg);
+  border-color: var(--cps-warn-bd);
+}
+.cps-chip-danger {
+  color: var(--cps-danger-fg);
+  background: var(--cps-danger-bg);
+  border-color: var(--cps-danger-bd);
+}
+.cps-chip-info {
+  color: var(--cps-info-fg);
+  background: var(--cps-info-bg);
+  border-color: var(--cps-info-bd);
+}
+.cps-chip-neutral {
+  color: var(--cps-neutral-fg);
+  background: var(--cps-neutral-bg);
+  border-color: var(--cps-neutral-bd);
+}
+/* 无点版本：纯计数、纯说明（如「3 个渠道」） */
+.cps-chip-plain .cps-chip-dot {
+  display: none;
+}
+
+/* 区块内的行（账号名单、网关名单）：靠分隔线成行，而不是每行再加一层边框卡片
    （面板里套卡片 = 两层边框，视觉噪音） */
 .cps-list-row {
   display: flex;
   align-items: center;
   gap: 16px;
   padding: 14px 16px;
-  border-bottom: 1px solid var(--ant-color-border-secondary);
+  border-bottom: 1px solid var(--cps-border);
   transition: background-color var(--cps-duration-fast) var(--cps-ease-standard);
 }
 .cps-list-row:last-child {
   border-bottom: none;
 }
 .cps-list-row:hover {
-  background: var(--ant-color-fill-quaternary);
+  background: var(--cps-rowhover);
 }
 /* 当前生效的那一行：左侧一道主色标记 */
 .cps-list-row-active {
   position: relative;
-  background: var(--ant-color-primary-bg);
+  background: var(--cps-wash);
 }
 .cps-list-row-active::before {
   content: "";
@@ -196,18 +290,36 @@ samp {
   top: 0;
   bottom: 0;
   width: 2px;
-  background: var(--ant-color-primary);
+  background: var(--cps-primary);
 }
 
+/* 请求历史的统计条：数字是主角（等宽、大一号），标签是小号弱色。
+   一条竖线分一组，比四个「数字 + 文字」挤在一起更有仪表盘的秩序。 */
+.cps-stat-value {
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  color: var(--cps-text);
+}
+.cps-stat-sep {
+  width: 1px;
+  height: 24px;
+  background: var(--cps-border);
+  flex: 0 0 auto;
+}
+/* 失败行：只给一层极淡的危险底色 + 左缘 2px 标记，不再整行铺红。
+   数据表里整块红底会把正常行也衬得发灰，读起来像「整页报错」。 */
+
 /* ---------- 表格里的文字与对齐 ----------
-   表格一行里只该有「等宽标识 / 纯文本 / 标签」三类，且各自样式固定。
-   以前同一列混用 code 芯片、内联标签、普通文本，扫读时互相抢。 */
+   表格一行里只该有「等宽标识 / 纯文本 / 芯片」三类，且各自样式固定。 */
 .cps-mono {
   /* 等宽字体来自 theme.ts 的 FONT_MONO（带 CJK 回退），别再在这里写死 mono 栈：
      Windows 上 monospace 的中文回退是宋体。 */
   font-family: var(--cps-font-mono);
-  font-size: 12px;
-  line-height: 20px;
+  font-size: var(--cps-type-meta);
+  line-height: 18px;
 }
 /* 单元格里的一行文字：超出省略，完整值走悬停（不再让复制图标与文字挤在一起） */
 .cps-cell-ellipsis {
@@ -223,13 +335,8 @@ samp {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
-  line-height: 20px;
-}
-/* 数字：等宽数字字形，右对齐时位数才对得齐 */
-.cps-num {
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
+  font-size: var(--cps-type-meta);
+  line-height: 18px;
 }
 /* 尝试链：强制单行。折行会把这一行撑高（43 → 72），整张表就不平整了 */
 .cps-trace {
@@ -239,8 +346,7 @@ samp {
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
-  /* 尝试序列放不下时用右缘淡出提示「还有更多」，完整内容在悬停里。
-     纯 overflow:hidden 会在词中间直接切断（"› a" 这种半截），看起来像渲染错误。 */
+  /* 尝试序列放不下时用右缘淡出提示「还有更多」，完整内容在悬停里。 */
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent);
   mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent);
 }
@@ -249,8 +355,8 @@ samp {
   align-items: center;
   gap: 6px;
   flex: 0 0 auto;
-  font-size: 12px;
-  line-height: 20px;
+  font-size: var(--cps-type-meta);
+  line-height: 18px;
 }
 
 /* 数据表：单元格内容**水平 + 垂直居中**（用户要求）。
@@ -262,6 +368,32 @@ samp {
   text-align: center;
   vertical-align: middle;
 }
+/* 表头：小号、字距略开、弱色——它是「列的名牌」，不该和正文抢 */
+.cps-table-center .ant-table-thead > tr > th {
+  font-size: var(--cps-type-label);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--cps-text-tertiary);
+}
+.cps-table-center .ant-table-tbody > tr > td {
+  font-size: var(--cps-type-body);
+}
+/* 空表也保持安静：不要一排大字「暂无数据」占半屏 */
+.cps-table-center .ant-table-placeholder .ant-empty-description {
+  font-size: var(--cps-type-meta);
+  color: var(--cps-text-tertiary);
+}
+/* 失败行（放在基础表格规则之后：更具体的选择器必须后出现，否则不生效） */
+.cps-table-center .ant-table-tbody > tr.cps-row-error > td {
+  background: color-mix(in srgb, var(--cps-danger-fg) 6%, transparent);
+}
+.cps-table-center .ant-table-tbody > tr.cps-row-error > td:first-child {
+  box-shadow: inset 2px 0 0 var(--cps-danger-fg);
+}
+.cps-table-center .ant-table-tbody > tr.cps-row-error:hover > td {
+  background: color-mix(in srgb, var(--cps-danger-fg) 10%, transparent);
+}
 
 /* ---------- 自绘标题栏（桌面壳） ---------- */
 .cps-titlebar {
@@ -271,8 +403,8 @@ samp {
   z-index: 100;
   display: flex;
   align-items: center;
-  background: var(--ant-color-bg-container);
-  border-bottom: 1px solid var(--ant-color-border-secondary);
+  background: var(--cps-rail);
+  border-bottom: 1px solid var(--cps-border);
   user-select: none;
 }
 .cps-titlebar-brand {
@@ -280,11 +412,11 @@ samp {
   align-items: center;
   gap: 8px;
   padding: 0 14px;
-  /* 标题栏是应用名唯一的落点（侧栏那块重复的已删），所以用正文字色 + 中等字重，
-     不再压成次要色——压下去会让整个窗口看起来没有名字。 */
+  /* 标题栏是应用名唯一的落点（侧栏那块重复的已删），所以用正文字色 + 中等字重 */
   font-size: 13px;
   font-weight: 500;
-  color: var(--ant-color-text);
+  letter-spacing: 0.01em;
+  color: var(--cps-text);
   white-space: nowrap;
 }
 .cps-titlebar-gap {
@@ -314,11 +446,11 @@ samp {
     color var(--cps-duration-fast) var(--cps-ease-standard);
 }
 .cps-wbtn:hover {
-  background: var(--ant-color-fill-secondary);
-  color: var(--ant-color-text);
+  background: var(--cps-rowhover);
+  color: var(--cps-text);
 }
 .cps-wbtn:active {
-  background: var(--ant-color-fill-tertiary);
+  background: var(--cps-headtint);
 }
 .cps-wbtn-close:hover {
   background: #e81123;
@@ -356,12 +488,15 @@ samp {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
-  line-height: 20px;
-  padding: 5px 12px;
-  border-radius: var(--ant-border-radius);
+  font-size: var(--cps-type-meta);
+  line-height: 18px;
+  padding: 6px 12px;
+  border-radius: 6px;
   cursor: default;
   width: fit-content;
+  color: var(--cps-text-secondary);
+  background: var(--cps-neutral-bg);
+  border: 1px solid var(--cps-neutral-bd);
 }
 /* 整行提示：内容居中（订阅模型的「钉住被忽略」用） */
 .cps-notice-center {
@@ -370,9 +505,9 @@ samp {
   text-align: center;
 }
 .cps-notice-warn {
-  color: var(--ant-color-warning-text);
-  background: var(--ant-color-warning-bg);
-  border: 1px solid var(--ant-color-warning-border);
+  color: var(--cps-warn-fg);
+  background: var(--cps-warn-bg);
+  border-color: var(--cps-warn-bd);
 }
 
 /* 表格：模型名 / 账号 / 渠道这类标识列不允许折行（折了行高参差，扫读变慢） */
@@ -384,14 +519,16 @@ samp {
 .cps-pre {
   margin: 0;
   padding: 10px 12px;
-  background: var(--ant-color-fill-quaternary);
-  border-radius: var(--ant-border-radius);
-  font-size: 12px;
-  line-height: 1.6;
+  background: var(--cps-headtint);
+  border: 1px solid var(--cps-border);
+  border-radius: 6px;
+  font-size: var(--cps-type-meta);
+  line-height: 1.65;
   max-height: 200px;
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-word;
+  color: var(--cps-text-secondary);
 }
 
 /* 侧栏底部：最近打开（除导航与钉住外的第三条到达路径） */
@@ -401,14 +538,14 @@ samp {
   gap: 2px;
 }
 .cps-recent-title {
-  font-size: 11px;
-  color: var(--ant-color-text-quaternary);
+  font-size: var(--cps-type-label);
+  color: var(--cps-text-quaternary);
   padding: 0 8px 4px;
   letter-spacing: 0.04em;
 }
 
 ::selection {
-  background: var(--ant-color-primary-bg-hover, rgba(79, 140, 255, 0.25));
+  background: var(--cps-washborder, rgba(79, 140, 255, 0.25));
 }
 
 /* 幽灵列表项（模型列表）：默认安静无面，悬停浮现浅底，选中态由内联样式接管 */
@@ -420,10 +557,10 @@ samp {
     border-color var(--cps-duration-fast) var(--cps-ease-standard);
 }
 .cps-ghost:hover {
-  background: var(--ant-color-fill-quaternary);
+  background: var(--cps-rowhover);
 }
 .cps-ghost:focus-visible {
-  outline: 2px solid var(--ant-color-primary);
+  outline: 2px solid var(--cps-primary);
   outline-offset: 1px;
 }
 
@@ -432,7 +569,7 @@ samp {
   transition: background-color var(--cps-duration-fast) var(--cps-ease-standard);
 }
 .cps-row:hover {
-  background: var(--ant-color-fill-quaternary);
+  background: var(--cps-rowhover);
 }
 
 /* 侧栏导航：**一块**选中底色在项与项之间滑动（位置由 App.tsx 计算）。
@@ -441,9 +578,10 @@ samp {
 .cps-nav-pill {
   position: absolute;
   top: 0;
-  border-radius: 6px;
+  border-radius: 8px;
   /* 与渠道链的选中行同一层薄晕染：全站的「选中」只有一种浓度 */
-  background: var(--cps-accent-wash-strong);
+  background: var(--cps-washstrong);
+  box-shadow: inset 0 0 0 1px var(--cps-washborder);
   pointer-events: none;
   z-index: 0;
   transition:
@@ -451,9 +589,6 @@ samp {
     left var(--cps-duration-fast) var(--cps-ease-standard),
     right var(--cps-duration-fast) var(--cps-ease-standard),
     height var(--cps-duration-fast) var(--cps-ease-standard);
-}
-[data-theme="light"] .cps-nav-pill {
-  box-shadow: inset 0 0 0 1px rgba(79, 140, 255, 0.08);
 }
 /* 展开/收起时文字重新挂载：淡入，而不是闪一下出现 */
 .cps-nav-label {
@@ -467,36 +602,37 @@ samp {
 }
 .cps-pin {
   position: absolute;
-  right: 6px;
+  right: 8px;
   top: 50%;
   transform: translateY(-50%);
   width: 24px;
   height: 24px;
   border: none;
   background: transparent;
-  border-radius: 4px;
+  border-radius: 5px;
   cursor: pointer;
-  color: var(--ant-color-text-quaternary);
+  color: var(--cps-text-quaternary);
   opacity: 0;
   transition:
-    opacity 0.15s ease,
-    color 0.15s ease,
-    background-color 0.15s ease;
+    opacity var(--cps-duration-fast) var(--cps-ease-standard),
+    color var(--cps-duration-fast) var(--cps-ease-standard),
+    background-color var(--cps-duration-fast) var(--cps-ease-standard);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 13px;
 }
-.cps-nav-item:hover .cps-pin {
+.cps-nav-item:hover .cps-pin,
+.cps-pin:focus-visible {
   opacity: 1;
 }
 .cps-pin:hover {
-  background: var(--ant-color-fill-secondary);
-  color: var(--ant-color-text);
+  background: var(--cps-rowhover);
+  color: var(--cps-text);
 }
 .cps-pin.cps-pinned {
   opacity: 1;
-  color: var(--ant-color-primary);
+  color: var(--cps-primary);
 }
 /* 窄栏（收起态）：已钉项在图标右上角显示小圆点 */
 .cps-nav-pinned-dot::after {
@@ -507,7 +643,7 @@ samp {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--ant-color-primary);
+  background: var(--cps-primary);
 }
 
 /* 模型列表：窄窗口下收窄，避免挤压右侧详情区 */
@@ -529,6 +665,52 @@ samp {
   }
 }
 
+/* ---------- 观测到的渠道（只读列表） ----------
+   它不是可编辑的链路，所以不画序号节点与连接线——那套是「路由顺序」的语言。
+   这里是一张数据清单：状态点 + 渠道 + 状态 + 耗时，列宽固定，扫读才对得齐。 */
+.cps-observe {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1px;
+}
+.cps-observe-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: 6px;
+  transition: background-color var(--cps-duration-fast) var(--cps-ease-standard);
+}
+.cps-observe-row:hover {
+  background: var(--cps-rowhover);
+}
+.cps-observe-row[data-state="excluded"] {
+  opacity: 0.6;
+}
+/* 状态点：颜色的唯一用法是「这一格的类别」，旁边永远有文字 */
+.cps-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: var(--cps-neutral-fg);
+  opacity: 0.85;
+}
+.cps-dot-ok {
+  background: var(--cps-ok-fg);
+}
+.cps-dot-warn {
+  background: var(--cps-warn-fg);
+}
+.cps-dot-danger {
+  background: var(--cps-danger-fg);
+}
+.cps-dot-info {
+  background: var(--cps-info-fg);
+}
+
 /* ---------- 路由管线（渠道尝试链） ----------
    产品的灵魂是「请求沿有序渠道链流动、命中钉住目标」——把它画出来：
    使用中的渠道串成一条纵向链（序号节点 + 连接线），未使用的离线在链尾。 */
@@ -547,26 +729,26 @@ samp {
   gap: 12px;
   margin-left: 30px;
   padding: 8px 12px;
-  border-radius: var(--ant-border-radius);
+  border-radius: 6px;
   transition: background-color var(--cps-duration-fast) var(--cps-ease-standard);
 }
 .cps-chain-row:hover {
-  background: var(--ant-color-fill-quaternary);
+  background: var(--cps-rowhover);
 }
 /* 选中行用一层薄薄的主色晕染，而不是整块实色——链路是内容，不该比操作按钮更抢眼 */
 .cps-chain-row[data-state="on"] {
-  background: var(--cps-accent-wash);
+  background: var(--cps-wash);
 }
 .cps-chain-row[data-state="on"]:hover {
-  background: var(--cps-accent-wash-strong);
+  background: var(--cps-washstrong);
 }
 /* 选中 = 加粗高亮；位置不许变（视觉焦点靠字重与颜色，不靠位移） */
 .cps-chain-row[data-state="on"] code {
   font-weight: 600;
-  color: var(--ant-color-primary);
+  color: var(--cps-primary);
 }
 .cps-chain-row[data-state="excluded"] {
-  opacity: 0.5;
+  opacity: 0.55;
 }
 /* 节点：链上 = 实心主色带序号；离线 = 空心 */
 .cps-chain-node {
@@ -586,18 +768,26 @@ samp {
   z-index: 1;
 }
 .cps-chain-row[data-state="on"] .cps-chain-node {
-  background: var(--ant-color-primary);
+  background: var(--cps-primary);
   color: #fff;
 }
 .cps-chain-row[data-state="off"] .cps-chain-node,
 .cps-chain-row[data-state="excluded"] .cps-chain-node {
-  background: var(--ant-color-bg-container);
-  border: 2px solid var(--ant-color-border);
+  background: var(--cps-surface);
+  border: 2px solid var(--cps-borderstrong);
+}
+/* 离线渠道的代位点：小、灰、无描边——不参与链路，也不假装能被选中 */
+.cps-chain-node-off {
+  left: -23px;
+  width: 6px;
+  height: 6px;
+  background: var(--cps-borderstrong);
+  border: none;
 }
 /* 拖拽排序：手柄 / 被拖行 / 落点指示 */
 .cps-grip {
   cursor: grab;
-  color: var(--ant-color-text-quaternary);
+  color: var(--cps-text-quaternary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -609,7 +799,7 @@ samp {
   transition: color var(--cps-duration-fast) var(--cps-ease-standard);
 }
 .cps-grip:hover {
-  color: var(--ant-color-text-secondary);
+  color: var(--cps-text-secondary);
 }
 .cps-grip:active {
   cursor: grabbing;
@@ -618,7 +808,7 @@ samp {
   opacity: 0.4;
 }
 .cps-chain-row.cps-drop-target {
-  box-shadow: inset 0 3px 0 0 var(--ant-color-primary);
+  box-shadow: inset 0 3px 0 0 var(--cps-primary);
 }
 
 /* 连接线：相邻两个链上节点之间的实线（含行距补偿，视觉连续） */
@@ -629,20 +819,8 @@ samp {
   top: calc(-50% - 3px);
   height: calc(100% + 6px);
   width: 2px;
-  background: var(--ant-color-primary);
+  background: var(--cps-primary);
   opacity: 0.45;
-}
-
-/*
- * 标准滚动条属性只留给不支持 ::-webkit-scrollbar 的浏览器（Firefox）。
- * 放到 @supports 里是为了不让 Chromium 看到它们——它对这两个属性最敏感，
- * 一见就退回原生滚动条（见文件上方注释）。
- */
-@supports not selector(::-webkit-scrollbar) {
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: var(--cps-thumb) transparent;
-  }
 }
 
 /* ---------- 交互状态与入场（2.2） ----------
@@ -653,7 +831,7 @@ samp {
 .cps-wbtn:focus-visible,
 .cps-pin:focus-visible,
 .cps-grip:focus-visible {
-  outline: 2px solid var(--ant-color-primary);
+  outline: 2px solid var(--cps-primary);
   outline-offset: 1px;
 }
 .cps-wbtn:focus-visible {
@@ -661,7 +839,7 @@ samp {
 }
 /* 底栏与面板共用同一条「顶部受光」 */
 .cps-statusbar {
-  box-shadow: inset 0 1px 0 0 var(--cps-surface-highlight);
+  box-shadow: inset 0 1px 0 0 var(--cps-highlight);
 }
 /* 空态与提示出现时淡入，而不是「啪」地占位 */
 .ant-alert,
@@ -710,7 +888,7 @@ samp {
   right: 0;
   top: 0;
   height: 2px;
-  background: linear-gradient(90deg, transparent, var(--ant-color-primary), transparent);
+  background: linear-gradient(90deg, transparent, var(--cps-primary), transparent);
   opacity: 0.85;
   pointer-events: none;
   animation: cps-scan 1.4s var(--cps-ease-standard) infinite;
@@ -753,6 +931,18 @@ samp {
   }
   to {
     opacity: 1;
+  }
+}
+
+/*
+ * 标准滚动条属性只留给不支持 ::-webkit-scrollbar 的浏览器（Firefox）。
+ * 放到 @supports 里是为了不让 Chromium 看到它们——它对这两个属性最敏感，
+ * 一见就退回原生滚动条（见文件上方注释）。
+ */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--cps-thumb) transparent;
   }
 }
 

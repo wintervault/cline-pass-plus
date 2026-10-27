@@ -36,7 +36,7 @@ import { animateEnter } from './motion.ts';
 import { RoutingGatewayProvider } from './routingGateway.tsx';
 import { ServiceBanner } from './serviceBanner.tsx';
 import { StatusBar } from './statusBar.tsx';
-import { darkTheme, initialTheme, lightTheme, persistTheme, type ThemeMode } from './theme.ts';
+import { applyThemeVars, darkTheme, initialTheme, lightTheme, persistTheme, type ThemeMode } from './theme.ts';
 import { TITLEBAR_HEIGHT, TitleBar } from './titleBar.tsx';
 
 /** 钉住页面的持久化键：打开控制台时默认落到被钉住的页面。 */
@@ -82,7 +82,7 @@ function SideNav({
 }) {
   const { token } = theme.useToken();
   const t = useT();
-  const btnBase = { height: 44, width: '100%', gap: 10, paddingInline: collapsed ? 0 : 10 } as const;
+  const btnBase = { height: 40, width: '100%', gap: 10, paddingInline: collapsed ? 0 : 10 } as const;
   const gutter = collapsed ? '0 10px' : '0 12px';
   /**
    * 选中底色：全站只有一块，在导航项之间**滑过去**（180ms），
@@ -178,7 +178,7 @@ function SideNav({
                   style={{
                     ...btnBase,
                     justifyContent: collapsed ? 'center' : 'flex-start',
-                    fontSize: 18,
+                    fontSize: 17,
                     color: active ? token.colorPrimary : token.colorTextSecondary,
                     /* 选中底色由滑动的 pill 承担（见 .cps-nav-pill），按钮本身透明 */
                     background: active ? 'transparent' : undefined,
@@ -186,7 +186,7 @@ function SideNav({
                   icon={<Comp />}
                 >
                   {!collapsed && (
-                    <span className="cps-nav-label" style={{ fontSize: 14, paddingRight: 18, whiteSpace: 'nowrap' }}>
+                    <span className="cps-nav-label" style={{ fontSize: 13.5, paddingRight: 18, whiteSpace: 'nowrap' }}>
                       {t(p.labelKey)}
                     </span>
                   )}
@@ -308,9 +308,9 @@ function Console({ mode, onToggleTheme }: { mode: ThemeMode; onToggleTheme: () =
   const [keyError, setKeyError] = useState<string | null>(null);
 
   // 页面底色跟随主题（Layout 之外的区域由 body 承担）；
-  // data-theme 供 CSS 选择暗/亮专用的表面与光效
+  // data-theme 与表面色变量由 applyThemeVars 一次写完（切主题时重跑）
   useEffect(() => {
-    document.documentElement.dataset.theme = mode;
+    applyThemeVars(mode);
     document.body.style.background = token.colorBgLayout;
     document.body.style.colorScheme = mode;
   }, [token.colorBgLayout, mode]);
@@ -388,8 +388,8 @@ function Console({ mode, onToggleTheme }: { mode: ThemeMode; onToggleTheme: () =
         <Layout.Sider
           width={collapsed ? 64 : 200}
           style={{
-            background: token.colorBgContainer,
-            borderRight: `1px solid ${token.colorBorderSecondary}`,
+            background: 'var(--cps-rail)',
+            borderRight: '1px solid var(--cps-border)',
           }}
         >
           <SideNav

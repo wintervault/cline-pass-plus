@@ -1,4 +1,3 @@
-import { Typography } from 'antd';
 import type { CSSProperties, ReactNode } from 'react';
 
 /**
@@ -57,9 +56,5 @@ export function Panel({
 
 /** 区块头里的次要说明（跟在标题后面的小字）。 */
 export function PanelHint({ children }: { children: ReactNode }) {
-  return (
-    <Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 400 }}>
-      {children}
-    </Typography.Text>
-  );
+  return <span className="cps-meta">{children}</span>;
 }

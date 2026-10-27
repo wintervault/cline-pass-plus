@@ -1,7 +1,4 @@
 import {
-  CheckCircleFilled,
-  CloseCircleFilled,
-  ExclamationCircleFilled,
   FileTextOutlined,
   KeyOutlined,
   LoadingOutlined,
@@ -14,13 +11,14 @@ import {
   SyncOutlined,
   TranslationOutlined,
 } from '@ant-design/icons';
-import { Button, Dropdown, Select, Space, Tag, Tooltip, Typography, theme } from 'antd';
+import { Button, Dropdown, Select, Space, Tooltip, Typography, theme } from 'antd';
 import { useState } from 'react';
 
 import { useGateways } from './api/hooks.ts';
 import type { GatewayView } from './api/types.ts';
 import type { HostControl } from './hostBridge.ts';
 import { type Lang, type MsgKey, useI18n } from './i18n/index.tsx';
+import { type ChipTone, StatusChip } from './statusChip.tsx';
 
 /**
  * 常驻状态栏。2.1 起以**左侧选中的网关**为主线（左→右 = 同一个网关的完整状态）：
@@ -34,23 +32,29 @@ import { type Lang, type MsgKey, useI18n } from './i18n/index.tsx';
  * 那是在说选中的网关；而它其实是整个进程。现在两者用分隔线明确分开。
  */
 
-const STATE_COLOR: Record<string, string> = {
-  running: '#52c41a',
-  starting: '#faad14',
-  stopping: '#faad14',
-  stopped: 'var(--ant-color-text-quaternary)',
-  error: '#ff4d4f',
+const GATEWAY_TONE: Record<GatewayView['status']['state'], ChipTone> = {
+  running: 'ok',
+  error: 'danger',
+  stopped: 'neutral',
+  disabled: 'neutral',
 };
 
-const STATE_ICON: Record<string, typeof CheckCircleFilled> = {
-  running: CheckCircleFilled,
-  starting: ExclamationCircleFilled,
-  stopping: ExclamationCircleFilled,
-  stopped: CloseCircleFilled,
-  error: CloseCircleFilled,
+const GATEWAY_KEY: Record<GatewayView['status']['state'], MsgKey> = {
+  running: 'statusbar.gateway.running',
+  error: 'statusbar.gateway.error',
+  stopped: 'statusbar.gateway.stopped',
+  disabled: 'statusbar.gateway.disabled',
 };
 
-const STATE_KEY: Record<string, MsgKey> = {
+const SERVICE_TONE: Record<string, ChipTone> = {
+  running: 'ok',
+  starting: 'warn',
+  stopping: 'warn',
+  stopped: 'neutral',
+  error: 'danger',
+};
+
+const SERVICE_KEY: Record<string, MsgKey> = {
   running: 'service.state.running',
   starting: 'service.state.starting',
   stopping: 'service.state.stopping',
@@ -58,7 +62,7 @@ const STATE_KEY: Record<string, MsgKey> = {
   error: 'service.state.error',
 };
 
-/** 状态栏里的一格：小号灰色标签 + 值。标签是「这是什么」不该靠猜。 */
+/** 状态栏里的一格：小号标签 + 值。标签是「这是什么」，不该靠猜。 */
 function Field({
   label,
   children,
@@ -80,58 +84,40 @@ function Field({
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 6,
+        gap: 8,
         /* 地址可以省略，但不能缩到看不见——再窄就让整条状态栏横向滚动 */
         minWidth: flexible ? 150 : 0,
         flex: flexible ? '1 1 auto' : '0 0 auto',
         whiteSpace: 'nowrap',
       }}
     >
-      <Typography.Text style={{ fontSize: 12, color: 'var(--ant-color-text-quaternary)', flex: '0 0 auto' }}>
+      <span className="cps-label" style={{ flex: '0 0 auto' }}>
         {label}
-      </Typography.Text>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>{children}</div>
+      </span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>{children}</div>
     </div>
   );
 }
 
-const GATEWAY_STATE_TAG: Record<GatewayView['status']['state'], { color: string; key: MsgKey }> = {
-  running: { color: 'green', key: 'statusbar.gateway.running' },
-  error: { color: 'red', key: 'statusbar.gateway.error' },
-  stopped: { color: 'default', key: 'statusbar.gateway.stopped' },
-  disabled: { color: 'default', key: 'statusbar.gateway.disabled' },
-};
-
-/** 状态标签的颜色过渡：状态翻转时是「变色」，不是「闪一下」。 */
-const TAG_MOTION = {
-  margin: 0,
-  transition:
-    'background-color var(--cps-duration-base) var(--cps-ease-standard), color var(--cps-duration-base) var(--cps-ease-standard), border-color var(--cps-duration-base) var(--cps-ease-standard)',
-} as const;
-
 function GatewayCluster({ gateway, onOpenGateways }: { gateway: GatewayView | undefined; onOpenGateways: () => void }) {
   const { t } = useI18n();
   if (!gateway) {
-    return (
-      <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-        {t('statusbar.notReady')}
-      </Typography.Text>
-    );
+    return <span className="cps-meta">{t('statusbar.notReady')}</span>;
   }
-  const state = GATEWAY_STATE_TAG[gateway.status.state];
   const account = gateway.accountState;
   return (
     <>
       <Tooltip title={gateway.status.error ?? undefined}>
-        <Tag color={state.color} style={TAG_MOTION}>
-          {t(state.key)}
-        </Tag>
+        <StatusChip tone={GATEWAY_TONE[gateway.status.state]} small>
+          {t(GATEWAY_KEY[gateway.status.state])}
+          {gateway.status.state === 'running' && gateway.status.boundPort ? ` :${gateway.status.boundPort}` : ''}
+        </StatusChip>
       </Tooltip>
       {account.code === 'no_accounts' && (
         <Tooltip title={t('statusbar.accountState.no_accounts.tip')}>
-          <Tag color="warning" style={TAG_MOTION}>
+          <StatusChip tone="warn" small>
             {t('statusbar.accountState.no_accounts')}
-          </Tag>
+          </StatusChip>
         </Tooltip>
       )}
       {account.code === 'empty_scope' && gateway.status.state !== 'disabled' && (
@@ -141,17 +127,17 @@ function GatewayCluster({ gateway, onOpenGateways }: { gateway: GatewayView | un
             total: account.usableTotal,
           })}
         >
-          <Tag color="warning" style={TAG_MOTION}>
+          <StatusChip tone="warn" small>
             {t('statusbar.accountState.empty_scope')}
-          </Tag>
+          </StatusChip>
         </Tooltip>
       )}
       <Tooltip title={gateway.hasProxyKey ? t('statusbar.key.tip.set') : t('statusbar.key.tip.unset')}>
         <Button
           size="small"
-          type="link"
+          type="text"
           icon={gateway.hasProxyKey ? <LockOutlined /> : <KeyOutlined />}
-          style={{ fontSize: 13, padding: 0, height: 'auto' }}
+          style={{ fontSize: 12, color: 'var(--cps-text-tertiary)', paddingInline: 4 }}
           onClick={onOpenGateways}
         >
           {gateway.hasProxyKey ? t('statusbar.key.set') : t('statusbar.key.unset')}
@@ -162,29 +148,27 @@ function GatewayCluster({ gateway, onOpenGateways }: { gateway: GatewayView | un
 }
 
 function ServiceCluster({ control }: { control: HostControl }) {
-  const { token } = theme.useToken();
   const { t } = useI18n();
   const { status, busy } = control;
   if (!control.host) return null;
 
-  const Icon = busy ? LoadingOutlined : (STATE_ICON[status.state] ?? CloseCircleFilled);
-  const color = STATE_COLOR[status.state] ?? token.colorTextSecondary;
-  const label = t(STATE_KEY[status.state] ?? 'service.state.stopped');
+  const tone = SERVICE_TONE[status.state] ?? 'neutral';
+  const label = t(SERVICE_KEY[status.state] ?? 'service.state.stopped');
 
   return (
     <Space size={8} align="center" style={{ flex: '0 0 auto', whiteSpace: 'nowrap' }}>
-      <Typography.Text style={{ fontSize: 12, color: 'var(--ant-color-text-quaternary)' }}>
-        {t('statusbar.service')}
-      </Typography.Text>
+      <span className="cps-label">{t('statusbar.service')}</span>
       <Tooltip
         title={
           status.port ? t('service.channel.title', { addr: `127.0.0.1:${status.port}` }) : t('service.channel.missing')
         }
       >
-        <Space size={6} align="center">
-          <Icon style={{ color, fontSize: 12 }} />
-          <Typography.Text style={{ fontSize: 13, color: token.colorText }}>{label}</Typography.Text>
-        </Space>
+        <span>
+          <StatusChip tone={tone} small dot={!busy}>
+            {busy && <LoadingOutlined style={{ fontSize: 11 }} />}
+            {label}
+          </StatusChip>
+        </span>
       </Tooltip>
       {status.state === 'stopped' || status.state === 'error' ? (
         <Button
@@ -205,6 +189,7 @@ function ServiceCluster({ control }: { control: HostControl }) {
             icon={<PauseCircleOutlined />}
             loading={busy}
             onClick={() => void control.stop()}
+            style={{ color: 'var(--cps-text-secondary)' }}
           >
             {t('service.action.stopShort')}
           </Button>
@@ -214,13 +199,21 @@ function ServiceCluster({ control }: { control: HostControl }) {
             icon={<SyncOutlined />}
             loading={busy}
             onClick={() => void control.restart()}
+            style={{ color: 'var(--cps-text-secondary)' }}
           >
             {t('service.action.restartShort')}
           </Button>
         </Space>
       )}
       <Tooltip title={t('service.action.logs')}>
-        <Button size="small" type="text" icon={<FileTextOutlined />} onClick={control.openLogs} />
+        <Button
+          size="small"
+          type="text"
+          icon={<FileTextOutlined />}
+          aria-label={t('service.action.logs')}
+          onClick={control.openLogs}
+          style={{ color: 'var(--cps-text-tertiary)' }}
+        />
       </Tooltip>
     </Space>
   );
@@ -257,15 +250,15 @@ export function StatusBar({
     <div
       className="cps-statusbar"
       style={{
-        height: 54,
+        height: 50,
         flex: '0 0 auto',
         display: 'flex',
         flexWrap: 'nowrap',
         alignItems: 'center',
-        gap: 8,
+        gap: 10,
         padding: '0 16px',
-        background: token.colorBgContainer,
-        borderTop: `1px solid ${token.colorBorderSecondary}`,
+        background: 'var(--cps-rail)',
+        borderTop: '1px solid var(--cps-border)',
         overflowX: 'auto',
       }}
     >
@@ -285,7 +278,7 @@ export function StatusBar({
             options={gateways.map((g) => ({ value: g.id, label: g.name }))}
           />
         ) : (
-          <Typography.Text ellipsis={{ tooltip: picked?.name }} style={{ fontSize: 13, maxWidth: 180 }}>
+          <Typography.Text ellipsis={{ tooltip: picked?.name }} style={{ fontSize: 12.5, maxWidth: 180 }}>
             {picked?.name ?? t('statusbar.notReady')}
           </Typography.Text>
         )}
@@ -296,23 +289,22 @@ export function StatusBar({
           <Typography.Text
             ellipsis={{ tooltip: picked.proxyBase }}
             copyable={{ text: picked.proxyBase, tooltips: [t('statusbar.address.copy'), t('common.copied')] }}
-            style={{ fontSize: 13, fontFamily: 'var(--cps-font-mono)', maxWidth: 320 }}
+            className="cps-data"
+            style={{ maxWidth: 320 }}
           >
             {picked.proxyBase}
           </Typography.Text>
         ) : (
-          <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-            {t('statusbar.notReady')}
-          </Typography.Text>
+          <span className="cps-meta">{t('statusbar.notReady')}</span>
         )}
       </Field>
 
       {/* ② 同一个网关的状态 / 账号 / 密钥，紧挨着左侧选择 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto', whiteSpace: 'nowrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: '0 0 auto', whiteSpace: 'nowrap' }}>
         <GatewayCluster gateway={picked} onOpenGateways={onOpenGateways} />
       </div>
 
-      <div style={{ width: 1, height: 20, background: token.colorBorderSecondary, flex: '0 0 auto' }} />
+      <div style={{ width: 1, height: 18, background: token.colorBorderSecondary, flex: '0 0 auto' }} />
 
       {/* ③ 服务是进程级动作，明确标注，避免与上面的网关状态混淆 */}
       <div style={{ flex: '0 0 auto', whiteSpace: 'nowrap' }}>
@@ -320,9 +312,9 @@ export function StatusBar({
       </div>
 
       <Space size={2} style={{ marginLeft: 'auto', flex: '0 0 auto' }}>
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+        <span className="cps-data" style={{ fontSize: 11.5, color: 'var(--cps-text-tertiary)', marginRight: 4 }}>
           v{version ?? '…'}
-        </Typography.Text>
+        </span>
         {/*
           语言切换：即时生效，不刷新页面。
           **不要用 Tooltip、也不要加原生 title**：状态栏贴着窗口底部，菜单和提示都会被
@@ -341,18 +333,33 @@ export function StatusBar({
             onClick: ({ key }) => onToggleLang(key as Lang),
           }}
         >
-          <Button size="small" type="text" icon={<TranslationOutlined />} aria-label={t('app.lang.switch')} />
+          <Button
+            size="small"
+            type="text"
+            icon={<TranslationOutlined />}
+            aria-label={t('app.lang.switch')}
+            style={{ color: 'var(--cps-text-tertiary)' }}
+          />
         </Dropdown>
         <Tooltip title={mode === 'dark' ? t('statusbar.theme.dark') : t('statusbar.theme.light')}>
           <Button
             size="small"
             type="text"
             icon={mode === 'dark' ? <SunOutlined /> : <MoonOutlined />}
+            aria-label={t('statusbar.theme.switch')}
             onClick={onToggleTheme}
+            style={{ color: 'var(--cps-text-tertiary)' }}
           />
         </Tooltip>
         <Tooltip title={t('statusbar.refresh')}>
-          <Button size="small" type="text" icon={<ReloadOutlined />} onClick={onRefresh} />
+          <Button
+            size="small"
+            type="text"
+            icon={<ReloadOutlined />}
+            aria-label={t('statusbar.refresh')}
+            onClick={onRefresh}
+            style={{ color: 'var(--cps-text-tertiary)' }}
+          />
         </Tooltip>
       </Space>
     </div>
