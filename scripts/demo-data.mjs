@@ -38,9 +38,9 @@ const days = (n) => now - n * 86_400_000;
 const day = (ts) => new Date(ts).toISOString().slice(0, 10);
 
 const ACCOUNTS = [
-  { name: '演示账号 A', key: 'sk-demo-a-000000000001', expiresAt: day(days(-22)) },
-  { name: '演示账号 B', key: 'sk-demo-b-000000000002', expiresAt: day(days(-3)) },
-  { name: '演示账号 C', key: 'sk-demo-c-000000000003' },
+  { name: 'Demo A', key: 'sk-demo-a-000000000001', expiresAt: day(days(-22)) },
+  { name: 'Demo B', key: 'sk-demo-b-000000000002', expiresAt: day(days(-3)) },
+  { name: 'Demo C', key: 'sk-demo-c-000000000003' },
 ];
 
 const MODELS = [
@@ -100,29 +100,20 @@ function modelMeta(index, { ignored = false } = {}) {
 }
 
 const accountModels = {
-  '演示账号 A': Object.fromEntries(MODELS.map((id, i) => [id, modelMeta(i)])),
-  '演示账号 B': Object.fromEntries(MODELS.slice(0, 5).map((id, i) => [id, modelMeta(i, { ignored: true })])),
+  'Demo A': Object.fromEntries(MODELS.map((id, i) => [id, modelMeta(i)])),
+  'Demo B': Object.fromEntries(MODELS.slice(0, 5).map((id, i) => [id, modelMeta(i, { ignored: true })])),
 };
 
 const history = [];
 const seed = [
-  ['cline-pass/glm-5.3', 'fireworks', '演示账号 A', 'main', true, 2140, null, [['fireworks', 200, 2140, '']]],
-  ['cline-pass/kimi-k3', 'together', '演示账号 A', 'main', true, 3860, null, [['together', 200, 3860, '']]],
-  [
-    'cline-pass/deepseek-v4.1-flash',
-    'deepinfra',
-    '演示账号 A',
-    'main',
-    false,
-    720,
-    null,
-    [['deepinfra', 200, 720, '']],
-  ],
-  ['cline-pass/qwen3.8-max', 'novita', '演示账号 A', 'edge', true, 5120, null, [['novita', 200, 5120, '']]],
+  ['cline-pass/glm-5.3', 'fireworks', 'Demo A', 'main', true, 2140, null, [['fireworks', 200, 2140, '']]],
+  ['cline-pass/kimi-k3', 'together', 'Demo A', 'main', true, 3860, null, [['together', 200, 3860, '']]],
+  ['cline-pass/deepseek-v4.1-flash', 'deepinfra', 'Demo A', 'main', false, 720, null, [['deepinfra', 200, 720, '']]],
+  ['cline-pass/qwen3.8-max', 'novita', 'Demo A', 'edge', true, 5120, null, [['novita', 200, 5120, '']]],
   [
     'cline-pass/glm-5.3',
     'fireworks',
-    '演示账号 B',
+    'Demo B',
     'main',
     true,
     2680,
@@ -132,11 +123,11 @@ const seed = [
       ['together', 200, 2680, ''],
     ],
   ],
-  ['cline-pass/mimo-v2.5-pro', 'openrouter', '演示账号 A', 'edge', false, 1580, null, [['openrouter', 200, 1580, '']]],
+  ['cline-pass/mimo-v2.5-pro', 'openrouter', 'Demo A', 'edge', false, 1580, null, [['openrouter', 200, 1580, '']]],
   [
     'cline-pass/glm-5.2',
     null,
-    '演示账号 C',
+    'Demo C',
     'main',
     true,
     940,
@@ -146,7 +137,7 @@ const seed = [
   [
     'cline-pass/deepseek-v4-pro',
     'together',
-    '演示账号 A',
+    'Demo A',
     'main',
     false,
     6400,
@@ -156,10 +147,10 @@ const seed = [
       ['together', 200, 6400, ''],
     ],
   ],
-  ['cline-pass/kimi-k2.7-code', 'fireworks', '演示账号 B', 'edge', true, 2950, null, [['fireworks', 200, 2950, '']]],
-  ['cline-pass/qwen3.7-max', 'openrouter', '演示账号 A', 'main', true, 4380, null, [['openrouter', 200, 4380, '']]],
-  ['cline-pass/minimax-m3', 'novita', '演示账号 A', 'main', false, 510, null, [['novita', 200, 510, '']]],
-  ['cline-pass/glm-5.3-flash', 'together', '演示账号 B', 'main', true, 1120, null, [['together', 200, 1120, '']]],
+  ['cline-pass/kimi-k2.7-code', 'fireworks', 'Demo B', 'edge', true, 2950, null, [['fireworks', 200, 2950, '']]],
+  ['cline-pass/qwen3.7-max', 'openrouter', 'Demo A', 'main', true, 4380, null, [['openrouter', 200, 4380, '']]],
+  ['cline-pass/minimax-m3', 'novita', 'Demo A', 'main', false, 510, null, [['novita', 200, 510, '']]],
+  ['cline-pass/glm-5.3-flash', 'together', 'Demo B', 'main', true, 1120, null, [['together', 200, 1120, '']]],
 ];
 
 seed.forEach(([model, provider, account, gateway, stream, ms, error, trace], i) => {
@@ -198,14 +189,14 @@ const metadata = {
     total: 15,
   },
   stats: {
-    '演示账号 A': { requests: 1284, lastUsed: minutes(6), lastError: null },
-    '演示账号 B': { requests: 402, lastUsed: minutes(19), lastError: 'HTTP 429：rate limit exceeded' },
-    '演示账号 C': { requests: 37, lastUsed: hours(28), lastError: 'INFERENCE_CAP_ERROR：账号额度已用尽' },
+    'Demo A': { requests: 1284, lastUsed: minutes(6), lastError: null },
+    'Demo B': { requests: 402, lastUsed: minutes(19), lastError: 'HTTP 429：rate limit exceeded' },
+    'Demo C': { requests: 37, lastUsed: hours(28), lastError: 'INFERENCE_CAP_ERROR：账号额度已用尽' },
   },
   accountClass: {
-    '演示账号 A': { class: 'normal', checkedAt: hours(2) },
-    '演示账号 B': { class: 'private', checkedAt: hours(2) },
-    '演示账号 C': {
+    'Demo A': { class: 'normal', checkedAt: hours(2) },
+    'Demo B': { class: 'private', checkedAt: hours(2) },
+    'Demo C': {
       class: 'unknown',
       checkedAt: minutes(12),
       reason: 'quota',
@@ -232,11 +223,17 @@ const config = {
       exposeCatalog: false,
       accountScope: 'all',
       accounts: [],
-      accountOrder: ['演示账号 A', '演示账号 B', '演示账号 C'],
+      accountOrder: ['Demo A', 'Demo B', 'Demo C'],
       accountMode: 'sticky',
       activeAccount: '',
       knownModels: MODELS,
       perModel: {
+        'cline-pass/glm-5.3-flash': {
+          upstreams: ['fireworks', 'together'],
+          exclude: ['openai-compatible-private'],
+          pinMode: 'strict',
+          sort: 'ttft',
+        },
         'cline-pass/glm-5.3': {
           upstreams: ['fireworks', 'together'],
           exclude: ['novita'],
