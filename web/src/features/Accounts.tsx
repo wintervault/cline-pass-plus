@@ -12,7 +12,6 @@ import {
   Select,
   Skeleton,
   Space,
-  Tag,
   Tooltip,
   Typography,
 } from 'antd';
@@ -28,6 +27,7 @@ import { ACCOUNT_CLASS_TAG } from '../labels.ts';
 import { useFlipList } from '../motion.ts';
 import { PageHeader } from '../pageHeader.tsx';
 import { Panel, PanelHint } from '../panel.tsx';
+import { StatusChip } from '../statusChip.tsx';
 
 /**
  * 账号池是**全局**的：名称/密钥/到期/启停只在这里定义一次。
@@ -95,15 +95,19 @@ function ClassifyTag({ record }: { record: AccountClassRecord | null }) {
   return (
     <Space size={4} wrap>
       <Tooltip title={tip}>
-        <Tag color={tag.color} style={{ margin: 0 }}>
-          {t(tag.labelKey)}
-        </Tag>
+        <span>
+          <StatusChip tone={tag.tone} small>
+            {t(tag.labelKey)}
+          </StatusChip>
+        </span>
       </Tooltip>
       {record?.reason === 'quota' && (
         <Tooltip title={tip}>
-          <Tag color="magenta" style={{ margin: 0 }}>
-            {t('accounts.class.reason.quota')}
-          </Tag>
+          <span>
+            <StatusChip tone="danger" small>
+              {t('accounts.class.reason.quota')}
+            </StatusChip>
+          </span>
         </Tooltip>
       )}
     </Space>
@@ -126,20 +130,24 @@ function ExpiryTag({ expiry, expiresAt }: { expiry: ExpiryState; expiresAt: stri
   if (expiry.kind === 'expired') {
     return (
       <Tooltip title={t('accounts.expiry.expiredTip', { date: expiresAt })}>
-        <Tag color="red" style={{ margin: 0 }}>
-          {expiry.days !== null
-            ? t('accounts.expiry.expired', { days: Math.abs(expiry.days) })
-            : t('accounts.expiry.expiredOnly')}
-        </Tag>
+        <span>
+          <StatusChip tone="danger" small>
+            {expiry.days !== null
+              ? t('accounts.expiry.expired', { days: Math.abs(expiry.days) })
+              : t('accounts.expiry.expiredOnly')}
+          </StatusChip>
+        </span>
       </Tooltip>
     );
   }
   if (expiry.kind === 'soon' && expiry.days !== null) {
     return (
       <Tooltip title={t('accounts.expiry.soonTip', { date: expiresAt })}>
-        <Tag color="gold" style={{ margin: 0 }}>
-          {expiry.days === 0 ? t('accounts.expiry.today') : t('accounts.expiry.inDays', { days: expiry.days })}
-        </Tag>
+        <span>
+          <StatusChip tone="warn" small>
+            {expiry.days === 0 ? t('accounts.expiry.today') : t('accounts.expiry.inDays', { days: expiry.days })}
+          </StatusChip>
+        </span>
       </Tooltip>
     );
   }
@@ -269,20 +277,24 @@ export default function Accounts() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {/* 体检设置：判定模型是全局的（判定的是账号，不是网关） */}
         <Panel title={t('accounts.settings.title')} extra={<PanelHint>{t('accounts.settings.hint')}</PanelHint>}>
-          <div style={{ display: 'grid', gap: 8 }}>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {t('accounts.settings.model')}
-            </Typography.Text>
-            <Select
-              style={{ width: 280, fontFamily: 'var(--cps-font-mono)' }}
-              showSearch
-              value={classifyModel || undefined}
-              onChange={(v: string) => commit({ classifyModel: v }, t('accounts.note.modelChanged', { model: v }))}
-              options={classifyOptions}
-            />
-            <Typography.Text type="secondary" style={{ fontSize: 12, lineHeight: '18px' }}>
-              {t('accounts.settings.modelHint')}
-            </Typography.Text>
+          <div className="cps-field">
+            <div className="cps-field-label">
+              <span className="cps-body" style={{ color: 'var(--cps-text-secondary)' }}>
+                {t('accounts.settings.model')}
+              </span>
+            </div>
+            <div className="cps-field-body">
+              <Select
+                style={{ width: 280, fontFamily: 'var(--cps-font-mono)' }}
+                showSearch
+                value={classifyModel || undefined}
+                onChange={(v: string) => commit({ classifyModel: v }, t('accounts.note.modelChanged', { model: v }))}
+                options={classifyOptions}
+              />
+              <p className="cps-meta" style={{ margin: '6px 0 0' }}>
+                {t('accounts.settings.modelHint')}
+              </p>
+            </div>
           </div>
         </Panel>
 
@@ -354,9 +366,9 @@ export default function Accounts() {
                           <ClassifyTag record={a.classify} />
                           <ExpiryTag expiry={a.expiry} expiresAt={a.expiresAt} />
                         </div>
-                        <Typography.Text code style={{ fontSize: 12 }}>
+                        <span className="cps-data" style={{ color: 'var(--cps-text-tertiary)' }}>
                           {a.keyMasked}
-                        </Typography.Text>
+                        </span>
                       </div>
 
                       <div style={{ display: 'grid', gap: 4, justifyItems: 'end', minWidth: 118 }}>

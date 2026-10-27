@@ -9,7 +9,7 @@ import {
   StopOutlined,
 } from '@ant-design/icons';
 import { useQueryClient } from '@tanstack/react-query';
-import { Alert, Button, Card, Checkbox, Empty, Input, Skeleton, Space, Tag, Tooltip, Typography, theme } from 'antd';
+import { Alert, Button, Card, Checkbox, Empty, Input, Skeleton, Space, Tooltip, Typography, theme } from 'antd';
 import { useEffect, useState } from 'react';
 import { qk, useFetchOfficial, useModels, useProbe, useSaveModelConfig, useTest, useValidate } from '../api/hooks.ts';
 import {
@@ -29,6 +29,7 @@ import { useFlipList } from '../motion.ts';
 import { PageHeader } from '../pageHeader.tsx';
 import { Panel, PanelHint } from '../panel.tsx';
 import { RoutingGatewayPicker, useRoutingGateway } from '../routingGateway.tsx';
+import { StatusChip } from '../statusChip.tsx';
 import { RoutingFields } from './routingFields.tsx';
 
 /** 按校验状态排序的渠道列表（可用优先），供详情面板与测试台共用。 */
@@ -39,7 +40,11 @@ export function sortedUpstreams(meta: ModelMeta | null): string[] {
 
 const statusTag = (kind: UpstreamStatusKind, t: (key: MsgKey) => string) => {
   const s = STATUS_TAG[kind];
-  return <Tag color={s.color}>{t(s.labelKey)}</Tag>;
+  return (
+    <StatusChip tone={s.tone} small>
+      {t(s.labelKey)}
+    </StatusChip>
+  );
 };
 
 const fmtTime = (ts: number | null | undefined, lang: Lang): string =>
@@ -99,13 +104,13 @@ function ModelItem({
         </Tooltip>
         {/* 状态跟着 ID 同行：它是扫读这一列时最需要看到的东西 */}
         {ignored ? (
-          <Tag color="red" style={{ margin: 0, flex: '0 0 auto' }}>
+          <StatusChip tone="danger" small>
             {t('models.tag.ignored')}
-          </Tag>
+          </StatusChip>
         ) : probed ? (
-          <Tag color="geekblue" style={{ margin: 0, flex: '0 0 auto' }}>
+          <StatusChip tone="neutral" small dot={false}>
             {t('models.tag.channels', { count: meta?.upstreams?.length ?? 0 })}
-          </Tag>
+          </StatusChip>
         ) : (
           <Typography.Text type="secondary" style={{ fontSize: 12, flex: '0 0 auto' }}>
             {t('models.tag.untested')}
@@ -115,14 +120,14 @@ function ModelItem({
       {hasSecondLine && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
           {cfg.upstreams.length > 0 && (
-            <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>
+            <StatusChip tone="info" small dot={false}>
               {t('models.tag.using', { count: cfg.upstreams.length })}
-            </Tag>
+            </StatusChip>
           )}
           {cfg.exclude.length > 0 && (
-            <Tag color="red" style={{ margin: 0, flex: '0 0 auto' }}>
+            <StatusChip tone="warn" small dot={false}>
               {t('models.tag.excluded', { count: cfg.exclude.length })}
-            </Tag>
+            </StatusChip>
           )}
           {meta?.lastProvider && (
             <Typography.Text type="secondary" style={{ fontSize: 12 }} className="cps-cell-ellipsis">
@@ -235,7 +240,13 @@ function UpstreamRow({
           : undefined
       }
     >
-      <span className="cps-chain-node">{selected ? order + 1 : null}</span>
+      {/* 序号节点只属于「链上」的渠道；离线项用一个小灰点占位——
+          空心圆看起来像单选按钮，而这里根本没有可点的东西。 */}
+      {selected ? (
+        <span className="cps-chain-node">{order + 1}</span>
+      ) : (
+        <span className="cps-chain-node cps-chain-node-off" aria-hidden />
+      )}
       {selected ? (
         <button
           type="button"
@@ -272,11 +283,19 @@ function UpstreamRow({
       </Tooltip>
       {selected ? (
         <Space size={2}>
-          <Button size="small" type="text" icon={<ArrowUpOutlined />} disabled={order <= 0} onClick={() => move(-1)} />
+          <Button
+            size="small"
+            type="text"
+            icon={<ArrowUpOutlined />}
+            aria-label={t('models.upstream.moveUp')}
+            disabled={order <= 0}
+            onClick={() => move(-1)}
+          />
           <Button
             size="small"
             type="text"
             icon={<ArrowDownOutlined />}
+            aria-label={t('models.upstream.moveDown')}
             disabled={order < 0 || order >= cfg.upstreams.length - 1}
             onClick={() => move(1)}
           />
@@ -289,6 +308,7 @@ function UpstreamRow({
           size="small"
           type="text"
           icon={<StopOutlined />}
+          aria-label={excluded ? t('models.upstream.unexclude.tip') : t('models.upstream.exclude.tip')}
           style={{ color: excluded ? token.colorError : undefined }}
           onClick={toggleExclude}
         />
@@ -459,7 +479,9 @@ export default function Models() {
           </Typography.Title>
           <div style={{ display: 'grid', gap: 14 }}>
             <Space size={10}>
-              <Tag style={{ margin: 0 }}>{t('models.onboarding.step', { index: 1 })}</Tag>
+              <StatusChip tone="neutral" small dot={false}>
+                {t('models.onboarding.step', { index: 1 })}
+              </StatusChip>
               <Typography.Text>{t('models.onboarding.step1')}</Typography.Text>
               <Button
                 size="small"
@@ -469,14 +491,18 @@ export default function Models() {
               </Button>
             </Space>
             <Space size={10}>
-              <Tag style={{ margin: 0 }}>{t('models.onboarding.step', { index: 2 })}</Tag>
+              <StatusChip tone="neutral" small dot={false}>
+                {t('models.onboarding.step', { index: 2 })}
+              </StatusChip>
               <Typography.Text>{t('models.onboarding.step2')}</Typography.Text>
               <Button size="small" loading={fetchOfficial.isPending} onClick={runFetchOfficial}>
                 {t('models.onboarding.step2.action')}
               </Button>
             </Space>
             <Space size={10}>
-              <Tag style={{ margin: 0 }}>{t('models.onboarding.step', { index: 3 })}</Tag>
+              <StatusChip tone="neutral" small dot={false}>
+                {t('models.onboarding.step', { index: 3 })}
+              </StatusChip>
               <Typography.Text type="secondary">{t('models.onboarding.step3')}</Typography.Text>
             </Space>
           </div>
@@ -528,26 +554,19 @@ export default function Models() {
                 className={probe.isPending && probe.variables === current.id ? 'cps-scanning' : undefined}
                 style={{ flex: 1, minWidth: 0 }}
                 title={
-                  <>
-                    <Typography.Text
-                      code
-                      style={{
-                        fontSize: 13,
-                        minWidth: 0,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                      copyable={{ text: current.id, tooltips: [t('models.detail.copyId'), t('common.copied')] }}
-                    >
-                      {current.id}
-                    </Typography.Text>
-                    {meta?.pinnable && (
-                      <Tag color="green" style={{ margin: 0, flex: '0 0 auto' }}>
-                        {meta.pipeline === 'planner' ? t('models.pipeline.planner') : t('models.pipeline.direct')}
-                      </Tag>
-                    )}
-                  </>
+                  <Typography.Text
+                    code
+                    style={{
+                      fontSize: 13,
+                      minWidth: 0,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                    copyable={{ text: current.id, tooltips: [t('models.detail.copyId'), t('common.copied')] }}
+                  >
+                    {current.id}
+                  </Typography.Text>
                 }
                 extra={
                   <Space size={8}>
@@ -608,6 +627,12 @@ export default function Models() {
 
                   {/* 元信息行：自由折行，窄窗口下自动换行而不互相挤压 */}
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 28px', fontSize: 12 }}>
+                    {meta?.pipeline && (
+                      <span>
+                        <Typography.Text type="secondary">{t('models.meta.pipeline')} </Typography.Text>
+                        {meta.pipeline === 'planner' ? t('models.pipeline.planner') : t('models.pipeline.direct')}
+                      </span>
+                    )}
                     {meta?.canonicalSlug && (
                       <span>
                         <Typography.Text type="secondary">{t('models.meta.canonical')} </Typography.Text>
@@ -619,9 +644,7 @@ export default function Models() {
                     {meta?.lastProvider && (
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                         <Typography.Text type="secondary">{t('models.meta.lastHit')} </Typography.Text>
-                        <Tag color="geekblue" style={{ margin: 0 }}>
-                          {meta.lastProvider}
-                        </Tag>
+                        <span className="cps-mono">{meta.lastProvider}</span>
                         {meta.lastMs ? (
                           <Typography.Text type="secondary" style={{ fontVariantNumeric: 'tabular-nums' }}>
                             {meta.lastMs}ms
@@ -660,57 +683,69 @@ export default function Models() {
 
                   <div style={{ flex: 1, minHeight: 0, overflow: 'auto', overscrollBehavior: 'contain' }}>
                     {ups.length ? (
-                      <ul className="cps-chain" ref={observeRef}>
+                      <ul className="cps-observe" ref={observeRef}>
                         {ups.map((u) => {
                           const s = meta?.upstreamStatus[u];
                           const detail = meta?.upstreamDetail[u];
                           const order = cfg.upstreams.indexOf(u);
                           const excluded = cfg.exclude.includes(u);
                           const state = excluded ? 'excluded' : order >= 0 ? 'on' : 'off';
+                          const tone = s ? STATUS_TAG[s.status].tone : 'neutral';
                           return (
-                            <li key={u} className="cps-chain-row" data-flip-key={u} data-state={state}>
-                              <span className="cps-chain-node">{order >= 0 ? order + 1 : null}</span>
-                              <span style={{ width: 16 }} />
-                              <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                                <Typography.Text code style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
-                                  {u}
-                                </Typography.Text>
-                                {detail?.name && (
-                                  <Typography.Text type="secondary" style={{ fontSize: 12 }} ellipsis>
-                                    {detail.name}
-                                    {detail.endpoints !== undefined && detail.endpoints > 1
+                            <li key={u} className="cps-observe-row" data-flip-key={u} data-state={state}>
+                              <span className={`cps-dot cps-dot-${tone}`} aria-hidden />
+                              {/* 两行结构：第一行是渠道标识与状态，第二行是渠道的说明。
+                                  英文的 “Not pinnable” 比状态列宽，硬塞会把说明挤掉；
+                                  换行后两边都不再互相争宽度。 */}
+                              <div style={{ flex: 1, minWidth: 0, display: 'grid', gap: 2 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                                  <span className="cps-mono cps-cell-ellipsis" style={{ minWidth: 0 }}>
+                                    {u}
+                                  </span>
+                                  {s ? (
+                                    <Tooltip title={diagnosticText(lang, s.note) || undefined}>
+                                      <span style={{ flex: '0 0 auto' }}>
+                                        <StatusChip tone={STATUS_TAG[s.status].tone} small>
+                                          {t(STATUS_TAG[s.status].labelKey)}
+                                        </StatusChip>
+                                      </span>
+                                    </Tooltip>
+                                  ) : (
+                                    <span className="cps-meta" style={{ flex: '0 0 auto' }}>
+                                      {t('labels.upstream.unknown')}
+                                    </span>
+                                  )}
+                                </div>
+                                {(detail?.name || detail?.context) && (
+                                  <span className="cps-meta cps-cell-ellipsis">
+                                    {detail?.name}
+                                    {detail?.endpoints !== undefined && detail.endpoints > 1
                                       ? ` ×${detail.endpoints}`
                                       : ''}
-                                  </Typography.Text>
+                                    {detail?.context
+                                      ? ` · ${t('playground.channel.context', { k: Math.round(detail.context / 1000) })}`
+                                      : ''}
+                                  </span>
                                 )}
-                                {detail?.context ? (
-                                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                                    {t('playground.channel.context', { k: Math.round(detail.context / 1000) })}
-                                  </Typography.Text>
-                                ) : null}
                               </div>
-                              {s ? (
-                                <Tooltip title={diagnosticText(lang, s.note) || undefined}>
-                                  {statusTag(s.status, t)}
-                                </Tooltip>
-                              ) : (
-                                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                                  {t('labels.upstream.unknown')}
-                                </Typography.Text>
-                              )}
-                              <Typography.Text
-                                type="secondary"
-                                style={{ width: 64, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
+                              <span
+                                className="cps-num"
+                                style={{
+                                  width: 58,
+                                  textAlign: 'right',
+                                  flex: '0 0 auto',
+                                  color: 'var(--cps-text-tertiary)',
+                                }}
                               >
                                 {s?.ms != null ? `${s.ms} ms` : '—'}
-                              </Typography.Text>
-                              <Typography.Text type="secondary" style={{ fontSize: 12, width: 76 }}>
+                              </span>
+                              <span className="cps-meta" style={{ width: 64, textAlign: 'right', flex: '0 0 auto' }}>
                                 {state === 'on'
                                   ? t('models.observe.inRoute')
                                   : state === 'excluded'
                                     ? t('models.observe.excluded')
                                     : t('models.observe.notUsed')}
-                              </Typography.Text>
+                              </span>
                             </li>
                           );
                         })}

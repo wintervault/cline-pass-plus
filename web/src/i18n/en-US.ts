@@ -134,6 +134,7 @@ const enUS: Record<keyof typeof zhCN, string> = {
   'statusbar.notReady': 'Not ready',
   'statusbar.theme.dark': 'Switch to light',
   'statusbar.theme.light': 'Switch to dark',
+  'statusbar.theme.switch': 'Switch theme',
   'statusbar.refresh': 'Refresh all data',
 
   // ---------------- Title bar ----------------
@@ -217,6 +218,7 @@ const enUS: Record<keyof typeof zhCN, string> = {
   'models.meta.lastHit': 'Last hit',
   'models.meta.tier0': 'tier-0',
   'models.meta.listSeparator': ', ',
+  'models.meta.pipeline': 'Pipeline',
   'models.meta.probed': 'Probed',
   'models.meta.validated': ' · Validated',
   'models.chain.title': 'Channel priority',
@@ -239,6 +241,8 @@ const enUS: Record<keyof typeof zhCN, string> = {
   'models.routing.gateway': 'Managed gateway',
   'models.routing.hint': 'Changes save immediately',
   'models.upstream.use': 'Use',
+  'models.upstream.moveUp': 'Move up',
+  'models.upstream.moveDown': 'Move down',
   'models.upstream.use.tip': 'Add to the channel list: tried in order, next one used automatically on failure',
   'models.upstream.exclude.tip': 'Exclude: never used, not even as a gateway fallback',
   'models.upstream.unexclude.tip': 'Remove exclusion',
@@ -407,6 +411,9 @@ const enUS: Record<keyof typeof zhCN, string> = {
   'gateways.mode.sticky': 'Sticky (recommended)',
   'gateways.mode.single': 'Single account',
   'gateways.mode.roundrobin': 'Rotate per request',
+  'gateways.modeShort.sticky': 'Sticky',
+  'gateways.modeShort.single': 'Single',
+  'gateways.modeShort.roundrobin': 'Rotate',
   'gateways.mode.hint.sticky':
     'Keep using the current account; rotate only on account-level errors such as an invalid key or exhausted quota',
   'gateways.mode.hint.single': 'Always use the account you pick',
@@ -448,11 +455,15 @@ const enUS: Record<keyof typeof zhCN, string> = {
   'playground.routing.title': 'Current routing policy for this model',
   'playground.routing.gateway': 'Managed gateway',
   'playground.account.label': 'Detect as',
-  'playground.routing.strict': 'Strict: only the listed channels; routing elsewhere counts as a failure',
+  'playground.routing.strict': 'Strict: listed channels only; routing elsewhere fails',
   'playground.routing.preferred':
     'Prefer + fallback: try each candidate strictly, let the gateway choose only for the last one',
   'playground.routing.empty':
+    'This gateway has no channel list for the model yet; you can start from the channels this account probed',
+  'playground.routing.emptyNoProbe':
     'No channels probed for this model yet — probe them on the Models page and the candidates will show up here',
+  'playground.routing.useProbed': 'Use probed channels',
+  'playground.note.useProbed': 'Added {count} probed channels',
   'playground.col.order': 'Order',
   'playground.col.channel': 'Channel',
   'playground.col.health': 'Health',
@@ -474,8 +485,9 @@ const enUS: Record<keyof typeof zhCN, string> = {
     'The local channel list does not match what the gateway actually offers; the degraded strategy was used',
   'playground.result.copy': 'Copy test result',
   'playground.result.copy.tip': 'Copy the full result, including every attempt',
+  'playground.result.emptyTitle': 'No test result yet',
   'playground.result.empty':
-    'No result yet — press "Send test" to make one real request (uses a minimal amount). The result and the candidate attempt sequence appear here.',
+    'Press "Send test" to make one real request (uses a minimal amount of quota). The result and the candidate attempt sequence appear here.',
   'playground.result.error': 'Request failed: {error}',
   'playground.result.unknownError': 'Unknown error',
   'playground.desc.actual': 'Actual channel',
@@ -523,7 +535,7 @@ const enUS: Record<keyof typeof zhCN, string> = {
   'history.col.gateway': 'Gateway',
   'history.col.model': 'Model',
   'history.col.account': 'Account',
-  'history.col.provider': 'Actual channel',
+  'history.col.provider': 'Channel',
   'history.col.ms': 'Latency',
   'history.col.mode': 'Mode',
   'history.col.trace': 'Attempts',

@@ -9,7 +9,6 @@ import {
   Skeleton,
   Space,
   Table,
-  Tag,
   Tooltip,
   Typography,
   theme,
@@ -23,6 +22,7 @@ import { diagnosticText } from '../i18n/codes.ts';
 import { type MsgKey, useI18n } from '../i18n/index.tsx';
 import { PageHeader } from '../pageHeader.tsx';
 import { Panel } from '../panel.tsx';
+import { StatusChip } from '../statusChip.tsx';
 
 /** 自动刷新间隔（毫秒）；0 = 关闭。 */
 const REFRESH_OPTIONS: Array<{ value: number; labelKey: MsgKey }> = [
@@ -122,12 +122,12 @@ function TraceChain({ trace, attempts }: { trace?: TraceEntry[]; attempts: strin
 
 function Stat({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
-    <Space size={8} align="baseline">
-      <Typography.Text style={{ fontSize: 18, fontWeight: 600, color: tone }}>{value}</Typography.Text>
-      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-        {label}
-      </Typography.Text>
-    </Space>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 64 }}>
+      <span className="cps-stat-value" style={{ color: tone }}>
+        {value}
+      </span>
+      <span className="cps-label">{label}</span>
+    </div>
   );
 }
 
@@ -188,16 +188,19 @@ export default function History() {
           className="cps-fade-in"
           flush
           title={
-            <Space size={32} wrap>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
               <Stat label={t('history.stat.ok')} value={String(okRows.length)} tone={token.colorSuccess} />
+              <span className="cps-stat-sep" aria-hidden />
               <Stat
                 label={t('history.stat.failed')}
                 value={String(failed)}
                 tone={failed ? token.colorError : undefined}
               />
+              <span className="cps-stat-sep" aria-hidden />
               <Stat label={t('history.stat.avg')} value={`${avgMs}ms`} />
+              <span className="cps-stat-sep" aria-hidden />
               <Stat label={t('history.stat.stream')} value={`${streamPct}%`} />
-            </Space>
+            </div>
           }
           extra={
             /* 刷新控制：手动一次 / 按间隔自动（失败排查时开着它最省事） */
@@ -206,6 +209,7 @@ export default function History() {
                 <Button
                   size="small"
                   icon={<ReloadOutlined spin={history.isFetching} />}
+                  aria-label={t('history.refresh')}
                   onClick={() => {
                     void history.refetch().then((r) => {
                       if (r.isError) fb.fail(t('history.refreshFailed'), r.error);
@@ -265,7 +269,7 @@ export default function History() {
               emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('history.empty')} />,
             }}
             pagination={{ pageSize: 20, hideOnSinglePage: true, showSizeChanger: false }}
-            onRow={(r) => ({ style: r.error ? { background: token.colorErrorBg } : undefined })}
+            onRow={(r) => ({ className: r.error ? 'cps-row-error' : undefined })}
             columns={[
               {
                 title: t('history.col.time'),
@@ -306,31 +310,23 @@ export default function History() {
                 title: t('history.col.provider'),
                 width: 112,
                 render: (_, r) => (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                     {r.provider ? (
                       <Tooltip title={r.provider}>
-                        <Tag
-                          color="geekblue"
-                          style={{
-                            margin: 0,
-                            flex: '0 1 auto',
-                            minWidth: 0,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
+                        <span className="cps-mono cps-cell-ellipsis" style={{ color: 'var(--cps-text-secondary)' }}>
                           {r.provider}
-                        </Tag>
+                        </span>
                       </Tooltip>
                     ) : (
-                      '—'
+                      <Typography.Text type="secondary">—</Typography.Text>
                     )}
                     {r.pinMismatch && (
                       <Tooltip title={t('history.pinMismatch')}>
-                        <Tag color="red" style={{ margin: 0, flex: '0 0 auto' }}>
-                          {t('history.pinMismatch.tag')}
-                        </Tag>
+                        <span style={{ flex: '0 0 auto' }}>
+                          <StatusChip tone="danger" small dot={false}>
+                            {t('history.pinMismatch.tag')}
+                          </StatusChip>
+                        </span>
                       </Tooltip>
                     )}
                   </div>

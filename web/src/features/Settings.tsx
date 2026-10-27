@@ -8,7 +8,6 @@ import {
   Popconfirm,
   Space,
   Switch,
-  Tag,
   Tooltip,
   Typography,
   theme,
@@ -23,6 +22,7 @@ import { getHostBridge, type HostInfo } from '../hostBridge.ts';
 import { type MsgKey, useI18n } from '../i18n/index.tsx';
 import { PageHeader } from '../pageHeader.tsx';
 import { Panel } from '../panel.tsx';
+import { type ChipTone, StatusChip } from '../statusChip.tsx';
 
 /**
  * 设置页：只放「不属于账号、也不属于某个网关」的东西。
@@ -36,10 +36,10 @@ import { Panel } from '../panel.tsx';
 /** 项目仓库地址（「关于」与桌面壳的打开动作共用同一份）。 */
 const REPO_URL = 'https://github.com/wintervault/cline-pass-plus';
 
-const STATE_TAG: Record<ConsoleStatus['state'], { color: string; key: MsgKey }> = {
-  running: { color: 'green', key: 'settings.console.state.running' },
-  error: { color: 'red', key: 'settings.console.state.error' },
-  stopped: { color: 'default', key: 'settings.console.state.stopped' },
+const STATE_TAG: Record<ConsoleStatus['state'], { tone: ChipTone; key: MsgKey }> = {
+  running: { tone: 'ok', key: 'settings.console.state.running' },
+  error: { tone: 'danger', key: 'settings.console.state.error' },
+  stopped: { tone: 'neutral', key: 'settings.console.state.stopped' },
 };
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -162,9 +162,9 @@ function ConsolePanel() {
               label: t('settings.console.state'),
               children: (
                 <Space size={8} wrap>
-                  <Tag color={tag.color} style={{ margin: 0 }}>
+                  <StatusChip tone={tag.tone} small>
                     {t(tag.key)}
-                  </Tag>
+                  </StatusChip>
                   {status.state === 'running' && status.boundPort ? (
                     <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                       {`${status.boundHost ?? '127.0.0.1'}:${status.boundPort}`}
@@ -184,9 +184,9 @@ function ConsolePanel() {
               key: 'key',
               label: t('settings.console.key'),
               children: (
-                <Tag color={data?.hasProxyKey ? 'green' : 'default'} style={{ margin: 0 }}>
+                <StatusChip tone={data?.hasProxyKey ? 'ok' : 'neutral'} small>
                   {data?.hasProxyKey ? t('settings.console.keySet') : t('settings.console.keyUnset')}
-                </Tag>
+                </StatusChip>
               ),
             },
           ]}
@@ -370,45 +370,40 @@ function AboutPanel() {
   const host = getHostBridge();
   return (
     <Panel title={t('settings.about.title')}>
-      <Descriptions
-        size="small"
-        column={1}
-        items={[
-          {
-            key: 'version',
-            label: t('settings.about.version'),
-            children: <span className="cps-mono">v{meta.data?.version ?? '…'}</span>,
-          },
-          {
-            key: 'repo',
-            label: t('settings.about.repo'),
-            children: (
-              <Typography.Link
-                href={REPO_URL}
-                target="_blank"
-                rel="noreferrer"
-                onClick={(e) => {
-                  /*
-                   * 控制台在桌面壳里是外部 WebView，target=_blank 不会被处理
-                   * （点击看起来毫无反应）。壳把「用系统浏览器打开仓库」暴露成
-                   * 控制通道动作；浏览器直开时仍走普通链接。
-                   */
-                  if (!host?.openRepo) return;
-                  e.preventDefault();
-                  void host.openRepo().catch(() => {});
-                }}
-              >
-                wintervault/cline-pass-plus
-              </Typography.Link>
-            ),
-          },
-          {
-            key: 'license',
-            label: t('settings.about.license'),
-            children: 'MIT',
-          },
-        ]}
-      />
+      {/* 关于只是三行事实，不值得占一块表单的高度：压成一行，按「标签 + 值」排列。 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap', rowGap: 8 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8 }}>
+          <span className="cps-meta">{t('settings.about.version')}</span>
+          <span className="cps-mono" style={{ color: 'var(--cps-text)' }}>
+            v{meta.data?.version ?? '…'}
+          </span>
+        </span>
+        <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8 }}>
+          <span className="cps-meta">{t('settings.about.repo')}</span>
+          <Typography.Link
+            href={REPO_URL}
+            target="_blank"
+            rel="noreferrer"
+            style={{ fontSize: 12 }}
+            onClick={(e) => {
+              /*
+               * 控制台在桌面壳里是外部 WebView，target=_blank 不会被处理
+               * （点击看起来毫无反应）。壳把「用系统浏览器打开仓库」暴露成
+               * 控制通道动作；浏览器直开时仍走普通链接。
+               */
+              if (!host?.openRepo) return;
+              e.preventDefault();
+              void host.openRepo().catch(() => {});
+            }}
+          >
+            wintervault/cline-pass-plus
+          </Typography.Link>
+        </span>
+        <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8 }}>
+          <span className="cps-meta">{t('settings.about.license')}</span>
+          <span className="cps-body">MIT</span>
+        </span>
+      </div>
     </Panel>
   );
 }

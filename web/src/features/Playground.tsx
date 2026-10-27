@@ -15,7 +15,6 @@ import {
   Space,
   Switch,
   Table,
-  Tag,
   Tooltip,
   Typography,
 } from 'antd';
@@ -37,6 +36,7 @@ import { STATUS_TAG } from '../labels.ts';
 import { PageHeader } from '../pageHeader.tsx';
 import { Panel, PanelHint } from '../panel.tsx';
 import { RoutingGatewayPicker, useRoutingGateway } from '../routingGateway.tsx';
+import { StatusChip } from '../statusChip.tsx';
 import { RoutingFields } from './routingFields.tsx';
 
 /**
@@ -102,8 +102,25 @@ function RoutingPanel({ model, cfg, meta }: { model: string; cfg: PerModelConfig
       <RoutingFields cfg={cfg} onChange={patch} />
       {rows.length === 0 ? (
         <div className="cps-notice" style={{ marginTop: 12 }}>
-          <ExclamationCircleFilled style={{ color: 'var(--ant-color-warning-text)' }} />
-          <span>{t('playground.routing.empty')}</span>
+          <ExclamationCircleFilled style={{ color: 'var(--cps-warn-fg)' }} />
+          <span>
+            {(meta?.upstreams?.length ?? 0) > 0 ? t('playground.routing.empty') : t('playground.routing.emptyNoProbe')}
+          </span>
+          {(meta?.upstreams?.length ?? 0) > 0 && (
+            <Button
+              size="small"
+              type="link"
+              style={{ paddingInline: 2, height: 'auto' }}
+              onClick={() =>
+                patch(
+                  { upstreams: [...(meta?.upstreams ?? [])], exclude: [] },
+                  t('playground.note.useProbed', { count: meta?.upstreams?.length ?? 0 }),
+                )
+              }
+            >
+              {t('playground.routing.useProbed')}
+            </Button>
+          )}
         </div>
       ) : (
         <Table
@@ -156,9 +173,11 @@ function RoutingPanel({ model, cfg, meta }: { model: string; cfg: PerModelConfig
                 const tag = STATUS_TAG[s.status];
                 return (
                   <Tooltip title={diagnosticText(lang, s.note) || undefined}>
-                    <Tag color={tag.color} style={{ margin: 0 }}>
-                      {t(tag.labelKey)}
-                    </Tag>
+                    <span>
+                      <StatusChip tone={tag.tone} small>
+                        {t(tag.labelKey)}
+                      </StatusChip>
+                    </span>
                   </Tooltip>
                 );
               },
@@ -341,7 +360,7 @@ export default function Playground() {
     (!result.targets.length || result.actual === result.targets[0] || result.actualName === result.targets[0]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, height: '100%' }}>
       <PageHeader
         title={t('playground.title')}
         desc={t('playground.desc')}
@@ -406,27 +425,38 @@ export default function Playground() {
 
       {active && <RoutingPanel model={active} cfg={cfg} meta={activeRow?.meta ?? null} />}
 
-      {/* 结果区：始终在位（空态也属于这块区域），避免「点完才长出一块」的跳动 */}
+      {/* 结果区：始终在位（空态也属于这块区域），避免「点完才长出一块」的跳动。
+          它吃满剩余高度——结果区是这一页的终点，空着也应该是一块完整的区域。 */}
       <Panel
+        style={{ flex: '1 1 auto', minHeight: 140 }}
+        bodyStyle={!result ? { display: 'flex', alignItems: 'center', justifyContent: 'center' } : undefined}
         title={
           result ? (
             <Space size={8}>
               {result.ok ? (
-                <Tag color="green">{t('playground.result.success')}</Tag>
+                <StatusChip tone="ok" small>
+                  {t('playground.result.success')}
+                </StatusChip>
               ) : (
-                <Tag color="red">{t('playground.result.failed')}</Tag>
+                <StatusChip tone="danger" small>
+                  {t('playground.result.failed')}
+                </StatusChip>
               )}
               <Typography.Text code style={{ fontSize: 13 }}>
                 {active}
               </Typography.Text>
               {result.ok && (
-                <Tag color={hit ? 'green' : 'orange'}>
+                <StatusChip tone={hit ? 'ok' : 'warn'} small dot={false}>
                   {hit ? t('playground.result.hit') : t('playground.result.miss')}
-                </Tag>
+                </StatusChip>
               )}
               {result.degraded && (
                 <Tooltip title={t('playground.result.degraded.tip')}>
-                  <Tag color="gold">{t('playground.result.degraded')}</Tag>
+                  <span>
+                    <StatusChip tone="warn" small>
+                      {t('playground.result.degraded')}
+                    </StatusChip>
+                  </span>
                 </Tooltip>
               )}
             </Space>
@@ -454,12 +484,16 @@ export default function Playground() {
         }
       >
         {!result ? (
-          /* 空态压成一行。占满一块的 antd Empty（大插图 + 两行字）让这一页在
-             默认窗口下几乎顶到滚动条——空态本来只是「还没测过」这一句，
-             没有资格占掉一百多像素。 */
-          <div className="cps-notice">
-            <InfoCircleOutlined style={{ color: 'var(--ant-color-text-tertiary)' }} />
-            <span>{t('playground.result.empty')}</span>
+          /* 空态是一块安静的「目的地」：一个图标、一句标题、一句怎么做。
+             不占满、不插图，也不在点完之后才长出这一块。 */
+          <div style={{ display: 'grid', justifyItems: 'center', gap: 6, textAlign: 'center', padding: '28px 0' }}>
+            <InfoCircleOutlined style={{ fontSize: 20, color: 'var(--cps-text-quaternary)', marginBottom: 2 }} />
+            <span className="cps-body" style={{ color: 'var(--cps-text-secondary)', fontWeight: 500 }}>
+              {t('playground.result.emptyTitle')}
+            </span>
+            <span className="cps-meta" style={{ maxWidth: 460 }}>
+              {t('playground.result.empty')}
+            </span>
           </div>
         ) : !result.ok ? (
           <Alert

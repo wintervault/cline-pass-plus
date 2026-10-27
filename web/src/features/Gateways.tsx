@@ -12,7 +12,6 @@ import {
   Skeleton,
   Space,
   Switch,
-  Tag,
   Tooltip,
   Typography,
 } from 'antd';
@@ -25,6 +24,7 @@ import { type MsgKey, useI18n } from '../i18n/index.tsx';
 import { useFlipList } from '../motion.ts';
 import { PageHeader } from '../pageHeader.tsx';
 import { Panel, PanelHint } from '../panel.tsx';
+import { type ChipTone, StatusChip } from '../statusChip.tsx';
 
 /**
  * 网关 = 一个独立的接入面（端口 + 密钥 + 账号子集 + 账号策略 + 模型清单与路由配置）。
@@ -33,11 +33,11 @@ import { Panel, PanelHint } from '../panel.tsx';
  * 本来就是接入面的属性，多网关后只能按网关编辑——单独一页会立刻变成「编辑的是哪一个」。
  */
 
-const STATE_TAG: Record<GatewayView['status']['state'], { color: string; labelKey: MsgKey }> = {
-  running: { color: 'green', labelKey: 'gateways.state.running' },
-  error: { color: 'red', labelKey: 'gateways.state.error' },
-  stopped: { color: 'default', labelKey: 'gateways.state.stopped' },
-  disabled: { color: 'default', labelKey: 'gateways.state.disabled' },
+const STATE_TAG: Record<GatewayView['status']['state'], { tone: ChipTone; labelKey: MsgKey }> = {
+  running: { tone: 'ok', labelKey: 'gateways.state.running' },
+  error: { tone: 'danger', labelKey: 'gateways.state.error' },
+  stopped: { tone: 'neutral', labelKey: 'gateways.state.stopped' },
+  disabled: { tone: 'neutral', labelKey: 'gateways.state.disabled' },
 };
 
 const ACCOUNT_MODE_OPTIONS: Array<{ value: AccountMode; labelKey: MsgKey }> = [
@@ -54,6 +54,12 @@ const MODE_HINT: Record<AccountMode, MsgKey> = {
 
 const ADVANCED_KEY = 'cps_gateway_advanced';
 
+const MODE_SHORT: Record<AccountMode, MsgKey> = {
+  sticky: 'gateways.modeShort.sticky',
+  single: 'gateways.modeShort.single',
+  roundrobin: 'gateways.modeShort.roundrobin',
+};
+
 /** 账号范围四选一（顺序按用户习惯：正常 / 风控 / 全部 / 自选）。 */
 const SCOPE_OPTIONS: Array<{ value: AccountScope; labelKey: MsgKey }> = [
   { value: 'normal', labelKey: 'gateways.scope.normal' },
@@ -62,10 +68,10 @@ const SCOPE_OPTIONS: Array<{ value: AccountScope; labelKey: MsgKey }> = [
   { value: 'custom', labelKey: 'gateways.scope.custom' },
 ];
 
-const CLASS_TAG: Record<'normal' | 'private' | 'unknown', { color: string; labelKey: MsgKey }> = {
-  normal: { color: 'green', labelKey: 'labels.class.normal' },
-  private: { color: 'orange', labelKey: 'labels.class.private' },
-  unknown: { color: 'default', labelKey: 'labels.class.unknown' },
+const CLASS_TAG: Record<'normal' | 'private' | 'unknown', { tone: ChipTone; labelKey: MsgKey }> = {
+  normal: { tone: 'ok', labelKey: 'labels.class.normal' },
+  private: { tone: 'warn', labelKey: 'labels.class.private' },
+  unknown: { tone: 'neutral', labelKey: 'labels.class.unknown' },
 };
 
 /** 新网关的标识：默认模式下用户不用填，自动生成合法 slug。 */
@@ -240,6 +246,7 @@ function GatewayRow({
 }) {
   const { t } = useI18n();
   const state = STATE_TAG[gateway.status.state];
+  const modeKey = MODE_SHORT[gateway.accountMode] ?? 'gateways.modeShort.sticky';
   return (
     <div className="cps-list-row" data-flip-key={gateway.id}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, width: '100%' }}>
@@ -247,10 +254,14 @@ function GatewayRow({
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <Typography.Text strong>{gateway.name}</Typography.Text>
             <Tooltip title={gateway.status.error ?? undefined}>
-              <Tag color={state.color} style={{ margin: 0 }}>
-                {t(state.labelKey)}
-                {gateway.status.state === 'running' && gateway.status.boundPort ? ` :${gateway.status.boundPort}` : ''}
-              </Tag>
+              <span>
+                <StatusChip tone={state.tone} small>
+                  {t(state.labelKey)}
+                  {gateway.status.state === 'running' && gateway.status.boundPort
+                    ? ` :${gateway.status.boundPort}`
+                    : ''}
+                </StatusChip>
+              </span>
             </Tooltip>
             {gateway.accountState.code === 'empty_scope' && gateway.status.state !== 'disabled' && (
               <Tooltip
@@ -259,16 +270,20 @@ function GatewayRow({
                   total: gateway.accountState.usableTotal,
                 })}
               >
-                <Tag color="warning" style={{ margin: 0 }}>
-                  {t('gateways.accountState.empty_scope')}
-                </Tag>
+                <span>
+                  <StatusChip tone="warn" small>
+                    {t('gateways.accountState.empty_scope')}
+                  </StatusChip>
+                </span>
               </Tooltip>
             )}
             {gateway.accountState.code === 'no_accounts' && gateway.status.state !== 'disabled' && (
               <Tooltip title={t('gateways.accountState.no_accounts.tip')}>
-                <Tag color="warning" style={{ margin: 0 }}>
-                  {t('gateways.accountState.no_accounts')}
-                </Tag>
+                <span>
+                  <StatusChip tone="warn" small>
+                    {t('gateways.accountState.no_accounts')}
+                  </StatusChip>
+                </span>
               </Tooltip>
             )}
             {gateway.status.state === 'error' && (
@@ -278,6 +293,12 @@ function GatewayRow({
             )}
           </div>
           <Space size={16} wrap>
+            <StatusChip tone="neutral" small dot={false}>
+              {t(`gateways.scope.${gateway.accountScope}` as MsgKey)}
+            </StatusChip>
+            <StatusChip tone="neutral" small dot={false}>
+              {t(modeKey)}
+            </StatusChip>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               {gateway.id}
             </Typography.Text>
@@ -677,9 +698,9 @@ export default function Gateways() {
                         <Typography.Text style={{ flex: 1, minWidth: 0 }} ellipsis>
                           {name}
                         </Typography.Text>
-                        <Tag color={tag.color} style={{ margin: 0 }}>
+                        <StatusChip tone={tag.tone} small>
                           {t(tag.labelKey)}
-                        </Tag>
+                        </StatusChip>
                         <Button
                           size="small"
                           type="text"

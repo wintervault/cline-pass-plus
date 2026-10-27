@@ -1,5 +1,5 @@
 import { SearchOutlined } from '@ant-design/icons';
-import { Alert, App, Button, Empty, Input, Skeleton, Space, Table, Tag, Tooltip, Typography } from 'antd';
+import { Alert, App, Button, Empty, Input, Skeleton, Space, Table, Tooltip, Typography } from 'antd';
 import { useState } from 'react';
 
 import { useModels, useProbe } from '../api/hooks.ts';
@@ -8,6 +8,7 @@ import { DetectionAccountPicker, useDetectionAccount } from '../detectionScope.t
 import { useI18n } from '../i18n/index.tsx';
 import { PageHeader } from '../pageHeader.tsx';
 import { Panel } from '../panel.tsx';
+import { StatusChip } from '../statusChip.tsx';
 
 /** 本页探测的结果（失败也留痕）。目录模型多半不在订阅清单里，结果就地展示，不再「存了却无处可看」。 */
 interface ProbeOutcome {
@@ -25,9 +26,11 @@ function ProbeTags({ p }: { p: ProbeOutcome }) {
   if (!p.ok) {
     return (
       <Tooltip title={p.error}>
-        <Tag color="red" style={{ margin: 0 }}>
-          {t('catalog.probe.failed')}
-        </Tag>
+        <span>
+          <StatusChip tone="danger" small>
+            {t('catalog.probe.failed')}
+          </StatusChip>
+        </span>
       </Tooltip>
     );
   }
@@ -35,25 +38,35 @@ function ProbeTags({ p }: { p: ProbeOutcome }) {
   const shown = ups.slice(0, 3);
   return (
     <Space size={4} wrap>
-      <Tag color="green" style={{ margin: 0 }}>
+      <StatusChip tone="info" small dot={false}>
         {p.pipeline === 'planner' ? t('models.pipeline.planner') : t('models.pipeline.direct')}
-      </Tag>
+      </StatusChip>
       {shown.map((u) => (
-        <Tag key={u} color="geekblue" style={{ margin: 0 }}>
-          {u}
-        </Tag>
+        <StatusChip key={u} tone="neutral" small dot={false}>
+          <span className="cps-mono">{u}</span>
+        </StatusChip>
       ))}
       {ups.length > shown.length && (
         <Tooltip title={ups.join(t('models.meta.listSeparator'))}>
-          <Tag style={{ margin: 0 }}>+{ups.length - shown.length}</Tag>
+          <span>
+            <StatusChip tone="neutral" small dot={false}>
+              +{ups.length - shown.length}
+            </StatusChip>
+          </span>
         </Tooltip>
       )}
-      {ups.length === 0 && <Tag style={{ margin: 0 }}>{t('catalog.noChannel')}</Tag>}
+      {ups.length === 0 && (
+        <StatusChip tone="neutral" small dot={false}>
+          {t('catalog.noChannel')}
+        </StatusChip>
+      )}
       {p.pinState === 'ignored' && (
         <Tooltip title={t('catalog.pinIgnored.tip')}>
-          <Tag color="orange" style={{ margin: 0 }}>
-            {t('models.tag.ignored')}
-          </Tag>
+          <span>
+            <StatusChip tone="warn" small>
+              {t('models.tag.ignored')}
+            </StatusChip>
+          </span>
         </Tooltip>
       )}
     </Space>
@@ -173,9 +186,13 @@ export default function Catalog() {
                   const p = probes[`${activeAccount}|${id}`];
                   if (!p) {
                     return id.includes(':free') ? (
-                      <Tag color="green">{t('catalog.type.free')}</Tag>
+                      <StatusChip tone="ok" small dot={false}>
+                        {t('catalog.type.free')}
+                      </StatusChip>
                     ) : (
-                      <Tag>{t('catalog.type.planner')}</Tag>
+                      <StatusChip tone="neutral" small dot={false}>
+                        {t('catalog.type.planner')}
+                      </StatusChip>
                     );
                   }
                   return <ProbeTags p={p} />;
