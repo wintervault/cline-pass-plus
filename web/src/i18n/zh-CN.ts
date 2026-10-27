@@ -155,7 +155,7 @@ const zhCN = {
   'routing.note.sort': '渠道排序偏好已改为「{name}」',
   // ---------------- 订阅模型 ----------------
   'models.title': '订阅模型',
-  'models.desc': '先「探测渠道」列出可用渠道，勾选「使用」并排好顺序；「校验」逐渠道体检可用性。',
+  'models.desc': '探测可用渠道；勾选「使用」并排序，「校验」逐个渠道体检。',
   'models.pull': '拉取官方最新模型',
   'models.official.last': '上次拉取：{time}（来源 {sources}，新增 {added}）',
   'models.official.none': '还没有拉取过官方清单',

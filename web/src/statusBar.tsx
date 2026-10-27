@@ -94,7 +94,11 @@ function Field({
       <span className="cps-label" style={{ flex: '0 0 auto' }}>
         {label}
       </span>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>{children}</div>
+      <div
+        style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: flexible ? '1 1 auto' : undefined }}
+      >
+        {children}
+      </div>
     </div>
   );
 }
@@ -110,7 +114,6 @@ function GatewayCluster({ gateway, onOpenGateways }: { gateway: GatewayView | un
       <Tooltip title={gateway.status.error ?? undefined}>
         <StatusChip tone={GATEWAY_TONE[gateway.status.state]} small>
           {t(GATEWAY_KEY[gateway.status.state])}
-          {gateway.status.state === 'running' && gateway.status.boundPort ? ` :${gateway.status.boundPort}` : ''}
         </StatusChip>
       </Tooltip>
       {account.code === 'no_accounts' && (
@@ -137,11 +140,13 @@ function GatewayCluster({ gateway, onOpenGateways }: { gateway: GatewayView | un
           size="small"
           type="text"
           icon={gateway.hasProxyKey ? <LockOutlined /> : <KeyOutlined />}
-          style={{ fontSize: 12, color: 'var(--cps-text-tertiary)', paddingInline: 4 }}
+          aria-label={gateway.hasProxyKey ? t('statusbar.key.set') : t('statusbar.key.unset')}
+          style={{
+            paddingInline: 4,
+            color: gateway.hasProxyKey ? 'var(--cps-text-tertiary)' : 'var(--cps-warn-fg)',
+          }}
           onClick={onOpenGateways}
-        >
-          {gateway.hasProxyKey ? t('statusbar.key.set') : t('statusbar.key.unset')}
-        </Button>
+        />
       </Tooltip>
     </>
   );
@@ -189,7 +194,7 @@ function ServiceCluster({ control }: { control: HostControl }) {
             icon={<PauseCircleOutlined />}
             loading={busy}
             onClick={() => void control.stop()}
-            style={{ color: 'var(--cps-text-secondary)' }}
+            style={{ color: 'var(--cps-text-secondary)', paddingInline: 6 }}
           >
             {t('service.action.stopShort')}
           </Button>
@@ -199,7 +204,7 @@ function ServiceCluster({ control }: { control: HostControl }) {
             icon={<SyncOutlined />}
             loading={busy}
             onClick={() => void control.restart()}
-            style={{ color: 'var(--cps-text-secondary)' }}
+            style={{ color: 'var(--cps-text-secondary)', paddingInline: 6 }}
           >
             {t('service.action.restartShort')}
           </Button>
@@ -255,8 +260,8 @@ export function StatusBar({
         display: 'flex',
         flexWrap: 'nowrap',
         alignItems: 'center',
-        gap: 10,
-        padding: '0 16px',
+        gap: 8,
+        padding: '0 14px',
         background: 'var(--cps-rail)',
         borderTop: '1px solid var(--cps-border)',
         overflowX: 'auto',
@@ -290,7 +295,9 @@ export function StatusBar({
             ellipsis={{ tooltip: picked.proxyBase }}
             copyable={{ text: picked.proxyBase, tooltips: [t('statusbar.address.copy'), t('common.copied')] }}
             className="cps-data"
-            style={{ maxWidth: 320 }}
+            /* 必须 minWidth:0：flex 子项的默认 min-width 是内容宽度，地址不会缩，
+               会直接压到右边的状态芯片上（英文界面实测重叠）。 */
+            style={{ maxWidth: 320, minWidth: 0, flex: '1 1 auto' }}
           >
             {picked.proxyBase}
           </Typography.Text>
@@ -312,7 +319,7 @@ export function StatusBar({
       </div>
 
       <Space size={2} style={{ marginLeft: 'auto', flex: '0 0 auto' }}>
-        <span className="cps-data" style={{ fontSize: 11.5, color: 'var(--cps-text-tertiary)', marginRight: 4 }}>
+        <span className="cps-data" style={{ fontSize: 11.5, color: 'var(--cps-text-tertiary)' }}>
           v{version ?? '…'}
         </span>
         {/*

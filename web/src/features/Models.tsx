@@ -133,7 +133,8 @@ function ModelItem({
             <Typography.Text type="secondary" style={{ fontSize: 12 }} className="cps-cell-ellipsis">
               {t('models.item.last', {
                 provider: meta.lastProvider,
-                suffix: meta.lastMs ? t('models.item.lastSuffix', { ms: meta.lastMs }) : '',
+                /* 列表里不重复毫秒：它属于右侧详情的元信息，放这里只会和两个计数芯片抢宽度 */
+                suffix: '',
               })}
             </Typography.Text>
           )}
@@ -711,8 +712,10 @@ export default function Models() {
                                       </span>
                                     </Tooltip>
                                   ) : (
-                                    <span className="cps-meta" style={{ flex: '0 0 auto' }}>
-                                      {t('labels.upstream.unknown')}
+                                    <span style={{ flex: '0 0 auto' }}>
+                                      <StatusChip tone="neutral" small>
+                                        {t('labels.upstream.unknown')}
+                                      </StatusChip>
                                     </span>
                                   )}
                                 </div>

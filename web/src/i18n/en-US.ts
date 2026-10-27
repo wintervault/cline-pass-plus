@@ -114,7 +114,7 @@ const enUS: Record<keyof typeof zhCN, string> = {
   // ---------------- Status bar ----------------
   'statusbar.gateway': 'Gateway',
   'statusbar.service': 'Service',
-  'statusbar.address': 'Endpoint',
+  'statusbar.address': 'URL',
   'statusbar.address.copy': 'Copy address',
   'statusbar.key': 'API Key',
   'statusbar.key.set': 'Set',
@@ -159,8 +159,7 @@ const enUS: Record<keyof typeof zhCN, string> = {
   'routing.note.sort': 'Channel order set to "{name}"',
   // ---------------- Models ----------------
   'models.title': 'Models',
-  'models.desc':
-    'Probe to list usable channels, tick "Use" and put them in order; Validate runs one small request per channel.',
+  'models.desc': 'Probe for usable channels; tick "Use" and order them. Validate checks each one.',
   'models.pull': 'Fetch official models',
   'models.official.last': 'Last fetched {time} (sources: {sources}, added: {added})',
   'models.official.none': 'The official list has not been fetched yet',
