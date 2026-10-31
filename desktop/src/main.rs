@@ -101,6 +101,11 @@ struct ServerState {
     /// 控制端口（0 = 控制服务没起来，页面会明确报「控制通道不可用」）
     control_port: AtomicU16,
     state: Mutex<SvcState>,
+    /// 用户/启动流程「希望服务在跑」——看门狗只在这个前提下自动重启，
+    /// 这样用户主动停止、托盘退出都不会被它又拉起来。
+    desired: AtomicBool,
+    /// 最近几次自动重启的时刻（用于限流，防止崩溃循环把机器拖垮）。
+    restarts: Mutex<Vec<Instant>>,
     /// 壳日志的内存环形缓冲，供 /host/log 回读（便于远程诊断）
     logs: Mutex<VecDeque<String>>,
 }
@@ -156,6 +161,8 @@ fn main() {
                 exiting: AtomicBool::new(false),
                 control_port: AtomicU16::new(0),
                 state: Mutex::new(SvcState::Stopped),
+                desired: AtomicBool::new(false),
+                restarts: Mutex::new(Vec::new()),
                 logs: Mutex::new(VecDeque::new()),
             }));
 
@@ -175,6 +182,13 @@ fn main() {
                 let state = handle.state::<Arc<ServerState>>();
                 let control = Arc::clone(state.inner());
                 std::thread::spawn(move || control_server(control));
+            }
+
+            // 服务看门狗：意外退出自动拉起（见 supervise 的注释）
+            {
+                let state = handle.state::<Arc<ServerState>>();
+                let watched = Arc::clone(state.inner());
+                std::thread::spawn(move || supervise(watched));
             }
 
             // 启动即打开控制台：跟平常的桌面软件一样，双击图标就该看到界面。
@@ -876,7 +890,9 @@ fn spawn_server(state: &ServerState) -> Result<(), String> {
     let mut guard = state.child.lock().map_err(|e| e.to_string())?;
     if let Some(child) = guard.as_mut() {
         if child.try_wait().map_err(|e| e.to_string())?.is_none() {
-            return Ok(()); // 已在运行（幂等）
+            // 已在运行（幂等）：仍然要把「希望它在跑」记下来，看门狗据此判断
+            state.desired.store(true, Ordering::SeqCst);
+            return Ok(());
         }
     }
 
@@ -919,11 +935,14 @@ fn spawn_server(state: &ServerState) -> Result<(), String> {
 
     state.log(&format!("[壳] 服务已启动 pid={}", child.id()));
     *guard = Some(child);
+    state.desired.store(true, Ordering::SeqCst);
     state.set_state(SvcState::Starting);
     Ok(())
 }
 
 fn stop_server(state: &ServerState, grace: Duration) -> Result<(), String> {
+    // 先撤销「希望它在跑」：看门狗看到它就不会在我们收尸的间隙把服务又拉起来
+    state.desired.store(false, Ordering::SeqCst);
     let mut guard = state.child.lock().map_err(|e| e.to_string())?;
     let Some(child) = guard.as_mut() else {
         return Ok(()); // 已停止（幂等）
@@ -950,6 +969,87 @@ fn stop_server(state: &ServerState, grace: Duration) -> Result<(), String> {
     }
     *guard = None;
     Ok(())
+}
+
+/// 自动重启的限流：5 分钟内最多 3 次。
+const RESTART_WINDOW: Duration = Duration::from_secs(300);
+const RESTART_LIMIT: usize = 3;
+
+/// 服务看门狗：服务**意外**退出时自动拉起。
+///
+/// 背景（2026-10-31 线上两次）：上游 SSE 中途断开让 Node 抛未捕获异常，进程直接
+/// 退出——窗口还开着、服务没了，用户只能手动重启。根因已在服务端修掉（改用
+/// pipeline 转发流错误），但任何**未来**的未捕获错误仍会以同样方式表现，
+/// 而「壳只做一件事：把服务进程管起来」本身就包含「挂了要拉起来」。
+///
+/// 只在 `desired`（用户/启动流程希望它在跑）时生效：主动停止、托盘退出、
+/// 重启过程中的空档都不会被它干扰。连续 3 次退出就停手并把原因写进状态，
+/// 避免崩溃循环刷日志、拖慢机器。
+fn supervise(state: Arc<ServerState>) {
+    loop {
+        std::thread::sleep(Duration::from_millis(1000));
+        if state.exiting.load(Ordering::SeqCst) {
+            return;
+        }
+        if !state.desired.load(Ordering::SeqCst) {
+            continue;
+        }
+        {
+            let guard = state.state.lock().unwrap_or_else(|e| e.into_inner());
+            if matches!(*guard, SvcState::Stopping) {
+                continue; // 停止/重启进行中，由执行线程收尾
+            }
+        }
+        // 进程还活着 → 无事可做；已经退出 → 收尸并准备重启
+        let status = {
+            let mut child = state.child.lock().unwrap_or_else(|e| e.into_inner());
+            match child.as_mut() {
+                None => continue, // 还没有进程（启动流程自己会拉起）
+                Some(c) => match c.try_wait() {
+                    Ok(Some(status)) => status,
+                    _ => continue,
+                },
+            }
+        };
+        {
+            let mut child = state.child.lock().unwrap_or_else(|e| e.into_inner());
+            *child = None;
+        }
+
+        let attempt = {
+            let mut times = state.restarts.lock().unwrap_or_else(|e| e.into_inner());
+            times.retain(|t| t.elapsed() < RESTART_WINDOW);
+            if times.len() >= RESTART_LIMIT {
+                None
+            } else {
+                times.push(Instant::now());
+                Some(times.len())
+            }
+        };
+        let Some(attempt) = attempt else {
+            let msg = format!("服务连续退出 {RESTART_LIMIT} 次（最近一次 {status}），已停止自动重启");
+            state.log(&format!("[壳] {msg}"));
+            state.set_state(SvcState::Error(msg));
+            state.desired.store(false, Ordering::SeqCst);
+            continue;
+        };
+
+        state.log(&format!("[壳] 服务意外退出（{status}），自动重启（第 {attempt} 次）"));
+        let backoff = match attempt {
+            1 => 1_000,
+            2 => 5_000,
+            _ => 15_000,
+        };
+        std::thread::sleep(Duration::from_millis(backoff));
+        if state.exiting.load(Ordering::SeqCst) || !state.desired.load(Ordering::SeqCst) {
+            continue; // 等退避的这段时间里用户把它停了
+        }
+        if let Err(err) = spawn_server(&state) {
+            state.log(&format!("[壳] 自动重启失败：{err}"));
+            state.set_state(SvcState::Error(err));
+            state.desired.store(false, Ordering::SeqCst);
+        }
+    }
 }
 
 // ---------- 网络探针 ----------
