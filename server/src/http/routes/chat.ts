@@ -1,7 +1,8 @@
-import { Readable } from 'node:stream';
+import { pipeline, Readable } from 'node:stream';
 
 import type { AppContext } from '../../appContext.ts';
 import { gatewayAccountState, gatewayById } from '../../config/derive.ts';
+import { logger } from '../../log/logger.ts';
 import { type ChainStream, sameSlug } from '../../proxy/chain.ts';
 import { RoutingTap } from '../../proxy/stream.ts';
 import { emptyRouting } from '../../upstream/routing.ts';
@@ -9,6 +10,8 @@ import { accountModels, gatewayModels } from '../../upstream/types.ts';
 import { applySecurityHeaders, canRespond, sendError } from '../respond.ts';
 import type { Ctx, Handler } from '../router.ts';
 import { readJsonBody, recordHistory } from './api.ts';
+
+const log = logger.child({ module: 'chat' });
 
 const CHAT_PATHS = new Set(['/chat/completions', '/v1/chat/completions', '/api/v1/chat/completions']);
 const MODELS_PATHS = new Set(['/v1/models', '/api/v1/models', '/models']);
@@ -158,8 +161,15 @@ function respondStream(
   });
 
   const tap = new RoutingTap();
-  c.res.on('finish', () => {
-    // RoutingTap._flush 在流结束时解析元数据，'finish' 时结果已就绪
+  let recorded = false;
+  /**
+   * 流结束时写历史。`outcome` 只能是 `stream`（正常收完）或 `failure`（上游中途断流）：
+   * 后者以前会让整个进程崩掉，根本走不到这里（见 2.2.2）。
+   */
+  const finish = (outcome: 'stream' | 'failure', message?: string): void => {
+    if (recorded) return;
+    recorded = true;
+    // RoutingTap._flush 在流结束时解析元数据，正常结束时结果已就绪
     const { provider, canonical } = tap.result();
     const routing = emptyRouting();
     routing.finalProvider = provider;
@@ -171,17 +181,39 @@ function respondStream(
       ctx,
       gatewayId,
       modelId,
-      { ...result, routing, outcome: result.outcome },
+      { ...result, routing, outcome, ...(message === undefined ? {} : { message }) },
       { stream: true, pinMismatch },
     );
-  });
+  };
 
   if (result.head.length) c.res.write(result.head);
   if (!upstream.body) {
     c.res.end();
+    finish('stream');
     return;
   }
-  Readable.fromWeb(upstream.body as import('node:stream/web').ReadableStream)
-    .pipe(tap)
-    .pipe(c.res);
+  /*
+   * 必须用 pipeline，不能用 `.pipe(...).pipe(...)`：
+   *
+   * `.pipe()` 不转发错误。上游在 SSE 中途断开（网关超时、TLS 被重置、上游重启）时，
+   * undici 以 `TypeError: terminated` 让响应体 stream 进入 error 状态，
+   * `Readable.fromWeb` 把它变成 Readable 的 `'error'` 事件——**没有监听者**的 error
+   * 事件会被 Node 抛成未捕获异常，进程直接退出（2.2.1 线上实测两次：凌晨 01:13、
+   * 16:37，日志里是 `{"msg":"未捕获异常"} TypeError: terminated`）。窗口还在，服务没了。
+   *
+   * pipeline 会把错误沿线传递并销毁两端：客户端立刻收到断流（而不是一个假装结束的
+   * 200），上游连接被回收，进程不受影响。
+   *
+   * 两种结束要分开：
+   * - `ERR_STREAM_PREMATURE_CLOSE` / `AbortError` = 客户端断开（我们 cancel 了上游），
+   *   这是取消，不记历史、不算失败；
+   * - 其它错误 = 上游中途断流，记一条失败历史（不能伪装成正常结束）。
+   */
+  pipeline(Readable.fromWeb(upstream.body as import('node:stream/web').ReadableStream), tap, c.res, (err) => {
+    if (!err) return finish('stream');
+    const e = err as NodeJS.ErrnoException;
+    if (e.code === 'ERR_STREAM_PREMATURE_CLOSE' || e.name === 'AbortError') return;
+    log.error({ err, modelId }, '流式透传中断');
+    finish('failure', `stream interrupted: ${e.message}`);
+  });
 }

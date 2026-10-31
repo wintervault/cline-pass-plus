@@ -26,6 +26,14 @@ export function createHttpServer(options: CreateHttpServerOptions): http.Server 
       if (!res.writableEnded) abortController.abort(new Error('client disconnected'));
     };
     res.on('close', onResClose);
+    /*
+     * 连接级错误的兜底监听：客户端粗暴断开（RST）时，req/res 会各自发出 'error'。
+     * 没有监听者的 'error' 事件会被 Node 抛成未捕获异常并终止进程——
+     * 一个断网的客户端不该能杀掉服务。这里只记一行日志，响应本身由 canRespond
+     * 与 pipeline 的销毁逻辑处理。
+     */
+    req.on('error', (err) => log.debug({ err, path: url.pathname }, '请求流错误'));
+    res.on('error', (err) => log.debug({ err, path: url.pathname }, '响应流错误'));
     const ctx: Ctx = {
       req,
       res,

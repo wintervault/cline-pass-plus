@@ -9,6 +9,11 @@ export interface ScriptedResponse {
   raw?: string;
   /** SSE 流：逐块写出的文本片段（自动带 text/event-stream）。 */
   sse?: string[];
+  /**
+   * 写出第 N 个 SSE 块之后直接销毁 socket —— 模拟上游中途断开
+   * （网关超时 / TLS reset / 对端重启）。不发终止块、不发 `[DONE]`。
+   */
+  abortAfter?: number;
   delayMs?: number;
   contentType?: string;
   headers?: Record<string, string>;
@@ -92,6 +97,11 @@ export class FakeUpstream {
             }
             res.write(sseChunks[i]);
             i += 1;
+            if (next.abortAfter !== undefined && i >= next.abortAfter) {
+              clearInterval(timer);
+              // 留 5ms 让已写出的块先到达客户端，再模拟连接被掐断
+              setTimeout(() => res.socket?.destroy(), 5);
+            }
           }, 5);
           res.on('close', () => clearInterval(timer));
           return;
