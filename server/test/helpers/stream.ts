@@ -57,6 +57,7 @@ export async function chainStream(): Promise<StreamFixture> {
     exclude: [],
     pinMode: 'strict',
     sort: null,
+    regionGuard: true,
     ...over,
   });
   return { upstream, chain, metaOf, cfgOf, close: () => upstream.close() };

@@ -383,6 +383,7 @@ describe('loadConfig', () => {
       exclude: [],
       pinMode: 'strict',
       sort: 'cost',
+      regionGuard: true,
     });
     expect(gateway?.failover.budgetMs).toBe(90000);
     expect(r.backupPath).toBeNull();

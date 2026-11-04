@@ -83,6 +83,8 @@ export function normalizePerModel(raw: unknown): PerModelConfig {
     exclude,
     pinMode: source['pinMode'] === 'preferred' ? 'preferred' : 'strict',
     sort: source['sort'] === 'cost' || source['sort'] === 'ttft' || source['sort'] === 'tps' ? source['sort'] : null,
+    /* 缺省为开：只写白名单挡不住私有渠道（docs/pinning.md D7），显式 false 才关。 */
+    regionGuard: source['regionGuard'] !== false,
   };
 }
 
@@ -621,7 +623,9 @@ export function registerApiRoutes(
 
     // 临时配置覆盖：不落盘，仅本次请求生效（与保存的配置叠加）
     const base = gateway.perModel[model];
-    const cfg: PerModelConfig = base ? { ...base } : { upstreams: [], exclude: [], pinMode: 'strict', sort: null };
+    const cfg: PerModelConfig = base
+      ? { ...base }
+      : { upstreams: [], exclude: [], pinMode: 'strict', sort: null, regionGuard: true };
     if (payload.upstreams !== undefined) cfg.upstreams = normalizePerModel({ upstreams: payload.upstreams }).upstreams;
     else if (payload.upstream !== undefined)
       cfg.upstreams = typeof payload.upstream === 'string' && payload.upstream ? [payload.upstream] : [];

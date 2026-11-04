@@ -295,7 +295,7 @@ export class ChatChain {
 
         const injected = injectPrefs(
           input.body,
-          { pipeline, knownUpstreams: known },
+          { pipeline, knownUpstreams: known, regionGuard: input.cfg?.regionGuard ?? true },
           { upstream, orderRest: [], excludeList: attemptExclude, strict: !relax, sort: plan.sort },
         );
         if (injected.degraded) degraded = true;

@@ -2,7 +2,7 @@ import type { Account } from '../config/schema.ts';
 import { fetchJSON } from './client.ts';
 import { classifyChannelStatus, isQuotaExhausted } from './errors.ts';
 import { unwrap } from './response.ts';
-import { parsePlannedChain, parseRouting } from './routing.ts';
+import { injectPrefs, parsePlannedChain, parseRouting } from './routing.ts';
 import { blankModelMeta, type ModelMeta, type PinState, type UpstreamStatusKind } from './types.ts';
 
 /** 探测与校验共用的上游访问依赖。 */
@@ -322,10 +322,13 @@ export class ProbeService {
         list.slice(i, i + batch).map(async (slug) => {
           const started = Date.now();
           const base = { model: modelId, messages: [{ role: 'user', content: 'hi' }], max_tokens: 512 };
-          const body =
-            pipeline === 'planner'
-              ? { ...base, providerOptions: { gateway: { only: [slug] } } }
-              : { ...base, provider: { only: [slug] } };
+          // 与运行时走同一个注入函数：`only` 之外还要带上区域约束，
+          // 否则校验可能被私有渠道「假成功」——它本来就会被网关优先选中。
+          const body = injectPrefs(
+            base,
+            { pipeline: pipeline ?? null, knownUpstreams: list },
+            { upstream: slug, orderRest: [], excludeList: [], strict: true, sort: null },
+          ).body;
           let json: unknown = null;
           try {
             const res = await fetchJSON(

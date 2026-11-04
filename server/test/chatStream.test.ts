@@ -87,7 +87,13 @@ async function harness() {
   ];
   const gateway = config.gateways[0];
   if (!gateway) throw new Error('defaultConfig 没有网关');
-  gateway.perModel['cline-pass/x'] = { upstreams: ['ch1'], exclude: [], pinMode: 'strict', sort: null };
+  gateway.perModel['cline-pass/x'] = {
+    upstreams: ['ch1'],
+    exclude: [],
+    pinMode: 'strict',
+    sort: null,
+    regionGuard: true,
+  };
 
   const meta = defaultMeta();
   meta.models['main'] = {

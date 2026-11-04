@@ -57,6 +57,11 @@ export interface PerModelConfig {
   exclude: string[];
   pinMode: PinMode;
   sort: SortKey | null;
+  /**
+   * 钉住时用区域约束排掉私有渠道（默认开）。
+   * 可选：老版本 API 不会返回这个字段，缺省按服务端默认（开）处理。
+   */
+  regionGuard?: boolean;
 }
 
 /**
@@ -71,6 +76,7 @@ export const EMPTY_PER_MODEL: PerModelConfig = {
   exclude: [],
   pinMode: 'strict',
   sort: null,
+  regionGuard: true,
 };
 
 export interface SubscriptionRow {

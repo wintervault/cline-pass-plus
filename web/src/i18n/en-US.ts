@@ -155,8 +155,13 @@ const enUS: Record<keyof typeof zhCN, string> = {
   'routing.sort.ttft': 'Fastest first token',
   'routing.sort.tps': 'Highest throughput',
   'routing.sort.hint': 'Execution-order preference across usable channels.',
+  'routing.regionGuard': 'Exclude private',
+  'routing.regionGuard.hint':
+    'A provider whitelist alone does not stop openai-compatible-private — the gateway tries it first. With this on, that channel is pinned to a region it has no nodes in, so requests land on the channels you listed. Models where the channel was never observed are unaffected.',
   'routing.note.pinMode': 'Pin mode set to "{name}"',
   'routing.note.sort': 'Channel order set to "{name}"',
+  'routing.note.regionGuardOn': 'Private-channel exclusion turned on',
+  'routing.note.regionGuardOff': 'Private-channel exclusion turned off',
   // ---------------- Models ----------------
   'models.title': 'Models',
   'models.desc': 'Probe for usable channels; tick "Use" and order them. Validate checks each one.',

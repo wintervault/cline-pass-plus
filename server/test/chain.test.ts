@@ -85,6 +85,7 @@ const cfgOf = (over: Record<string, unknown> = {}) => ({
   exclude: [],
   pinMode: 'strict' as const,
   sort: null,
+  regionGuard: true,
   ...over,
 });
 

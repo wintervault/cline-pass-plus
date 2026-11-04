@@ -222,6 +222,96 @@ describe('injectPrefs', () => {
   });
 });
 
+/**
+ * 区域排除私有渠道（2026-11-04 linux.do 3119385 实测写法）。
+ * 只写 only 挡不住 openai-compatible-private：网关会先走它再回退官方。
+ */
+describe('injectPrefs：区域约束排掉私有渠道', () => {
+  const PRIVATE = 'openai-compatible-private';
+  const GUARD = { scope: 'global', providers: { [PRIVATE]: { scope: 'zone', geoRegion: 'us' } } };
+  const gatewayOf = (out: Record<string, unknown>): Record<string, unknown> =>
+    ((out['providerOptions'] as Record<string, unknown>)?.['gateway'] ?? {}) as Record<string, unknown>;
+
+  it('钉住别的渠道、且观测到私有渠道 → 注入区域约束', () => {
+    const { body: out } = injectPrefs(
+      {},
+      { pipeline: 'planner', knownUpstreams: [PRIVATE, 'deepseek'] },
+      basePrefs({ upstream: 'deepseek' }),
+    );
+    expect(gatewayOf(out)).toEqual({ only: ['deepseek'], inferenceRegion: GUARD });
+  });
+
+  it('钉的就是私有渠道 → 不注入（否则把自己钉死）', () => {
+    const { body: out } = injectPrefs(
+      {},
+      { pipeline: 'planner', knownUpstreams: [PRIVATE, 'deepseek'] },
+      basePrefs({ upstream: PRIVATE }),
+    );
+    expect(gatewayOf(out)['inferenceRegion']).toBeUndefined();
+  });
+
+  it('没观测到私有渠道 → 不注入（不猜）', () => {
+    const { body: out } = injectPrefs(
+      {},
+      { pipeline: 'planner', knownUpstreams: ['deepseek'] },
+      basePrefs({ upstream: 'deepseek' }),
+    );
+    expect(gatewayOf(out)['inferenceRegion']).toBeUndefined();
+  });
+
+  it('开关关闭 → 不注入（退回旧写法）', () => {
+    const { body: out } = injectPrefs(
+      {},
+      { pipeline: 'planner', knownUpstreams: [PRIVATE, 'deepseek'], regionGuard: false },
+      basePrefs({ upstream: 'deepseek' }),
+    );
+    expect(gatewayOf(out)).toEqual({ only: ['deepseek'] });
+  });
+
+  it('只设排序、没有限定渠道 → 不注入（那不是「排除」）', () => {
+    const { body: out } = injectPrefs(
+      {},
+      { pipeline: 'planner', knownUpstreams: [PRIVATE, 'deepseek'] },
+      basePrefs({ sort: 'cost' }),
+    );
+    expect(gatewayOf(out)).toEqual({ sort: 'cost' });
+  });
+
+  it('preferred + 白名单排掉私有渠道 → 也注入', () => {
+    const { body: out } = injectPrefs(
+      {},
+      { pipeline: 'planner', knownUpstreams: [PRIVATE, 'deepseek', 'together'] },
+      basePrefs({ upstream: 'deepseek', strict: false, excludeList: [PRIVATE] }),
+    );
+    expect(gatewayOf(out)).toEqual({
+      order: ['deepseek'],
+      only: ['deepseek', 'together'],
+      inferenceRegion: GUARD,
+    });
+  });
+
+  it('调用方自带 inferenceRegion → 不覆盖', () => {
+    const mine = { scope: 'zone', geoRegion: 'eu', providers: { deepseek: null } };
+    const body = { providerOptions: { gateway: { inferenceRegion: mine } } };
+    const { body: out } = injectPrefs(
+      body,
+      { pipeline: 'planner', knownUpstreams: [PRIVATE, 'deepseek'] },
+      basePrefs({ upstream: 'deepseek' }),
+    );
+    expect(gatewayOf(out)['inferenceRegion']).toEqual(mine);
+  });
+
+  it('direct 管道不注入（那条路走 OpenRouter 的 provider 字段）', () => {
+    const { body: out } = injectPrefs(
+      {},
+      { pipeline: 'direct', knownUpstreams: [PRIVATE, 'deepseek'] },
+      basePrefs({ upstream: 'deepseek' }),
+    );
+    expect(out['providerOptions']).toBeUndefined();
+    expect(out['provider']).toEqual({ only: ['deepseek'] });
+  });
+});
+
 describe('slugify', () => {
   it('显示名转 slug', () => {
     expect(slugify('GMICloud')).toBe('gmicloud');

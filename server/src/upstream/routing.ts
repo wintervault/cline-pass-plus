@@ -142,6 +142,11 @@ export interface InjectContext {
   pipeline: Pipeline | null;
   /** 已知渠道清单，用于把排除换算成白名单。 */
   knownUpstreams: readonly string[];
+  /**
+   * 用区域约束排掉私有渠道（默认 true，`PerModelConfig.regionGuard` 可关）。
+   * 只在「观测到私有渠道 + 它不在允许集合里」时生效，见下方 `applyRegionGuard`。
+   */
+  regionGuard?: boolean;
 }
 
 export interface InjectResult {
@@ -155,6 +160,21 @@ export interface InjectResult {
 
 /** OpenRouter 的排序字段名与控制台选项不同。 */
 export const OR_SORT: Record<SortKey, string> = { cost: 'price', ttft: 'latency', tps: 'throughput' };
+
+/** 风控号被拉去的那条「私有 contributor」渠道（观测到才可能被拉过去）。 */
+export const PRIVATE_UPSTREAM = 'openai-compatible-private';
+
+/**
+ * 区域约束的取值（linux.do 3119385 第 1 种写法，2026-11-04 实测三种均有效）。
+ *
+ * 语义：其余渠道照常 `global`，只把私有渠道限制到一个它没有节点的区域——它就不成立，
+ * 网关改用清单内的官方渠道。US/EU 只是用来让它不成立，不代表推理实际发生在那里。
+ *
+ * 每次返回新对象：它会写进请求体，别让调用方的后续修改污染共享常量。
+ */
+function privateRegionGuard(): Record<string, unknown> {
+  return { scope: 'global', providers: { [PRIVATE_UPSTREAM]: { scope: 'zone', geoRegion: 'us' } } };
+}
 
 /**
  * 按管道注入钉住偏好（实测结论）：
@@ -178,6 +198,19 @@ export function injectPrefs(body: Record<string, unknown>, ctx: InjectContext, p
   const useVercel = ctx.pipeline === 'planner' || ctx.pipeline === null;
   const useOpenRouter = ctx.pipeline === 'direct' || ctx.pipeline === null;
 
+  /*
+   * 私有渠道在不在允许集合里？
+   * - 钉的就是私有渠道 → 允许；
+   * - 有白名单且含它 → 允许；
+   * - 没有白名单、也没有钉目标（只设了排序）→ 不算「排除」，交给网关。
+   * 只有「明确不允许它」时才值得加区域约束。
+   */
+  const privateAllowed = prefs.upstream === PRIVATE_UPSTREAM || allowList?.includes(PRIVATE_UPSTREAM) === true;
+  /** 本次是否在「限定渠道」：只设排序不算。 */
+  const restrictsProviders = prefs.upstream !== null || (allowList?.length ?? 0) > 0;
+  const applyRegionGuard =
+    (ctx.regionGuard ?? true) && restrictsProviders && ctx.knownUpstreams.includes(PRIVATE_UPSTREAM) && !privateAllowed;
+
   if (useVercel) {
     const gw: Record<string, unknown> = {};
     if (prefs.upstream) {
@@ -194,6 +227,13 @@ export function injectPrefs(body: Record<string, unknown>, ctx: InjectContext, p
 
     const existingOptions = asRecord(result['providerOptions']);
     const existingGateway = asRecord(existingOptions?.['gateway']);
+    /*
+     * 区域约束：只写 `only` 挡不住私有渠道——网关会先走「私有 contributor」再回退官方
+     * （linux.do 3119385，2026-11-04 实测）。调用方自己写了 inferenceRegion 就不覆盖。
+     */
+    if (applyRegionGuard && !asRecord(existingGateway?.['inferenceRegion'])) {
+      gw['inferenceRegion'] = privateRegionGuard();
+    }
     result['providerOptions'] = {
       ...(existingOptions ?? {}),
       gateway: { ...(existingGateway ?? {}), ...gw },

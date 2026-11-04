@@ -151,8 +151,13 @@ const zhCN = {
   'routing.sort.ttft': '最快首字',
   'routing.sort.tps': '最高吞吐',
   'routing.sort.hint': '多个可用渠道之间的执行顺序偏好',
+  'routing.regionGuard': '排除私有渠道',
+  'routing.regionGuard.hint':
+    '只写白名单时，网关仍可能先走 openai-compatible-private。开启后给它加一个没有节点的区域约束，请求才会真正落到清单里的渠道；观测不到该渠道的模型不受影响。',
   'routing.note.pinMode': '钉住模式已改为「{name}」',
   'routing.note.sort': '渠道排序偏好已改为「{name}」',
+  'routing.note.regionGuardOn': '已开启「排除私有渠道」',
+  'routing.note.regionGuardOff': '已关闭「排除私有渠道」',
   // ---------------- 订阅模型 ----------------
   'models.title': '订阅模型',
   'models.desc': '探测可用渠道；勾选「使用」并排序，「校验」逐个渠道体检。',
