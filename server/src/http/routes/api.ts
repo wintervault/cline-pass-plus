@@ -22,6 +22,7 @@ import {
   MAX_GATEWAYS,
   type PerModelConfig,
 } from '../../config/schema.ts';
+import { MAX_GROUPS_PER_ACCOUNT, normalizeTags } from '../../config/tags.ts';
 import { probeBind } from '../../console/manager.ts';
 import { moduleLogger } from '../../log/logger.ts';
 import type { ChainResult } from '../../proxy/chain.ts';
@@ -140,19 +141,7 @@ export function mergeAccountsDetailed(existing: Account[], incoming: unknown): A
 
     /* 分组三态：缺省 = 保持（老客户端不带这个字段），数组 = 设置（空数组 = 清空）。 */
     const rawGroups = a['groups'];
-    const groups = Array.isArray(rawGroups)
-      ? [
-          ...new Set(
-            rawGroups
-              .map((g) =>
-                String(g ?? '')
-                  .trim()
-                  .slice(0, 24),
-              )
-              .filter(Boolean),
-          ),
-        ].slice(0, 8)
-      : (prior?.groups ?? []);
+    const groups = Array.isArray(rawGroups) ? normalizeTags(rawGroups, MAX_GROUPS_PER_ACCOUNT) : (prior?.groups ?? []);
 
     picked.push({
       account: {
@@ -175,7 +164,7 @@ export function mergeAccountsDetailed(existing: Account[], incoming: unknown): A
 }
 
 /**
- * 账号改名 / 删除后整理按账号名索引的观测数据（检测记录、用量统计、风控结论）。
+ * 账号改名 / 删除后整理按账号名索引的观测数据（检测记录、用量统计）。
  *
  * 两段式（先全部取出并删除，再写入新名）是必须的：改名可以成环
  * （A→B、B→A），逐条搬会把目标位置的旧数据覆盖掉。
@@ -318,7 +307,7 @@ export function mergeGatewayPayload(raw: Record<string, unknown>, existing: Gate
   const accountScope =
     scopeValue === 'all' || scopeValue === 'groups' || scopeValue === 'custom' ? scopeValue : fallback.accountScope;
   const scopeGroups = Array.isArray(raw['scopeGroups'])
-    ? [...new Set(raw['scopeGroups'].map((n) => String(n ?? '').trim()).filter(Boolean))]
+    ? normalizeTags(raw['scopeGroups'], Number.POSITIVE_INFINITY)
     : fallback.scopeGroups;
   const accounts = Array.isArray(raw['accounts'])
     ? [...new Set(raw['accounts'].map((n) => String(n ?? '').trim()).filter(Boolean))]

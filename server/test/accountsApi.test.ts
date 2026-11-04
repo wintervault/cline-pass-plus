@@ -157,6 +157,36 @@ describe('POST /api/accounts', () => {
     expect(configStore.value.accounts[0]?.groups).toEqual(['主力', '备用']);
   });
 
+  it('分组三态：缺省保持、空数组清空', async () => {
+    const { port, configStore } = await harness([acc('a', { groups: ['主力'] })]);
+    // 不带 groups（老客户端）：保持
+    expect(
+      (await request(port, '/api/accounts', { method: 'POST', body: { accounts: [{ name: 'a', existingIndex: 0 }] } }))
+        .status,
+    ).toBe(200);
+    expect(configStore.value.accounts[0]?.groups).toEqual(['主力']);
+    // 空数组：显式清空
+    expect(
+      (
+        await request(port, '/api/accounts', {
+          method: 'POST',
+          body: { accounts: [{ name: 'a', existingIndex: 0, groups: [] }] },
+        })
+      ).status,
+    ).toBe(200);
+    expect(configStore.value.accounts[0]?.groups).toEqual([]);
+  });
+
+  it('超长分组整条丢弃，而不是截断成别的分组', async () => {
+    const { port, configStore } = await harness([acc('a')]);
+    const long = 'x'.repeat(25);
+    await request(port, '/api/accounts', {
+      method: 'POST',
+      body: { accounts: [{ name: 'a', key: 'sk_a', groups: [long, '主力'] }] },
+    });
+    expect(configStore.value.accounts[0]?.groups).toEqual(['主力']);
+  });
+
   it('accounts 不是数组 → 400 且不清空账号池', async () => {
     const { port, configStore } = await harness([acc('a')]);
     const res = await request(port, '/api/accounts', { method: 'POST', body: { accounts: 'oops' } });

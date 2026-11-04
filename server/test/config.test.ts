@@ -292,6 +292,42 @@ describe('loadConfig', () => {
     expect(r.config.gateways[0]?.port).toBe(3126);
   });
 
+  it('分组归一化：去空白/去重/丢超长/丢非字符串，缺省补空数组', async () => {
+    await write(
+      JSON.stringify({
+        version: CONFIG_VERSION,
+        accounts: [
+          { name: 'A', key: 'sk_a', groups: [' 主力 ', '主力', '', 123, 'x'.repeat(25), '备用'] },
+          { name: 'B', key: 'sk_b' },
+        ],
+      }),
+    );
+    const r = await loadConfig(file);
+    // 超长分组整条丢弃：截断会把它变成另一个分组，静默改变账号的归属
+    expect(r.config.accounts[0]?.groups).toEqual(['主力', '备用']);
+    expect(r.config.accounts[1]?.groups).toEqual([]);
+  });
+
+  it('分组数量上限 8 个，超出部分丢弃', async () => {
+    const groups = Array.from({ length: 10 }, (_, i) => `g${i}`);
+    await write(JSON.stringify({ version: CONFIG_VERSION, accounts: [{ name: 'A', key: 'sk_a', groups }] }));
+    const r = await loadConfig(file);
+    expect(r.config.accounts[0]?.groups).toEqual(groups.slice(0, 8));
+  });
+
+  it('网关 scopeGroups 同样归一化，且不限制数量', async () => {
+    const many = Array.from({ length: 40 }, (_, i) => `g${i}`);
+    await write(
+      JSON.stringify({
+        version: CONFIG_VERSION,
+        accounts: [{ name: 'A', key: 'sk_a', groups: [] }],
+        gateways: [{ id: 'main', port: 3126, accountScope: 'groups', scopeGroups: [...many, ' g0 ', 'y'.repeat(25)] }],
+      }),
+    );
+    const r = await loadConfig(file);
+    expect(r.config.gateways[0]?.scopeGroups).toEqual(many);
+  });
+
   it('无效账号被丢弃，有效账号保留', async () => {
     await write(
       JSON.stringify({

@@ -249,6 +249,17 @@ describe('mergeGatewayPayload（proxyKey 三态语义 + 显式校验）', () => 
     expect(gateway.exposeCatalog).toBe(true);
   });
 
+  it('scopeGroups：缺省保持，数组归一化（去空白、去重、超长丢弃）', () => {
+    const grouped = { ...defaultGateway(), accountScope: 'groups' as const, scopeGroups: ['主力'] };
+    const kept = mergeGatewayPayload({ name: 'x' }, grouped);
+    if (!kept.ok) throw new Error(`期望成功，实际报错：${kept.code}`);
+    expect(kept.gateway.scopeGroups).toEqual(['主力']);
+
+    const next = mergeGatewayPayload({ scopeGroups: [' 备用 ', '备用', '', 'z'.repeat(25)] }, grouped);
+    if (!next.ok) throw new Error(`期望成功，实际报错：${next.code}`);
+    expect(next.gateway.scopeGroups).toEqual(['备用']);
+  });
+
   it('非空串 = 设置新密钥（去除首尾空白）', () => {
     expect(ok({ proxyKey: '  sk_new  ' }).proxyKey).toBe('sk_new');
   });

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { isIsoDate } from './date.ts';
+import { MAX_GROUPS_PER_ACCOUNT, normalizeTags } from './tags.ts';
 
 /** 当前配置格式版本。加载到更低版本会触发迁移，更高版本拒绝启动（避免新版写的配置被旧版改坏）。 */
 export const CONFIG_VERSION = 6;
@@ -60,10 +61,13 @@ export const AccountSchema = z.object({
    */
   expiresAt: z.string().refine(isIsoDate, '日期格式应为 YYYY-MM-DD').optional().catch(undefined),
   /**
-   * 用户自定义分组（2.2.4 起）。自由标签，最多 8 个、每个不超过 24 字，用于网关的
+   * 用户自定义分组（2.3.0 起）。自由标签，最多 8 个、每个不超过 24 字，用于网关的
    * 「按分组」账号范围与列表筛选。**分组是用户的事实，不是观测**——网关不参与决定。
+   *
+   * 归一化走 `config/tags.ts`（与 API 保存、环境变量注入共用），规则是只删不改：
+   * 空格与重复被清掉，超长或超量的标签整条丢弃，绝不截断标签内容。
    */
-  groups: z.array(z.string().trim().min(1).max(24)).max(8).catch([]).default([]),
+  groups: z.preprocess((v) => normalizeTags(v, MAX_GROUPS_PER_ACCOUNT), z.array(z.string())).default([]),
 });
 export type Account = z.infer<typeof AccountSchema>;
 
@@ -176,7 +180,7 @@ export const GatewaySchema = z.object({
    */
   accountScope: AccountScopeSchema.catch('custom').default('all'),
   /** 指定分组（账号的 `groups` 里带任一标签即命中），仅在 accountScope=groups 时生效。 */
-  scopeGroups: z.array(z.string().min(1)).catch([]).default([]),
+  scopeGroups: z.preprocess((v) => normalizeTags(v, Number.POSITIVE_INFINITY), z.array(z.string())).default([]),
   /** 自选账号（全局账号池里的名字），仅在 accountScope=custom 时生效。 */
   accounts: z.array(z.string().min(1)).catch([]).default([]),
   /** 账号顺序 = 粘性优先级（不在列表里的按全局顺序排在后面）。 */

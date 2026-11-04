@@ -109,12 +109,8 @@ export async function loadConfig(file: string): Promise<LoadResult> {
     else droppedAccounts += 1;
   }
   if (droppedAccounts) notes.push(`丢弃了 ${droppedAccounts} 个无效账号（缺少 key 或字段类型错误）`);
-  // 分组去重（手改配置写重了不该在界面上出现两个一样的标签）
-  for (const account of accounts) {
-    account.groups = [...new Set(account.groups.map((g) => g.trim()).filter(Boolean))].slice(0, 8);
-  }
 
-  // 账号名是账号的标识（usage 统计与风控分类都按名字存）→ 必须唯一
+  // 账号名是账号的标识（用量统计与账号级检测记录都按名字存）→ 必须唯一
   const unified = ensureUniqueAccountNames(accounts);
   if (unified.renamed.length)
     notes.push(`账号名重复，已自动改名：${unified.renamed.map((r) => `${r.from} → ${r.to}`).join('、')}`);
