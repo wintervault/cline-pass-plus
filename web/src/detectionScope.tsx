@@ -1,4 +1,4 @@
-import { Select, Space, Typography } from 'antd';
+import { Select, Space, Tooltip, Typography } from 'antd';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useAccounts } from './api/hooks.ts';
@@ -18,7 +18,7 @@ const PICKED_KEY = 'cps_detect_account';
 interface DetectionAccountValue {
   /** 当前检测账号名；账号池为空时为空串。 */
   account: string;
-  /** 当前账号的完整视图（体检结论、到期状态等）；没有账号时为 null。 */
+  /** 当前账号的完整视图（分组、到期状态等）；没有账号时为 null。 */
   current: AccountView | null;
   accounts: AccountView[];
   /** 账号列表还没加载完。 */
@@ -118,9 +118,23 @@ export function DetectionAccountPicker({ label, showGroups = false }: { label: s
         onChange={setAccount}
       />
       {showGroups && account && current && current.groups.length > 0 ? (
-        <span className="cps-meta" style={{ color: 'var(--cps-text-tertiary)' }}>
-          {current.groups.join(' · ')}
-        </span>
+        <Tooltip title={current.groups.join(' · ')}>
+          {/* 分组是用户数据、长度不可控：限宽 + 省略号，别把页头挤成两行 */}
+          <span
+            className="cps-meta"
+            style={{
+              display: 'inline-block',
+              maxWidth: 180,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              verticalAlign: 'bottom',
+              color: 'var(--cps-text-tertiary)',
+            }}
+          >
+            {current.groups.join(' · ')}
+          </span>
+        </Tooltip>
       ) : null}
     </Space>
   );

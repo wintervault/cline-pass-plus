@@ -75,7 +75,7 @@ const CJK = /\p{Script=Han}/u;
 
 /**
  * 诊断原文的显示规则：中文界面原样显示；英文界面丢弃含中文的字符串。
- * 服务端的诊断（钉住理由、尝试备注、体检失败原因）是观测数据，不是 UI 文案，
+ * 服务端的诊断（钉住理由、尝试备注、探测失败原因）是观测数据，不是 UI 文案，
  * 没有 code 可翻译——按项目约定「未知 code 宁可不显示，也不漏中文」。
  */
 export function diagnosticText(lang: Lang, text: string | null | undefined): string {

@@ -58,6 +58,10 @@ interface EditModal {
   groups: string[];
 }
 
+/** 分组上限，与服务端 `config/tags.ts` 一致（一处是输入限制，一处是保存校验）。 */
+const GROUP_MAX_COUNT = 8;
+const GROUP_MAX_LENGTH = 24;
+
 /** 最近使用时间：当天只显示时刻，跨天带日期（跟随界面语言）。 */
 function fmtUsed(ts: number, lang: Lang): string {
   const d = new Date(ts);
@@ -84,19 +88,21 @@ function GroupTags({ groups }: { groups: string[] }) {
     );
   }
   return (
-    <span
-      className="cps-meta"
-      style={{
-        display: 'block',
-        minWidth: 0,
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap',
-        color: 'var(--cps-text-secondary)',
-      }}
-    >
-      {groups.join(' · ')}
-    </span>
+    <Tooltip title={groups.join(' · ')}>
+      <span
+        className="cps-meta"
+        style={{
+          display: 'block',
+          minWidth: 0,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          color: 'var(--cps-text-secondary)',
+        }}
+      >
+        {groups.join(' · ')}
+      </span>
+    </Tooltip>
   );
 }
 
@@ -214,9 +220,17 @@ export default function Accounts() {
     testKey.mutate({ payload: { name }, label: name });
   };
 
-  /** 分组只有数量和长度上限（8 个 / 各 24 字），与服务端 schema 一致。 */
-  const cleanGroups = (groups: string[]): string[] =>
-    [...new Set(groups.map((g) => g.trim().slice(0, 24)).filter(Boolean))].slice(0, 8);
+  /**
+   * 分组归一化：与服务端同一套规则（去空白、去重、数量与长度上限）。
+   * 超长的标签**拦下来**而不是截断——截断会把「主力-华东」变成另一个已存在的分组，
+   * 静默改掉这个账号服务哪些网关。
+   */
+  const cleanGroups = (groups: string[]): string[] | null => {
+    const next = [...new Set(groups.map((g) => g.trim()).filter(Boolean))];
+    if (next.some((g) => g.length > GROUP_MAX_LENGTH)) return null;
+    if (next.length > GROUP_MAX_COUNT) return null;
+    return next;
+  };
 
   const submitModal = (): void => {
     if (!modal) return;
@@ -226,9 +240,13 @@ export default function Accounts() {
       message.warning(t('accounts.validate.keyRequired'));
       return;
     }
+    const groups = cleanGroups(modal.groups);
+    if (groups === null) {
+      message.warning(t('accounts.validate.groups', { count: GROUP_MAX_COUNT, length: GROUP_MAX_LENGTH }));
+      return;
+    }
     const draft = draftFromServer();
     const editing = modal.index !== null;
-    const groups = cleanGroups(modal.groups);
     if (modal.index === null) {
       draft.push({ name, key, expiresAt: modal.expiresAt, groups, existingIndex: null });
     } else {
@@ -476,7 +494,7 @@ export default function Accounts() {
             <Select
               mode="tags"
               style={{ marginTop: 4, width: '100%' }}
-              maxCount={8}
+              maxCount={GROUP_MAX_COUNT}
               tokenSeparators={[',', '，']}
               placeholder={t('accounts.field.groups.placeholder')}
               value={modal?.groups ?? []}

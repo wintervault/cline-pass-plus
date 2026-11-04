@@ -414,7 +414,7 @@ export default function Models() {
     fetchOfficial.mutate(undefined);
   };
 
-  /** 账号体检结论标签：检测结果要跟着账号走，页头必须能看见「现在用的是哪个号」。 */
+  /** 页头的账号选择器（附该账号的分组）：检测结果要跟着账号走，必须看见「现在用的是哪个号」。 */
   return (
     /* 填满内容列：两栏吃满剩余高度，路由策略贴底，底部只留内容区内边距。 */
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, height: '100%' }}>

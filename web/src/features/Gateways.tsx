@@ -741,6 +741,14 @@ export default function Gateways() {
                           ? t('gateways.field.scopeGroups.noPick')
                           : t('gateways.field.scopeGroups.hint')}
                     </Typography.Text>
+                    {/* 分组被从所有账号上删掉后，这里仍留着选中的名字：说出来，别让「范围内无账号」变成谜 */}
+                    {draft.scopeGroups.some((g) => !allGroups.includes(g)) && (
+                      <Typography.Text type="warning" style={{ fontSize: 12, display: 'block', marginTop: 6 }}>
+                        {t('gateways.field.scopeGroups.missing', {
+                          groups: draft.scopeGroups.filter((g) => !allGroups.includes(g)).join(' · '),
+                        })}
+                      </Typography.Text>
+                    )}
                   </>
                 )}
                 <div style={{ display: 'grid', gap: 2, marginTop: 10, maxHeight: 230, overflow: 'auto' }}>
