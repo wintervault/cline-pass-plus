@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { isIsoDate } from './date.ts';
 
 /** 当前配置格式版本。加载到更低版本会触发迁移，更高版本拒绝启动（避免新版写的配置被旧版改坏）。 */
-export const CONFIG_VERSION = 5;
+export const CONFIG_VERSION = 6;
 
 /**
  * 控制台监听默认端口（2.1 起独立于网关）。
@@ -19,15 +19,6 @@ export const DEFAULT_CONSOLE_PORT = 3125;
 /** 网关默认端口的起点（新建网关从这里往后找空位）。 */
 export const DEFAULT_GATEWAY_PORT = 3126;
 
-/**
- * 账号风控体检用的默认判定模型。
- *
- * 为什么是 flash 型号：体检每次都要真实发请求，要快、要便宜；而且必须是
- * **planner 管线**的模型（`cline-pass/*`）——我们要看的正是它的默认路由。
- * direct 模型（OpenRouter 类）两类账号都能钉住，判不出风控（docs/pinning.md 第五节）。
- */
-export const DEFAULT_CLASSIFY_MODEL = 'cline-pass/deepseek-v4.1-flash';
-
 /** 上游网关默认地址（Cline 官方）。 */
 export const DEFAULT_UPSTREAM_BASE = 'https://api.cline.bot/api/v1';
 
@@ -36,21 +27,27 @@ export const DEFAULT_UPSTREAM_BASE = 'https://api.cline.bot/api/v1';
  * 以及任何经代理成功调用的 `cline-pass/*` 模型会自动收录。
  */
 export const DEFAULT_KNOWN_MODELS = [
-  'cline-pass/glm-5.3-flash',
-  'cline-pass/kimi-k3',
-  'cline-pass/deepseek-v4-flash',
+  'cline-pass/deepseek-v4.1-flash-1017',
   'cline-pass/deepseek-v4.1-flash',
-  'cline-pass/qwen3.8-max',
-  'cline-pass/minimax-m3',
-  'cline-pass/glm-5.3',
-  'cline-pass/glm-5.2',
+  'cline-pass/deepseek-v4-flash',
   'cline-pass/deepseek-v4-pro',
+  'cline-pass/glm-5.3',
+  'cline-pass/glm-5.3-flash',
+  'cline-pass/glm-5.2',
+  'cline-pass/kimi-k3.1-pro',
+  'cline-pass/kimi-k3',
+  'cline-pass/kimi-k2.7-code',
+  'cline-pass/kimi-k2.6',
+  'cline-pass/qwen3.8-max',
+  'cline-pass/qwen3.7-max',
+  'cline-pass/qwen3.7-plus',
+  'cline-pass/minimax-m3.1-flash',
+  'cline-pass/minimax-m3',
+  'cline-pass/mimo-v2.6-pro',
+  'cline-pass/mimo-v2.6-flash',
   'cline-pass/mimo-v2.5-pro',
   'cline-pass/mimo-v2.5',
-  'cline-pass/kimi-k2.6',
-  'cline-pass/qwen3.7-plus',
-  'cline-pass/kimi-k2.7-code',
-  'cline-pass/qwen3.7-max',
+  'cline-pass/muse-spark-1.3-contributor',
 ];
 
 export const AccountSchema = z.object({
@@ -62,6 +59,11 @@ export const AccountSchema = z.object({
    * 不该把密钥一起丢掉。**到期只提醒**：它不改变账号参与哪个网关。
    */
   expiresAt: z.string().refine(isIsoDate, '日期格式应为 YYYY-MM-DD').optional().catch(undefined),
+  /**
+   * 用户自定义分组（2.2.4 起）。自由标签，最多 8 个、每个不超过 24 字，用于网关的
+   * 「按分组」账号范围与列表筛选。**分组是用户的事实，不是观测**——网关不参与决定。
+   */
+  groups: z.array(z.string().trim().min(1).max(24)).max(8).catch([]).default([]),
 });
 export type Account = z.infer<typeof AccountSchema>;
 
@@ -75,16 +77,16 @@ export const AccountModeSchema = z.enum(['sticky', 'single', 'roundrobin']);
 export type AccountMode = z.infer<typeof AccountModeSchema>;
 
 /**
- * 网关的账号范围（3.1 起）：
- * - `all`     全部账号
- * - `normal`  全部**正常号**（体检结论 normal；未判定的不猜）
- * - `private` 全部**风控号**（体检结论 private）
- * - `custom`  自选（`accounts` 列表）
+ * 网关的账号范围（v6 起按**用户分组**，不再是体检结论）：
+ * - `all`    全部账号
+ * - `groups` 指定分组（`scopeGroups`，账号带任一标签即命中）
+ * - `custom` 自选（`accounts` 列表）
  *
- * 分类是观测值，会随时间翻转——所以范围在**每次取账号时**按当前结论计算，
- * 不存在「保存时快照」。
+ * 为什么去掉「正常号 / 风控号」：账号级的分类结论并不预测什么——同一个号在
+ * 不同模型上可能一个能钉、一个被 VMC 接管；而能钉的模型靠区域约束就能回到官方
+ * 渠道。「这个号能不能用」是**账号 × 模型**的观测（`accountModels`），不是账号属性。
  */
-export const AccountScopeSchema = z.enum(['all', 'normal', 'private', 'custom']);
+export const AccountScopeSchema = z.enum(['all', 'groups', 'custom']);
 export type AccountScope = z.infer<typeof AccountScopeSchema>;
 
 export const PerModelSchema = z.object({
@@ -173,6 +175,8 @@ export const GatewaySchema = z.object({
    * 加载时会为无法识别的值写一条 note。
    */
   accountScope: AccountScopeSchema.catch('custom').default('all'),
+  /** 指定分组（账号的 `groups` 里带任一标签即命中），仅在 accountScope=groups 时生效。 */
+  scopeGroups: z.array(z.string().min(1)).catch([]).default([]),
   /** 自选账号（全局账号池里的名字），仅在 accountScope=custom 时生效。 */
   accounts: z.array(z.string().min(1)).catch([]).default([]),
   /** 账号顺序 = 粘性优先级（不在列表里的按全局顺序排在后面）。 */
@@ -224,8 +228,6 @@ export const ConfigSchema = z.object({
 
   // ---- 账号池（全局） ----
   accounts: z.array(z.unknown()).catch([]).default([]),
-  /** 账号风控体检的判定模型（见上方 DEFAULT_CLASSIFY_MODEL 的注释）。 */
-  classifyModel: z.string().min(1).catch(DEFAULT_CLASSIFY_MODEL).default(DEFAULT_CLASSIFY_MODEL),
 
   // ---- 网关（接入面） ----
   gateways: z.array(z.unknown()).catch([]).default([]),
@@ -255,6 +257,7 @@ export function defaultGateway(overrides: Partial<Gateway> = {}): Gateway {
     corsOrigins: [],
     exposeCatalog: false,
     accountScope: 'all',
+    scopeGroups: [],
     accounts: [],
     accountOrder: [],
     accountMode: 'sticky',
@@ -272,7 +275,6 @@ export function defaultConfig(): Config {
     version: CONFIG_VERSION,
     upstreamBase: DEFAULT_UPSTREAM_BASE,
     accounts: [],
-    classifyModel: DEFAULT_CLASSIFY_MODEL,
     gateways: [defaultGateway()],
     console: ConsoleSchema.parse({}),
     historyLimit: 500,

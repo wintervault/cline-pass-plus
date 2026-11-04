@@ -11,20 +11,18 @@ export function usableAccounts(config: Config) {
   return config.accounts.filter((a) => a.key);
 }
 
-/** 风控体检结论查询（按账号名）。 */
-export type AccountClassLookup = (name: string) => 'normal' | 'private' | 'unknown';
-
 /**
  * 该网关可见的账号。
  *
  * 账号本身是全局的，网关只声明**范围**：
- * - `all` 全部 / `normal` 全部正常号 / `private` 全部风控号 / `custom` 自选列表；
- * - 正常/风控按**当前体检结论**计算（观测值会翻转，所以不保存快照）；
+ * - `all` 全部 / `groups` 指定分组 / `custom` 自选列表；
+ * - 分组是**用户的事实**（`account.groups`），不是观测结论——账号带任一指定标签即命中；
  * - `accountOrder` 决定顺序 = sticky 模式的优先顺序；不在列表里的按全局顺序排后面。
  *
- * `classOf` 缺省时，分类范围返回空（绝不把「没给结论」当成正常号）。
+ * （v6 起不再有「正常号 / 风控号」范围：账号级的分类结论不预测任何东西，
+ * 「能不能钉住」是账号 × 模型的观测，见 docs/pinning.md 第六节。）
  */
-export function gatewayAccounts(config: Config, gateway: Gateway, classOf?: AccountClassLookup): Account[] {
+export function gatewayAccounts(config: Config, gateway: Gateway): Account[] {
   let list: Account[];
   switch (gateway.accountScope) {
     case 'custom': {
@@ -32,11 +30,9 @@ export function gatewayAccounts(config: Config, gateway: Gateway, classOf?: Acco
       list = config.accounts.filter((a) => names.has(a.name));
       break;
     }
-    case 'normal':
-    case 'private': {
-      if (!classOf) return [];
-      const wanted = gateway.accountScope;
-      list = config.accounts.filter((a) => classOf(a.name) === wanted);
+    case 'groups': {
+      const wanted = new Set(gateway.scopeGroups);
+      list = wanted.size ? config.accounts.filter((a) => a.groups.some((g) => wanted.has(g))) : [];
       break;
     }
     default:
@@ -50,8 +46,8 @@ export function gatewayAccounts(config: Config, gateway: Gateway, classOf?: Acco
 }
 
 /** 该网关可用的账号（key 非空）。 */
-export function gatewayUsableAccounts(config: Config, gateway: Gateway, classOf?: AccountClassLookup): Account[] {
-  return gatewayAccounts(config, gateway, classOf).filter((a) => a.key);
+export function gatewayUsableAccounts(config: Config, gateway: Gateway): Account[] {
+  return gatewayAccounts(config, gateway).filter((a) => a.key);
 }
 
 /** 按 id 找网关；不存在返回 null。 */
@@ -71,7 +67,7 @@ export function primaryGateway(config: Config): Gateway {
  * 网关的账号可用状态。
  *
  * 必须把「一个账号都没有」和「有账号、但都不在该网关的范围内」分开：
- * 后者（例如两个号都被风控，而网关范围是「全部正常号」）以前会被误报成
+ * 后者（例如账号都在别的分组里，而网关范围选了这组）以前会被误报成
  * 「尚未配置上游 API Key」，用户去账号池看却发现账号明明在。
  */
 export type GatewayAccountStateCode = 'ok' | 'no_accounts' | 'empty_scope' | 'disabled';
@@ -85,13 +81,9 @@ export interface GatewayAccountState {
   scope: Gateway['accountScope'];
 }
 
-export function gatewayAccountState(
-  config: Config,
-  gateway: Gateway,
-  classOf?: AccountClassLookup,
-): GatewayAccountState {
+export function gatewayAccountState(config: Config, gateway: Gateway): GatewayAccountState {
   const usableTotal = usableAccounts(config).length;
-  const inScope = gatewayUsableAccounts(config, gateway, classOf).length;
+  const inScope = gatewayUsableAccounts(config, gateway).length;
   const scope = gateway.accountScope;
   if (gateway.enabled === false) return { code: 'disabled', inScope, usableTotal, scope };
   if (usableTotal === 0) return { code: 'no_accounts', inScope, usableTotal, scope };

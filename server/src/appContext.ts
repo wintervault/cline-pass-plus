@@ -1,4 +1,3 @@
-import type { ClassifyService } from './accounts/classify.ts';
 import type { Config } from './config/schema.ts';
 import type { ConsoleManager } from './console/manager.ts';
 import type { GatewayManager } from './gateways/manager.ts';
@@ -27,8 +26,6 @@ export interface AppContext {
   catalog: CatalogService;
   /** 渠道检测（账号级：探测/校验结论按账号名存）。 */
   probe: ProbeService;
-  /** 账号风控体检（观测值写 metadata，见 accounts/classify.ts）。 */
-  classify: ClassifyService;
   /** 优雅关停（桌面壳的启停控制走这里；与 SIGTERM 同一条路径）。由 index.ts 装配。 */
   onShutdown?: (reason: string) => void;
 }

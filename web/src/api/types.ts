@@ -8,8 +8,8 @@ export type UpstreamStatusKind = 'ok' | 'limited' | 'quota' | 'bad' | 'auth' | '
 export type PinMode = 'strict' | 'preferred';
 export type SortKey = 'cost' | 'ttft' | 'tps';
 export type AccountMode = 'sticky' | 'single' | 'roundrobin';
-/** 网关的账号范围：全部 / 全部正常号 / 全部风控号 / 自选。 */
-export type AccountScope = 'all' | 'normal' | 'private' | 'custom';
+/** 网关的账号范围：全部 / 按分组 / 自选。 */
+export type AccountScope = 'all' | 'groups' | 'custom';
 
 export interface UpstreamStatus {
   status: UpstreamStatusKind;
@@ -113,19 +113,8 @@ export interface AccountView {
   expiresAt: string | null;
   /** 到期状态由服务端计算（时钟与 i18n 都以服务端为准）。 */
   expiry: ExpiryState;
-  /** 风控体检结论；从未体检过为 null。 */
-  classify: AccountClassRecord | null;
-}
-
-/** 风控分类：观测值，会随时间翻转（见 server/src/accounts/types.ts）。 */
-export type AccountClassKind = 'normal' | 'private' | 'unknown';
-
-export interface AccountClassRecord {
-  class: AccountClassKind;
-  checkedAt: number | null;
-  note?: string;
-  /** 能归类的原因，界面据此给出与其它检测一致的提示（原始原文仍在 note）。 */
-  reason?: 'quota';
+  /** 用户自定义分组（网关的「按分组」范围用它）。 */
+  groups: string[];
 }
 
 export type ExpiryKind = 'none' | 'active' | 'soon' | 'expired';
@@ -144,8 +133,6 @@ export interface AccountStats {
 
 export interface AccountsResponse {
   accounts: AccountView[];
-  /** 风控体检的判定模型（全局；账号策略与范围是网关级的，在「网关」页编辑）。 */
-  classifyModel: string;
   stats: Record<string, AccountStats>;
 }
 
@@ -161,6 +148,8 @@ export interface GatewayView {
   corsOrigins: string[];
   exposeCatalog: boolean;
   accountScope: AccountScope;
+  /** 分组范围使用的标签（accountScope=groups 时生效；账号带任一标签即命中）。 */
+  scopeGroups: string[];
   /** 自选范围使用的账号名（accountScope=custom 时生效）。 */
   accounts: string[];
   /** 账号顺序 = sticky 优先级。 */
@@ -225,12 +214,6 @@ export interface FailoverConfig {
   retryBackoffMs: number;
 }
 
-export interface ClassifyResult extends AccountClassRecord {
-  name: string;
-  /** 本次是否新得出结论（false = 沿用旧结论，note 是失败原因）。 */
-  fresh: boolean;
-}
-
 /** 后端用户可见文案一律是稳定 code + params（前端按语言映射，未知 code 不显示原文）。 */
 export interface Notice {
   code: string;
@@ -243,13 +226,6 @@ export interface AccountTestResult {
   model?: string;
   error?: string;
   notice?: Notice;
-}
-
-export interface ClassifyResponse {
-  ok: boolean;
-  results: ClassifyResult[];
-  summary: { normal: number; private: number; unknown: number; failed: number };
-  cancelled: boolean;
 }
 
 export interface HistoryEntry {

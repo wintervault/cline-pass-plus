@@ -1,4 +1,4 @@
-import { DeleteOutlined, EditOutlined, MedicineBoxOutlined, PlusOutlined, TeamOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, PlusOutlined, TeamOutlined } from '@ant-design/icons';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
@@ -17,21 +17,19 @@ import {
 import dayjs from 'dayjs';
 import { useState } from 'react';
 
-import { qk, useAccounts, useClassifyAccounts, useModels, useSaveAccounts, useTestAccount } from '../api/hooks.ts';
-import type { AccountClassRecord, AccountsResponse, AccountView, ExpiryState } from '../api/types.ts';
-import { EmptyState } from '../emptyState.tsx';
-import { diagnosticText } from '../i18n/codes.ts';
+import { qk, useAccounts, useSaveAccounts, useTestAccount } from '../api/hooks.ts';
+import type { AccountsResponse, AccountView, ExpiryState } from '../api/types.ts';
+import { EmptyLine, EmptyState } from '../emptyState.tsx';
 import { type Lang, useI18n } from '../i18n/index.tsx';
-import { ACCOUNT_CLASS_TAG } from '../labels.ts';
 import { useFlipList } from '../motion.ts';
 import { PageHeader } from '../pageHeader.tsx';
 import { Panel, PanelHint } from '../panel.tsx';
 import { StatusChip } from '../statusChip.tsx';
 
 /**
- * 账号池是**全局**的：名称/密钥/到期/启停只在这里定义一次。
+ * 账号池是**全局**的：名称/密钥/分组/到期只在这里定义一次。
  * 账号策略（粘性/单账号/轮转）与「哪些账号参与」是**网关级**的，在「网关」页编辑——
- * 同一个账号可以只服务风控网关，也可以同时服务多个网关，但密钥只有一份。
+ * 同一个账号可以带多个分组，同时服务多个网关，但密钥只有一份。
  */
 
 /** 提交给服务端的账号行；key 空串 = 保持原 key（服务端拿不到明文）。 */
@@ -40,6 +38,8 @@ interface DraftAccount {
   key: string;
   /** `YYYY-MM-DD`；null = 没有到期时间。 */
   expiresAt: string | null;
+  /** 用户自定义标签；网关的「按分组」范围按它选账号。 */
+  groups: string[];
   /**
    * 该行在已存列表里的下标；新增行为 null。
    * key 的归属由它指定——**不能按当前行号对位**：删除一行会让后面的行
@@ -55,6 +55,7 @@ interface EditModal {
   name: string;
   key: string;
   expiresAt: string | null;
+  groups: string[];
 }
 
 /** 最近使用时间：当天只显示时刻，跨天带日期（跟随界面语言）。 */
@@ -67,49 +68,35 @@ function fmtUsed(ts: number, lang: Lang): string {
 }
 
 /**
- * 风控分类徽标。
+ * 分组标签。
  *
- * 这是**观测值**：同一个账号的默认路由会随时间翻转（docs/pinning.md 第五节），
- * 所以悬停必须给出判定时间，文案也要说清适用范围——它只解释 planner 管线的
- * 默认路由，不代表这个账号「废了」：direct（OpenRouter 类）模型两类账号都能钉。
+ * 用文本而不是彩色药丸：分组是用户起的名字，不是状态。给它配颜色等于暗示
+ * 「这组比那组更对」，而分组之间没有优劣；一屏五六个彩色药丸也会把真正的
+ * 异常（额度用尽、密钥失效）平均掉。
  */
-function ClassifyTag({ record }: { record: AccountClassRecord | null }) {
-  const { t, lang } = useI18n();
-  const kind = record?.class ?? 'unknown';
-  const tag = ACCOUNT_CLASS_TAG[kind];
-  const checked = record?.checkedAt
-    ? t('accounts.class.checkedAt', { time: fmtUsed(record.checkedAt, lang) })
-    : t('accounts.class.neverChecked');
-  const note = diagnosticText(lang, record?.note);
-  const reason = record?.reason === 'quota' ? t('accounts.class.reason.quota') : '';
-  const explain = reason ? t('accounts.class.reason', { reason }) : note ? t('accounts.class.note', { note }) : '';
-  const tip = (
-    <span>
-      {checked}
-      {explain}
-      <br />
-      {t('accounts.class.scope')}
-    </span>
-  );
+function GroupTags({ groups }: { groups: string[] }) {
+  const { t } = useI18n();
+  if (groups.length === 0) {
+    return (
+      <span className="cps-meta" style={{ color: 'var(--cps-text-tertiary)' }}>
+        {t('accounts.groups.none')}
+      </span>
+    );
+  }
   return (
-    <div style={{ display: 'grid', gap: 2, justifyItems: 'start' }}>
-      <Tooltip title={tip}>
-        <span>
-          <StatusChip tone={tag.tone} small>
-            {t(tag.labelKey)}
-          </StatusChip>
-        </span>
-      </Tooltip>
-      {record?.reason === 'quota' && (
-        <Tooltip title={tip}>
-          <span>
-            <StatusChip tone="danger" small>
-              {t('accounts.class.reason.quota')}
-            </StatusChip>
-          </span>
-        </Tooltip>
-      )}
-    </div>
+    <span
+      className="cps-meta"
+      style={{
+        display: 'block',
+        minWidth: 0,
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+        color: 'var(--cps-text-secondary)',
+      }}
+    >
+      {groups.join(' · ')}
+    </span>
   );
 }
 
@@ -164,36 +151,30 @@ export default function Accounts() {
   const { t, lang } = useI18n();
   const qc = useQueryClient();
   const accounts = useAccounts();
-  // 判定模型的下拉选项取所有网关的模型并集（判定模型是全局的）
-  const models = useModels();
   const save = useSaveAccounts();
   const testKey = useTestAccount();
-  const classify = useClassifyAccounts();
   const [modal, setModal] = useState<EditModal | null>(null);
+  const [groupFilter, setGroupFilter] = useState<string | null>(null);
 
   const data = accounts.data;
   const rows = data?.accounts ?? [];
-  const classifyModel = data?.classifyModel ?? '';
 
-  const unclassified = rows.filter((a) => (a.classify?.class ?? 'unknown') === 'unknown').length;
   const noExpiry = rows.filter((a) => !a.expiresAt).length;
+  /** 分组清单 = 所有账号用过的标签；同时作为筛选器与编辑弹窗的候选项。 */
+  const allGroups = [...new Set(rows.flatMap((a) => a.groups))].sort((a, b) => a.localeCompare(b));
+  /** 选过的分组可能刚被改名/删除：失效时按「全部分组」显示，而不是给出空名单。 */
+  const activeGroup = groupFilter && allGroups.includes(groupFilter) ? groupFilter : null;
+  const shown = rows.map((a, i) => ({ a, i })).filter(({ a }) => !activeGroup || a.groups.includes(activeGroup));
   /** 增删账号时，其余行滑到新位置，而不是瞬移（只响应用户操作后的数据变化）。 */
   const listRef = useFlipList<HTMLDivElement>(rows.map((a) => a.name).join('|'));
-  /** 判定模型的可选清单：订阅模型 + 当前值（当前值可能已不在清单里，不能因此消失）。 */
-  const modelIds = (models.data?.subscription ?? []).map((m) => m.id);
-  const classifyOptions = [...new Set([...modelIds, ...(classifyModel ? [classifyModel] : [])])].map((id) => ({
-    value: id,
-    label: id,
-  }));
 
   /** 把服务端当前状态组装成提交数组（key 留空 = 保持不变）。 */
   const draftFromServer = (): DraftAccount[] =>
-    rows.map((a, i) => ({ name: a.name, key: '', expiresAt: a.expiresAt, existingIndex: i }));
+    rows.map((a, i) => ({ name: a.name, key: '', expiresAt: a.expiresAt, groups: a.groups, existingIndex: i }));
 
   /** 就地保存：只改传入的字段，其余保持服务端当前值。note 是给用户的回执文案。 */
-  const commit = (next: { accounts?: DraftAccount[]; classifyModel?: string }, note: string): void => {
-    const nextAccounts = next.accounts ?? draftFromServer();
-    const nextModel = next.classifyModel ?? classifyModel;
+  const commit = (next: { accounts: DraftAccount[] }, note: string): void => {
+    const nextAccounts = next.accounts;
     // 乐观更新缓存：连续操作（连点开关）时，下一次 draftFromServer()
     // 读到的必须包含上一次改动——否则后一次提交会用旧缓存覆盖前一次（丢改动）
     qc.setQueryData<AccountsResponse>(qk.accounts, (old) =>
@@ -217,15 +198,14 @@ export default function Accounts() {
                 expiry: unchanged
                   ? (prev?.expiry ?? { kind: 'none', days: null })
                   : { kind: expiresAt ? 'active' : 'none', days: null },
-                classify: prev?.classify ?? null,
+                groups: a.groups,
               } satisfies AccountView;
             }),
-            classifyModel: nextModel,
           }
         : old,
     );
     save.mutate(
-      { payload: { accounts: nextAccounts, classifyModel: nextModel }, note },
+      { payload: { accounts: nextAccounts }, note },
       { onSuccess: () => qc.invalidateQueries({ queryKey: qk.accounts }) },
     );
   };
@@ -233,6 +213,10 @@ export default function Accounts() {
   const testAccount = (name: string): void => {
     testKey.mutate({ payload: { name }, label: name });
   };
+
+  /** 分组只有数量和长度上限（8 个 / 各 24 字），与服务端 schema 一致。 */
+  const cleanGroups = (groups: string[]): string[] =>
+    [...new Set(groups.map((g) => g.trim().slice(0, 24)).filter(Boolean))].slice(0, 8);
 
   const submitModal = (): void => {
     if (!modal) return;
@@ -244,10 +228,11 @@ export default function Accounts() {
     }
     const draft = draftFromServer();
     const editing = modal.index !== null;
+    const groups = cleanGroups(modal.groups);
     if (modal.index === null) {
-      draft.push({ name, key, expiresAt: modal.expiresAt, existingIndex: null });
+      draft.push({ name, key, expiresAt: modal.expiresAt, groups, existingIndex: null });
     } else {
-      draft[modal.index] = { ...(draft[modal.index] as DraftAccount), name, key, expiresAt: modal.expiresAt };
+      draft[modal.index] = { ...(draft[modal.index] as DraftAccount), name, key, expiresAt: modal.expiresAt, groups };
     }
     commit({ accounts: draft }, editing ? t('accounts.note.updated', { name }) : t('accounts.note.added', { name }));
     setModal(null);
@@ -268,213 +253,183 @@ export default function Accounts() {
           <Button
             type="primary"
             icon={<PlusOutlined />}
-            onClick={() => setModal({ index: null, name: '', key: '', expiresAt: null })}
+            onClick={() => setModal({ index: null, name: '', key: '', expiresAt: null, groups: [] })}
           >
             {t('accounts.add')}
           </Button>
         }
       />
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {/* 体检设置：判定模型是全局的（判定的是账号，不是网关）。
-            没有任何账号时不显示——体检对象都还没有，这一块没有意义。 */}
-        {rows.length > 0 && (
-          <Panel title={t('accounts.settings.title')} extra={<PanelHint>{t('accounts.settings.hint')}</PanelHint>}>
-            <div className="cps-field">
-              <div className="cps-field-label">
-                <span className="cps-body" style={{ color: 'var(--cps-text-secondary)' }}>
-                  {t('accounts.settings.model')}
-                </span>
-              </div>
-              <div className="cps-field-body">
+      {/* 账号名单 */}
+      <Panel
+        title={t('accounts.panel.title')}
+        extra={
+          rows.length > 0 ? (
+            <Space size={12} align="center">
+              <PanelHint>{t('common.count', { count: rows.length })}</PanelHint>
+              {noExpiry > 0 && <PanelHint>{t('accounts.panel.noExpiry', { count: noExpiry })}</PanelHint>}
+              {allGroups.length > 0 && (
                 <Select
-                  style={{ width: 280, fontFamily: 'var(--cps-font-mono)' }}
-                  showSearch
-                  value={classifyModel || undefined}
-                  onChange={(v: string) => commit({ classifyModel: v }, t('accounts.note.modelChanged', { model: v }))}
-                  options={classifyOptions}
-                />
-                <p className="cps-meta" style={{ margin: '6px 0 0' }}>
-                  {t('accounts.settings.modelHint')}
-                </p>
-              </div>
-            </div>
-          </Panel>
-        )}
-
-        {/* 账号名单 */}
-        <Panel
-          title={t('accounts.panel.title')}
-          extra={
-            rows.length > 0 ? (
-              <Space size={12} align="center">
-                <PanelHint>{t('common.count', { count: rows.length })}</PanelHint>
-                {unclassified > 0 && <PanelHint>{t('accounts.panel.unclassified', { count: unclassified })}</PanelHint>}
-                {noExpiry > 0 && <PanelHint>{t('accounts.panel.noExpiry', { count: noExpiry })}</PanelHint>}
-                <Button
                   size="small"
-                  icon={<MedicineBoxOutlined />}
-                  loading={classify.isPending}
-                  disabled={rows.length === 0}
-                  onClick={() => classify.mutate({})}
-                >
-                  {t('accounts.panel.classifyAll')}
-                </Button>
-              </Space>
-            ) : undefined
-          }
-          flush
-        >
-          {accounts.isError ? (
-            <Alert
-              type="error"
-              showIcon
-              style={{ margin: 16 }}
-              message={t('accounts.loadFailed')}
-              description={t('accounts.loadFailed.desc')}
-              action={
-                <Button size="small" onClick={() => void accounts.refetch()}>
-                  {t('common.retry')}
-                </Button>
-              }
-            />
-          ) : accounts.isLoading && !data ? (
-            <div style={{ padding: 16 }}>
-              <Skeleton active paragraph={{ rows: 4 }} />
+                  allowClear
+                  style={{ width: 132 }}
+                  placeholder={t('accounts.groups.filter')}
+                  value={activeGroup ?? undefined}
+                  onChange={(v?: string) => setGroupFilter(v ?? null)}
+                  options={allGroups.map((g) => ({ value: g, label: g }))}
+                />
+              )}
+            </Space>
+          ) : undefined
+        }
+        flush
+      >
+        {accounts.isError ? (
+          <Alert
+            type="error"
+            showIcon
+            style={{ margin: 16 }}
+            message={t('accounts.loadFailed')}
+            description={t('accounts.loadFailed.desc')}
+            action={
+              <Button size="small" onClick={() => void accounts.refetch()}>
+                {t('common.retry')}
+              </Button>
+            }
+          />
+        ) : accounts.isLoading && !data ? (
+          <div style={{ padding: 16 }}>
+            <Skeleton active paragraph={{ rows: 4 }} />
+          </div>
+        ) : rows.length === 0 ? (
+          <EmptyState
+            minHeight={240}
+            icon={<TeamOutlined />}
+            desc={t('accounts.empty')}
+            action={
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                onClick={() => setModal({ index: null, name: '', key: '', expiresAt: null, groups: [] })}
+              >
+                {t('accounts.add')}
+              </Button>
+            }
+          />
+        ) : (
+          <div ref={listRef} className="cps-fade-in">
+            <div className="cps-list-head cps-account-grid">
+              <span className="cps-label">{t('accounts.col.account')}</span>
+              <span className="cps-label">{t('accounts.col.groups')}</span>
+              <span className="cps-label">{t('accounts.col.expiry')}</span>
+              <span className="cps-label" style={{ textAlign: 'right' }}>
+                {t('accounts.col.usage')}
+              </span>
+              <span className="cps-label" style={{ textAlign: 'right' }}>
+                {t('accounts.col.actions')}
+              </span>
             </div>
-          ) : rows.length === 0 ? (
-            <EmptyState
-              minHeight={240}
-              icon={<TeamOutlined />}
-              desc={t('accounts.empty')}
-              action={
-                <Button
-                  type="primary"
-                  icon={<PlusOutlined />}
-                  onClick={() => setModal({ index: null, name: '', key: '', expiresAt: null })}
-                >
-                  {t('accounts.add')}
-                </Button>
-              }
-            />
-          ) : (
-            <div ref={listRef} className="cps-fade-in">
-              <div className="cps-list-head cps-account-grid">
-                <span className="cps-label">{t('accounts.col.account')}</span>
-                <span className="cps-label">{t('accounts.col.state')}</span>
-                <span className="cps-label">{t('accounts.col.expiry')}</span>
-                <span className="cps-label" style={{ textAlign: 'right' }}>
-                  {t('accounts.col.usage')}
-                </span>
-                <span className="cps-label" style={{ textAlign: 'right' }}>
-                  {t('accounts.col.actions')}
-                </span>
-              </div>
-              {rows.map((a, i) => {
-                const st = data?.stats[a.name];
-                const testingThis =
-                  classify.isPending &&
-                  ((classify.variables?.names?.length ?? 0) > 0 ? classify.variables?.names?.includes(a.name) : true);
-                return (
-                  <div key={`${a.name}-${a.keyMasked}`} className="cps-list-row cps-account-row" data-flip-key={a.name}>
-                    <div className="cps-account-grid" style={{ width: '100%' }}>
-                      <div style={{ minWidth: 0, display: 'grid', gap: 3 }}>
-                        <span
-                          style={{
-                            fontSize: 13.5,
-                            fontWeight: 600,
-                            color: 'var(--cps-text)',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {a.name || t('accounts.unnamed')}
-                        </span>
-                        <span className="cps-data" style={{ fontSize: 11.5, color: 'var(--cps-text-tertiary)' }}>
-                          {a.keyMasked}
-                        </span>
-                      </div>
-
-                      <ClassifyTag record={a.classify} />
-
-                      <ExpiryTag expiry={a.expiry} expiresAt={a.expiresAt} />
-
-                      <div style={{ display: 'grid', gap: 2, justifyItems: 'end' }}>
-                        <span className="cps-num" style={{ color: 'var(--cps-text)' }}>
-                          {t('common.requests', { count: st?.requests ?? 0 })}
-                        </span>
-                        <span className="cps-meta">
-                          {st?.lastUsed ? fmtUsed(st.lastUsed, lang) : t('accounts.usage.neverUsed')}
-                        </span>
-                        {st?.lastError && (
-                          <Tooltip title={st.lastError}>
-                            <span className="cps-status cps-status-danger" style={{ gap: 0, fontSize: 11.5 }}>
-                              {t('accounts.usage.error')}
-                            </span>
-                          </Tooltip>
-                        )}
-                      </div>
-
-                      <Space size={2} style={{ justifySelf: 'end' }}>
-                        <Tooltip title={t('accounts.action.test.tip')}>
-                          <Button
-                            size="small"
-                            loading={
-                              testKey.isPending &&
-                              testKey.variables !== undefined &&
-                              'name' in testKey.variables.payload &&
-                              testKey.variables.payload.name === a.name
-                            }
-                            onClick={() => testAccount(a.name)}
-                          >
-                            {t('accounts.action.test')}
-                          </Button>
-                        </Tooltip>
-                        <Tooltip title={t('accounts.action.classify.tip')}>
-                          <Button
-                            size="small"
-                            icon={<MedicineBoxOutlined />}
-                            aria-label={t('accounts.panel.classifyAll')}
-                            loading={testingThis}
-                            disabled={classify.isPending && !testingThis}
-                            onClick={() => classify.mutate({ names: [a.name] })}
-                          />
-                        </Tooltip>
-                        <Tooltip title={t('accounts.action.edit.tip')}>
-                          <Button
-                            size="small"
-                            type="text"
-                            icon={<EditOutlined />}
-                            aria-label={t('common.edit')}
-                            onClick={() => setModal({ index: i, name: a.name, key: '', expiresAt: a.expiresAt })}
-                          />
-                        </Tooltip>
-                        <Popconfirm
-                          title={t('accounts.delete.title', { name: a.name })}
-                          description={t('accounts.delete.desc')}
-                          okText={t('common.delete')}
-                          okButtonProps={{ danger: true }}
-                          cancelText={t('common.cancel')}
-                          onConfirm={() => removeAccount(i)}
-                        >
-                          <Button
-                            size="small"
-                            type="text"
-                            danger
-                            icon={<DeleteOutlined />}
-                            aria-label={t('accounts.action.delete.tip')}
-                          />
-                        </Popconfirm>
-                      </Space>
+            {shown.length === 0 ? (
+              <EmptyLine>{t('accounts.groups.empty', { group: activeGroup ?? '' })}</EmptyLine>
+            ) : null}
+            {shown.map(({ a, i }) => {
+              const st = data?.stats[a.name];
+              return (
+                <div key={`${a.name}-${a.keyMasked}`} className="cps-list-row cps-account-row" data-flip-key={a.name}>
+                  <div className="cps-account-grid" style={{ width: '100%' }}>
+                    <div style={{ minWidth: 0, display: 'grid', gap: 3 }}>
+                      <span
+                        className="cps-title"
+                        style={{
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          color: 'var(--cps-text)',
+                        }}
+                      >
+                        {a.name || t('accounts.unnamed')}
+                      </span>
+                      <span className="cps-data" style={{ fontSize: 11.5, color: 'var(--cps-text-tertiary)' }}>
+                        {a.keyMasked}
+                      </span>
                     </div>
+
+                    <GroupTags groups={a.groups} />
+
+                    <ExpiryTag expiry={a.expiry} expiresAt={a.expiresAt} />
+
+                    <div style={{ display: 'grid', gap: 2, justifyItems: 'end' }}>
+                      <span className="cps-num" style={{ color: 'var(--cps-text)' }}>
+                        {t('common.requests', { count: st?.requests ?? 0 })}
+                      </span>
+                      <span className="cps-meta">
+                        {st?.lastUsed ? fmtUsed(st.lastUsed, lang) : t('accounts.usage.neverUsed')}
+                      </span>
+                      {st?.lastError && (
+                        <Tooltip title={st.lastError}>
+                          <span className="cps-status cps-status-danger" style={{ gap: 0, fontSize: 11.5 }}>
+                            {t('accounts.usage.error')}
+                          </span>
+                        </Tooltip>
+                      )}
+                    </div>
+
+                    <Space size={2} style={{ justifySelf: 'end' }}>
+                      <Tooltip title={t('accounts.action.test.tip')}>
+                        <Button
+                          size="small"
+                          loading={
+                            testKey.isPending &&
+                            testKey.variables !== undefined &&
+                            'name' in testKey.variables.payload &&
+                            testKey.variables.payload.name === a.name
+                          }
+                          onClick={() => testAccount(a.name)}
+                        >
+                          {t('accounts.action.test')}
+                        </Button>
+                      </Tooltip>
+                      <Tooltip title={t('accounts.action.edit.tip')}>
+                        <Button
+                          size="small"
+                          type="text"
+                          icon={<EditOutlined />}
+                          aria-label={t('common.edit')}
+                          onClick={() =>
+                            setModal({
+                              index: i,
+                              name: a.name,
+                              key: '',
+                              expiresAt: a.expiresAt,
+                              groups: a.groups,
+                            })
+                          }
+                        />
+                      </Tooltip>
+                      <Popconfirm
+                        title={t('accounts.delete.title', { name: a.name })}
+                        description={t('accounts.delete.desc')}
+                        okText={t('common.delete')}
+                        okButtonProps={{ danger: true }}
+                        cancelText={t('common.cancel')}
+                        onConfirm={() => removeAccount(i)}
+                      >
+                        <Button
+                          size="small"
+                          type="text"
+                          danger
+                          icon={<DeleteOutlined />}
+                          aria-label={t('accounts.action.delete.tip')}
+                        />
+                      </Popconfirm>
+                    </Space>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </Panel>
-      </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Panel>
 
       <Modal
         open={modal !== null}
@@ -513,6 +468,24 @@ export default function Accounts() {
               value={modal?.key ?? ''}
               onChange={(e) => setModal((m) => (m ? { ...m, key: e.target.value } : m))}
             />
+          </div>
+          <div>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {t('accounts.field.groups')}
+            </Typography.Text>
+            <Select
+              mode="tags"
+              style={{ marginTop: 4, width: '100%' }}
+              maxCount={8}
+              tokenSeparators={[',', '，']}
+              placeholder={t('accounts.field.groups.placeholder')}
+              value={modal?.groups ?? []}
+              onChange={(v: string[]) => setModal((m) => (m ? { ...m, groups: v } : m))}
+              options={allGroups.map((g) => ({ value: g, label: g }))}
+            />
+            <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 6 }}>
+              {t('accounts.field.groups.hint')}
+            </Typography.Text>
           </div>
           <div>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>

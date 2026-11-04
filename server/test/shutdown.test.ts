@@ -51,7 +51,6 @@ function makeCtx(onShutdown?: (reason: string) => void): AppContext {
     } as unknown as AppContext['gateways'],
     console: {} as AppContext['console'],
     probe: {} as AppContext['probe'],
-    classify: {} as AppContext['classify'],
     catalog: {} as AppContext['catalog'],
     onShutdown,
   };

@@ -90,7 +90,9 @@ Installers live on the [Releases](../../releases/latest) page. Pick the package 
   Failing channels sink to the bottom of the list instead of being removed; a global budget
   caps total failover time.
 - **Account policies**: sticky (preserves prompt cache), single account, or round-robin,
-  with per-gateway account scope (all / normal / risk-flagged / custom) and order.
+  with per-gateway account scope (all / by group / custom) and order. **Groups** are tags on
+  accounts (an account can carry several); gateways pick accounts by tag, so reassigning an
+  account is just a tag change.
 - **Multiple gateways**: one process can expose several endpoints with independent ports,
   keys, model lists, and routing policies. **The console has its own listener** (3125 by
   default), so a gateway that fails to bind, is disabled, or is deleted never affects it.

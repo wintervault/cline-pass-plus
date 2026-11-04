@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { expiryState } from '../src/accounts/expiry.ts';
 import { daysUntil, isIsoDate } from '../src/config/date.ts';
-import { AccountSchema, defaultConfig } from '../src/config/schema.ts';
+import { AccountSchema } from '../src/config/schema.ts';
 
 /** 本地中午，避免测试在「零点边界」上抖动。 */
 const at = (y: number, m: number, d: number) => new Date(y, m - 1, d, 12, 0, 0);
@@ -62,18 +62,12 @@ describe('expiryState', () => {
 });
 
 describe('AccountSchema.expiresAt', () => {
-  const base = { name: 'a', key: 'sk_a' };
+  const base = { name: 'a', key: 'sk_a', groups: [] };
 
   it('合法日期保留；非法日期按「未设置」处理，账号本身不丢', () => {
     expect(AccountSchema.parse({ ...base, expiresAt: '2026-12-01' }).expiresAt).toBe('2026-12-01');
     const broken = AccountSchema.parse({ ...base, expiresAt: '2026-02-31' });
     expect(broken.expiresAt).toBeUndefined();
     expect(broken.key).toBe('sk_a');
-  });
-});
-
-describe('ConfigSchema.classifyModel', () => {
-  it('默认值是 planner 管线的 flash 模型', () => {
-    expect(defaultConfig().classifyModel).toBe('cline-pass/deepseek-v4.1-flash');
   });
 });

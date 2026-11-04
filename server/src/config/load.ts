@@ -109,6 +109,10 @@ export async function loadConfig(file: string): Promise<LoadResult> {
     else droppedAccounts += 1;
   }
   if (droppedAccounts) notes.push(`丢弃了 ${droppedAccounts} 个无效账号（缺少 key 或字段类型错误）`);
+  // 分组去重（手改配置写重了不该在界面上出现两个一样的标签）
+  for (const account of accounts) {
+    account.groups = [...new Set(account.groups.map((g) => g.trim()).filter(Boolean))].slice(0, 8);
+  }
 
   // 账号名是账号的标识（usage 统计与风控分类都按名字存）→ 必须唯一
   const unified = ensureUniqueAccountNames(accounts);
@@ -135,7 +139,7 @@ export async function loadConfig(file: string): Promise<LoadResult> {
     if (
       isPlainObject(normalizedEntry) &&
       normalizedEntry['accountScope'] !== undefined &&
-      !['all', 'normal', 'private', 'custom'].includes(String(normalizedEntry['accountScope']))
+      !['all', 'groups', 'custom'].includes(String(normalizedEntry['accountScope']))
     ) {
       const label =
         typeof normalizedEntry['name'] === 'string' && normalizedEntry['name']
@@ -234,8 +238,8 @@ function normalizeGateway(g: GatewayInput, accountNames: Set<string>, notes: str
 
   const accountOrder = [...new Set(g.accountOrder.filter((n) => accountNames.has(n)))];
 
-  // 只有自选范围能确定「在不在范围里」；正常/风控范围按体检结论动态计算，
-  // activeAccount 可能暂时不在其中（结论翻转），交给 pool 回退到第一个账号。
+  // 只有自选范围能确定「在不在范围里」；分组范围按账号标签动态计算，
+  // activeAccount 可能暂时不在其中（改了分组），交给 pool 回退到第一个账号。
   let activeAccount = g.activeAccount;
   if (activeAccount && g.accountScope === 'custom' && !accounts.includes(activeAccount)) {
     notes.push(`网关「${g.name}」指定的账号「${activeAccount}」不在其账号范围内，已改为默认`);

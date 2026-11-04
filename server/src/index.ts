@@ -1,11 +1,9 @@
 import fs from 'node:fs/promises';
 import type http from 'node:http';
 
-import { ClassifyService } from './accounts/classify.ts';
 import { AccountPool } from './accounts/pool.ts';
 import type { AppContext } from './appContext.ts';
 import {
-  type AccountClassLookup,
   gatewayAccountState,
   gatewayAccounts,
   gatewayById,
@@ -128,8 +126,6 @@ async function main(): Promise<void> {
   const metaLoaded = await loadMetaStore(META_PATH);
   for (const note of metaLoaded.notes) logger.warn({ note }, '观测数据');
   const metaStore = metaLoaded.store;
-  /** 风控结论查询：账号范围 normal/private 在每次取账号时按最新结论计算。 */
-  const classOf: AccountClassLookup = (name) => metaStore.value.accountClass[name]?.class ?? 'unknown';
 
   // ---- 全局服务（不随网关变化） ----
   // 目录拉取只需要「随便一个可用账号」：用一个覆盖全局账号的池，与网关的粘性状态无关。
@@ -146,20 +142,9 @@ async function main(): Promise<void> {
     meta: metaStore.value,
     markDirty: () => metaStore.markDirty(),
   });
-  // 依赖用函数注入：配置与 metadata 都是就地更新的，每次体检都读最新值
-  const classify = new ClassifyService(() => ({
-    upstreamBase: configStore.value.upstreamBase,
-    classifyModel: configStore.value.classifyModel,
-    get: (name) => metaStore.value.accountClass[name],
-    set: (name, record) =>
-      metaStore.update((meta) => {
-        meta.accountClass[name] = record;
-      }),
-  }));
-
   /**
    * 渠道检测（探测 / 校验）是**账号级**的：结论按账号名存进 `accountModels`，
-   * 与网关无关。同一个模型在正常号与风控号上的可钉性和渠道清单可能完全不同。
+   * 与网关无关。同一个模型在不同账号上的可钉性和渠道清单可能完全不同。
    */
   const probe = new ProbeService({
     get upstreamBase() {
@@ -188,7 +173,7 @@ async function main(): Promise<void> {
       const cfg = configStore.value;
       const gateway = gatewayById(cfg, id);
       return {
-        accounts: gateway ? gatewayAccounts(cfg, gateway, classOf) : [],
+        accounts: gateway ? gatewayAccounts(cfg, gateway) : [],
         accountMode: gateway?.accountMode ?? 'sticky',
         activeAccount: gateway?.activeAccount ?? '',
       };
@@ -227,7 +212,7 @@ async function main(): Promise<void> {
       const cfg = configStore.value;
       if (c.path === '/healthz' && c.method === 'GET') {
         const gateway = gatewayById(cfg, gatewayId);
-        const state = gateway ? gatewayAccountState(cfg, gateway, classOf) : null;
+        const state = gateway ? gatewayAccountState(cfg, gateway) : null;
         sendJSON(c.res, 200, {
           ok: true,
           gateway: gatewayId,
@@ -307,7 +292,6 @@ async function main(): Promise<void> {
     console: consoleManager,
     catalog,
     probe,
-    classify,
   };
   registerApiRoutes(ctx, router);
 

@@ -1,14 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRef } from 'react';
 
-import { type Feedback, useFeedback } from '../feedback.ts';
+import { useFeedback } from '../feedback.ts';
 import { codeText, noticeText } from '../i18n/codes.ts';
 import { useI18n } from '../i18n/index.tsx';
 import { api } from './client.ts';
 import type {
   AccountsResponse,
   AccountTestResult,
-  ClassifyResponse,
   ConsoleInfo,
   GatewaysResponse,
   HistoryEntry,
@@ -227,45 +225,9 @@ export function useTestAccount() {
     },
     onError: (err, vars) => fb.fail(t('toast.account.requestFailed', { name: vars.label }), err),
   });
-}
-
-/**
- * 风控体检。批量可能跑十几秒（串行、每账号 1 发最小请求），所以用两段式回执：
- * 按下时「正在体检…」，跑完换成结果（成功与失败都必带原因）。
+} /**
+ * 保存网关（新建或更新；id 创建后不可改）。
  */
-export function useClassifyAccounts() {
-  const refresh = useRefresh();
-  const fb = useFeedback();
-  const { t } = useI18n();
-  const busy = useRef<ReturnType<Feedback['busy']> | null>(null);
-  return useMutation({
-    mutationFn: (vars: { names?: string[] }) => api<ClassifyResponse>('/api/accounts/classify', { json: vars }),
-    onMutate: (vars) => {
-      busy.current = fb.busy(
-        vars.names?.length ? t('toast.classify.busy', { count: vars.names.length }) : t('toast.classify.busyAll'),
-      );
-    },
-    onSuccess: (r) => {
-      refresh();
-      const s = r.summary;
-      const tail = s.failed ? t('toast.classify.tail', { count: s.failed }) : '';
-      busy.current?.ok(
-        t('toast.classify.done', {
-          normal: s.normal,
-          private: s.private,
-          unknown: s.unknown,
-          tail,
-        }),
-      );
-    },
-    onError: (err) => busy.current?.fail(t('toast.classify.failed'), err),
-    onSettled: () => {
-      busy.current = null;
-    },
-  });
-}
-
-/** 保存网关（新建或更新；id 创建后不可改）。 */
 export function useSaveGateway() {
   const refresh = useRefresh();
   const fb = useFeedback();

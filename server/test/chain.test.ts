@@ -42,8 +42,8 @@ beforeEach(async () => {
   health = new ChannelHealth();
   config = defaultConfig();
   config.accounts = [
-    { name: 'A', key: 'sk_a' },
-    { name: 'B', key: 'sk_b' },
+    { name: 'A', key: 'sk_a', groups: [] },
+    { name: 'B', key: 'sk_b', groups: [] },
   ];
   pool = makePool();
 });
@@ -182,7 +182,7 @@ describe('ChatChain 故障转移', () => {
   });
 
   it('账号级失败但只有一个账号：直接把错误给客户端，不打后续候选', async () => {
-    config.accounts = [{ name: 'A', key: 'sk_a' }];
+    config.accounts = [{ name: 'A', key: 'sk_a', groups: [] }];
     pool = makePool();
     upstream.script([{ status: 401, body: err('Unauthorized') }]);
     const chain = makeChain();

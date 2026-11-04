@@ -4,7 +4,6 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useM
 import { useAccounts } from './api/hooks.ts';
 import type { AccountView } from './api/types.ts';
 import { useI18n } from './i18n/index.tsx';
-import { type ChipTone, StatusChip } from './statusChip.tsx';
 
 /**
  * 检测账号（订阅模型 / 测试台 / 完整目录共用）。
@@ -96,17 +95,14 @@ export function useDetectionAccount(): DetectionAccountValue {
 
 /**
  * 页头的账号选择器。所有检测页共用同一个控件，避免三个页面各写一套
- * 「选中值/回退/风险标签」。
+ * 「选中值/回退/标签」。
+ *
+ * `showGroups` 把所选账号的分组显示在右侧：同一个模型在不同分组上的渠道结论
+ * 可能完全不同，选账号时要知道自己在看哪一组。
  */
-const CLASS_TONE: Record<'normal' | 'private' | 'unknown', ChipTone> = {
-  normal: 'ok',
-  private: 'warn',
-  unknown: 'neutral',
-};
-export function DetectionAccountPicker({ label, showClass = false }: { label: string; showClass?: boolean }) {
+export function DetectionAccountPicker({ label, showGroups = false }: { label: string; showGroups?: boolean }) {
   const { t } = useI18n();
   const { account, current, accounts, setAccount } = useDetectionAccount();
-  const kind = current?.classify?.class ?? 'unknown';
   return (
     <Space size={6} align="center">
       <Typography.Text type="secondary" style={{ fontSize: 13 }}>
@@ -121,10 +117,10 @@ export function DetectionAccountPicker({ label, showClass = false }: { label: st
         options={accounts.map((a) => ({ value: a.name, label: a.name }))}
         onChange={setAccount}
       />
-      {showClass && account ? (
-        <StatusChip tone={CLASS_TONE[kind]} small>
-          {t(`models.account.${kind}`)}
-        </StatusChip>
+      {showGroups && account && current && current.groups.length > 0 ? (
+        <span className="cps-meta" style={{ color: 'var(--cps-text-tertiary)' }}>
+          {current.groups.join(' · ')}
+        </span>
       ) : null}
     </Space>
   );

@@ -44,11 +44,11 @@ describe('migrateConfig', () => {
   it('旧版 apiKey 迁入账号池且不重复', () => {
     const r = migrateConfig({ apiKey: 'sk_legacy' });
     expect(r.raw.apiKey).toBeUndefined();
-    expect(r.raw.accounts).toEqual([{ name: '默认账号', key: 'sk_legacy' }]);
+    expect(r.raw.accounts).toEqual([{ name: '默认账号', key: 'sk_legacy', groups: [] }]);
     expect(r.applied.join()).toContain('apiKey');
 
     // 已有同 key 账号时不重复插入
-    const r2 = migrateConfig({ apiKey: 'sk_x', accounts: [{ name: 'A', key: 'sk_x' }] });
+    const r2 = migrateConfig({ apiKey: 'sk_x', accounts: [{ name: 'A', key: 'sk_x', groups: [] }] });
     expect(r2.raw.accounts).toHaveLength(1);
   });
 
@@ -88,8 +88,8 @@ describe('migrateConfig', () => {
       accountMode: 'single',
       activeAccount: 1,
       accounts: [
-        { name: 'A', key: 'sk_a' },
-        { name: 'B', key: 'sk_b' },
+        { name: 'A', key: 'sk_a', groups: [] },
+        { name: 'B', key: 'sk_b', groups: [] },
       ],
       knownModels: ['cline-pass/x'],
       perModel: { 'cline-pass/x': { upstreams: ['deepseek'] } },
@@ -155,21 +155,52 @@ describe('migrateConfig', () => {
   it('v4 → v5：控制台独立到 3125，网关端口保持不动', () => {
     const r = migrateConfig({
       version: 4,
-      accounts: [{ name: 'A', key: 'sk_a' }],
+      accounts: [{ name: 'A', key: 'sk_a', groups: [] }],
       gateways: [{ id: 'main', port: 3123, proxyKey: 'sk_console' }],
       console: { gatewayId: 'main' },
     });
-    expect(r.raw.version).toBe(5);
+    expect(r.raw.version).toBe(CONFIG_VERSION);
     expect(r.applied.join()).toContain('v4 → v5');
     expect(r.raw.console).toEqual({ port: 3125, bindHost: '127.0.0.1', proxyKey: 'sk_console' });
     // 已接入客户端的地址不能因为改布局而被悄悄改掉
     expect((r.raw.gateways as Array<Record<string, unknown>>)[0]?.port).toBe(3123);
   });
 
+  it('v5 → v6：账号范围改按分组，原「正常/风控」范围落回全部', () => {
+    const r = migrateConfig({
+      version: 5,
+      classifyModel: 'cline-pass/deepseek-v4.1-flash',
+      accounts: [
+        { name: 'A', key: 'sk_a' },
+        { name: 'B', key: 'sk_b' },
+      ],
+      gateways: [
+        { id: 'main', accountScope: 'normal' },
+        { id: 'risk', accountScope: 'private', accounts: [] },
+        { id: 'own', accountScope: 'custom', accounts: ['A'] },
+      ],
+      console: { port: 3125, bindHost: '127.0.0.1', proxyKey: '' },
+    });
+    expect(r.raw.version).toBe(CONFIG_VERSION);
+    expect(r.applied.join()).toContain('v5 → v6');
+    const accounts = r.raw.accounts as Array<Record<string, unknown>>;
+    expect(accounts[0]?.groups).toEqual([]);
+    const gateways = r.raw.gateways as Array<Record<string, unknown>>;
+    expect(gateways[0]?.accountScope).toBe('all');
+    expect(gateways[1]?.accountScope).toBe('all');
+    expect(gateways[0]?.scopeGroups).toEqual([]);
+    // 自选范围保持原样
+    expect(gateways[2]?.accountScope).toBe('custom');
+    // 体检判定模型不再存在
+    expect(r.raw['classifyModel']).toBeUndefined();
+    // 提示里说清楚「原来的范围被改成了全部」
+    expect(r.applied.join()).toContain('2 个网关的范围原先按体检结论设置');
+  });
+
   it('v4 → v5：原网关占用 3125 时让位给控制台，避免控制台绑不上', () => {
     const r = migrateConfig({
       version: 4,
-      accounts: [{ name: 'A', key: 'sk_a' }],
+      accounts: [{ name: 'A', key: 'sk_a', groups: [] }],
       gateways: [
         { id: 'main', port: 3125 },
         { id: 'risk', port: 3126 },
@@ -265,10 +296,10 @@ describe('loadConfig', () => {
     await write(
       JSON.stringify({
         accounts: [
-          { name: '好的', key: 'sk_good' },
+          { name: '好的', key: 'sk_good', groups: [] },
           { name: '缺 key' },
           'string 不是对象',
-          { name: '另一个好的', key: 'sk_good2' },
+          { name: '另一个好的', key: 'sk_good2', groups: [] },
         ],
       }),
     );
@@ -278,11 +309,11 @@ describe('loadConfig', () => {
   });
 
   it('v2 的 activeAccount 下标在迁移时翻译成账号名；指向不存在的账号则清空', async () => {
-    await write(JSON.stringify({ accounts: [{ name: 'A', key: 'sk_a' }], activeAccount: 0 }));
+    await write(JSON.stringify({ accounts: [{ name: 'A', key: 'sk_a', groups: [] }], activeAccount: 0 }));
     const r = await loadConfig(file);
     expect(r.config.gateways[0]?.activeAccount).toBe('A');
 
-    await write(JSON.stringify({ accounts: [{ name: 'A', key: 'sk_a' }], activeAccount: 9 }));
+    await write(JSON.stringify({ accounts: [{ name: 'A', key: 'sk_a', groups: [] }], activeAccount: 9 }));
     const r2 = await loadConfig(file);
     expect(r2.config.gateways[0]?.activeAccount).toBe('');
   });
@@ -292,7 +323,7 @@ describe('loadConfig', () => {
       version: 2,
       port: 3123,
       proxyKey: 'sk_downstream',
-      accounts: [{ name: 'A', key: 'sk_a' }],
+      accounts: [{ name: 'A', key: 'sk_a', groups: [] }],
       knownModels: ['cline-pass/x'],
     };
     await write(JSON.stringify(v2));
@@ -321,7 +352,7 @@ describe('loadConfig', () => {
     await write(
       JSON.stringify({
         version: 4,
-        accounts: [{ name: 'A', key: 'sk_a' }],
+        accounts: [{ name: 'A', key: 'sk_a', groups: [] }],
         gateways: [{ id: 'main', port: 3123, accountScope: 'nromal' }],
         console: { gatewayId: 'main' },
       }),
@@ -332,7 +363,7 @@ describe('loadConfig', () => {
   });
 
   it('字段级修正（未涉及版本）不会被标记为迁移', async () => {
-    await write(JSON.stringify({ version: CONFIG_VERSION, accounts: [{ name: 'A', key: '' }] }));
+    await write(JSON.stringify({ version: CONFIG_VERSION, accounts: [{ name: 'A', key: '', groups: [] }] }));
     const r = await loadConfig(file);
     expect(r.migrationFrom).toBeNull();
   });
@@ -372,7 +403,7 @@ describe('loadConfig', () => {
     );
     const r = await loadConfig(file);
     expect(r.config.version).toBe(CONFIG_VERSION);
-    expect(r.config.accounts).toEqual([{ name: '默认账号', key: 'sk_v1_key' }]);
+    expect(r.config.accounts).toEqual([{ name: '默认账号', key: 'sk_v1_key', groups: [] }]);
     const gateway = r.config.gateways[0];
     expect(gateway?.accountMode).toBe('sticky');
     expect(gateway?.proxyKey).toBe('downstream-key');
@@ -393,7 +424,7 @@ describe('loadConfig', () => {
 describe('writeConfig', () => {
   it('写出的配置能被原样读回', async () => {
     const cfg = defaultConfig();
-    cfg.accounts = [{ name: 'A', key: 'sk_a' }];
+    cfg.accounts = [{ name: 'A', key: 'sk_a', groups: [] }];
     await writeConfig(file, cfg);
     const r = await loadConfig(file);
     expect(r.config.accounts).toEqual(cfg.accounts);

@@ -32,7 +32,7 @@ export function applyEnvOverrides(config: Config, env: NodeJS.ProcessEnv = proce
     if (config.accounts.length > 0) {
       notes.push(`账号池已有 ${config.accounts.length} 个账号，已忽略 CLINE_PASS_KEY（该变量仅用于首次启动）`);
     } else if (!config.accounts.some((a) => a.key === clineKey)) {
-      const merged = ensureUniqueAccountNames([{ name: 'env-account', key: clineKey }, ...config.accounts]);
+      const merged = ensureUniqueAccountNames([{ name: 'env-account', key: clineKey, groups: [] }, ...config.accounts]);
       config.accounts = merged.accounts;
       for (const r of merged.renamed) notes.push(`账号名重复，已自动改名：${r.from} → ${r.to}`);
       notes.push('CLINE_PASS_KEY 已注入账号池（首次启动引导）');

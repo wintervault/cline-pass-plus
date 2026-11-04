@@ -5,7 +5,6 @@ import { ensureUniqueAccountNames } from '../../accounts/naming.ts';
 import { type AppContext, updateConfig } from '../../appContext.ts';
 import { isIsoDate } from '../../config/date.ts';
 import {
-  type AccountClassLookup,
   gatewayAccountState,
   gatewayById,
   gatewayProxyBase,
@@ -139,11 +138,28 @@ export function mergeAccountsDetailed(existing: Account[], incoming: unknown): A
     if (rawExpires === null || rawExpires === '') expiresAt = undefined;
     else if (typeof rawExpires === 'string' && isIsoDate(rawExpires)) expiresAt = rawExpires;
 
+    /* 分组三态：缺省 = 保持（老客户端不带这个字段），数组 = 设置（空数组 = 清空）。 */
+    const rawGroups = a['groups'];
+    const groups = Array.isArray(rawGroups)
+      ? [
+          ...new Set(
+            rawGroups
+              .map((g) =>
+                String(g ?? '')
+                  .trim()
+                  .slice(0, 24),
+              )
+              .filter(Boolean),
+          ),
+        ].slice(0, 8)
+      : (prior?.groups ?? []);
+
     picked.push({
       account: {
         name,
         key: finalKey,
         ...(expiresAt ? { expiresAt } : {}),
+        groups,
       },
       priorName: prior?.name ?? null,
     });
@@ -168,33 +184,25 @@ export function mergeAccountsDetailed(existing: Account[], incoming: unknown): A
 function migrateAccountMeta(ctx: AppContext, renames: Array<{ from: string; to: string }>, names: string[]): void {
   const alive = new Set(names);
   const current = ctx.metaStore.value;
-  const hasStale = [
-    ...Object.keys(current.stats),
-    ...Object.keys(current.accountClass),
-    ...Object.keys(current.accountModels),
-  ].some((n) => !alive.has(n));
+  const hasStale = [...Object.keys(current.stats), ...Object.keys(current.accountModels)].some((n) => !alive.has(n));
   if (!renames.length && !hasStale) return;
 
   ctx.metaStore.update((meta) => {
     const moves = renames.map((r) => ({
       ...r,
       stats: meta.stats[r.from],
-      cls: meta.accountClass[r.from],
       models: meta.accountModels[r.from],
     }));
     for (const r of renames) {
       delete meta.stats[r.from];
-      delete meta.accountClass[r.from];
       delete meta.accountModels[r.from];
     }
     for (const m of moves) {
       if (!alive.has(m.to)) continue;
       if (m.stats) meta.stats[m.to] = m.stats;
-      if (m.cls) meta.accountClass[m.to] = m.cls;
       if (m.models) meta.accountModels[m.to] = m.models;
     }
     for (const name of Object.keys(meta.stats)) if (!alive.has(name)) delete meta.stats[name];
-    for (const name of Object.keys(meta.accountClass)) if (!alive.has(name)) delete meta.accountClass[name];
     // 删除账号后，检测记录不能留着：同名账号以后再加回来时不该继承别人的探测结论
     for (const name of Object.keys(meta.accountModels)) if (!alive.has(name)) delete meta.accountModels[name];
   });
@@ -242,7 +250,6 @@ function requestGateway(ctx: AppContext, c: Ctx): Gateway | null {
 function gatewayViews(ctx: AppContext) {
   const config = ctx.configStore.value;
   const statuses = new Map(ctx.gateways.statuses().map((s) => [s.id, s]));
-  const classOf: AccountClassLookup = (name) => ctx.metaStore.value.accountClass[name]?.class ?? 'unknown';
   return config.gateways.map((gateway) => {
     const { proxyKey, ...rest } = gateway;
     const status = statuses.get(gateway.id) ?? {
@@ -254,8 +261,8 @@ function gatewayViews(ctx: AppContext) {
     return {
       ...rest,
       hasProxyKey: !!proxyKey,
-      accountCount: gatewayUsableAccounts(config, gateway, classOf).length,
-      accountState: gatewayAccountState(config, gateway, classOf),
+      accountCount: gatewayUsableAccounts(config, gateway).length,
+      accountState: gatewayAccountState(config, gateway),
       modelCount: gateway.knownModels.length,
       proxyBase: gatewayProxyBase(gateway),
       status,
@@ -309,9 +316,10 @@ export function mergeGatewayPayload(raw: Record<string, unknown>, existing: Gate
 
   const scopeValue = raw['accountScope'];
   const accountScope =
-    scopeValue === 'all' || scopeValue === 'normal' || scopeValue === 'private' || scopeValue === 'custom'
-      ? scopeValue
-      : fallback.accountScope;
+    scopeValue === 'all' || scopeValue === 'groups' || scopeValue === 'custom' ? scopeValue : fallback.accountScope;
+  const scopeGroups = Array.isArray(raw['scopeGroups'])
+    ? [...new Set(raw['scopeGroups'].map((n) => String(n ?? '').trim()).filter(Boolean))]
+    : fallback.scopeGroups;
   const accounts = Array.isArray(raw['accounts'])
     ? [...new Set(raw['accounts'].map((n) => String(n ?? '').trim()).filter(Boolean))]
     : fallback.accounts;
@@ -359,6 +367,7 @@ export function mergeGatewayPayload(raw: Record<string, unknown>, existing: Gate
       corsOrigins,
       exposeCatalog: typeof raw['exposeCatalog'] === 'boolean' ? raw['exposeCatalog'] : fallback.exposeCatalog,
       accountScope,
+      scopeGroups,
       accounts,
       accountOrder,
       accountMode,
@@ -376,8 +385,6 @@ export function registerApiRoutes(
 ): void {
   const config = () => ctx.configStore.value;
   const meta = () => ctx.metaStore.value;
-  /** 账号范围 normal/private 依赖当前体检结论（与 gatewayViews 同一口径）。 */
-  const classOf: AccountClassLookup = (name) => ctx.metaStore.value.accountClass[name]?.class ?? 'unknown';
 
   /** 控制台监听的公开视图（不回传密钥）。 */
   const consoleView = (reqHost?: string) => {
@@ -415,7 +422,7 @@ export function registerApiRoutes(
       console: consoleView(c.req.headers.host),
       /** 只给选择器需要的字段；完整信息在 /api/gateways。 */
       gateways: cfg.gateways.map((g) => {
-        const state = gatewayAccountState(cfg, g, classOf);
+        const state = gatewayAccountState(cfg, g);
         return { id: g.id, name: g.name, enabled: g.enabled, accountState: state.code };
       }),
     });
@@ -691,7 +698,6 @@ export function registerApiRoutes(
   router.get('/api/accounts', (c: Ctx) => {
     const cfg = config();
     const stats = meta().stats;
-    const accountClass = meta().accountClass;
     // 不回传明文 key：只给掩码与指纹（末 4 位），编辑时留空 = 保持不变
     sendJSON(c.res, 200, {
       accounts: cfg.accounts.map((a) => ({
@@ -702,11 +708,9 @@ export function registerApiRoutes(
         expiresAt: a.expiresAt ?? null,
         /** 到期状态由**服务端**算（时钟以服务端为准；i18n 时前端按 kind 取词）。 */
         expiry: expiryState(a.expiresAt),
-        /** 风控体检结论（观测值，可能为空 = 从未体检过）。 */
-        classify: accountClass[a.name] ?? null,
+        /** 用户自定义分组（网关的「按分组」范围用它）。 */
+        groups: a.groups,
       })),
-      /** 体检判定模型（全局；账号策略与账号范围是网关级的，在「网关」页编辑）。 */
-      classifyModel: cfg.classifyModel,
       stats,
     });
   });
@@ -714,10 +718,10 @@ export function registerApiRoutes(
   router.post('/api/accounts', async (c: Ctx) => {
     const body = await readJsonBody(c.req);
     if (!body.ok) return sendError(c.res, 400, body.reason === 'bad-json' ? 'invalid JSON body' : 'body too large');
-    const payload = (body.value ?? {}) as { accounts?: unknown; classifyModel?: unknown };
+    const payload = (body.value ?? {}) as { accounts?: unknown };
     /**
      * accounts 三态：
-     * - 缺省 → 保持现有账号（只改判定模型的请求不该清空账号池）；
+     * - 缺省 → 保持现有账号；
      * - 空数组 → 明确删除全部账号（首次启动本来就是 0 个，必须允许回到该状态）；
      * - 非数组 → 拒绝，避免坏请求把账号池清空。
      */
@@ -729,11 +733,9 @@ export function registerApiRoutes(
         ? { accounts: config().accounts, renames: [] as Array<{ from: string; to: string }> }
         : mergeAccountsDetailed(config().accounts, payload.accounts);
     const names = new Set(accounts.map((a) => a.name));
-    const classifyModel = typeof payload.classifyModel === 'string' ? payload.classifyModel.trim().slice(0, 120) : '';
 
     updateConfig(ctx, (cfg) => {
       cfg.accounts = accounts;
-      if (classifyModel) cfg.classifyModel = classifyModel;
       const renameMap = new Map(renames.map((r) => [r.from, r.to]));
       for (const gw of cfg.gateways) {
         // 改名：账号范围与 single 模式的选择跟着改
@@ -754,39 +756,8 @@ export function registerApiRoutes(
     sendJSON(c.res, 200, {
       ok: true,
       accounts: accounts.length,
-      classifyModel: config().classifyModel,
       renamed: renames,
     });
-  });
-
-  /**
-   * 风控体检：每个账号发**一次**最小请求，看网关默认路由到哪个渠道。
-   * 显式传 `names` 时只体检这些（允许体检没参与任何网关的账号）；不传则体检全部账号。
-   * 串行执行——串行不会打满上游速率限制，也让「1 发/账号」的额度消耗可解释。
-   */
-  router.post('/api/accounts/classify', async (c: Ctx) => {
-    const body = await readJsonBody(c.req);
-    if (!body.ok) return sendError(c.res, 400, body.reason === 'bad-json' ? 'invalid JSON body' : 'body too large');
-    const payload = (body.value ?? {}) as { names?: unknown };
-    const wanted = Array.isArray(payload.names)
-      ? new Set(payload.names.filter((n): n is string => typeof n === 'string' && n.length > 0))
-      : null;
-    const targets = config().accounts.filter((a) => !!a.key && (wanted ? wanted.has(a.name) : true));
-    if (!targets.length) {
-      return sendError(
-        c.res,
-        400,
-        wanted ? '没有匹配的账号' : '没有可体检的账号',
-        'invalid_request_error',
-        wanted ? 'accounts.classify.noTargets' : 'accounts.classify.noEnabled',
-      );
-    }
-    if (ctx.classify.isRunning())
-      return sendError(c.res, 409, '体检正在进行中，请稍候', 'invalid_request_error', 'accounts.classify.busy');
-    const batch = await ctx.classify.classifyMany(targets, c.abortSignal);
-    // 客户端中途离开：不再写响应（socket 已断）
-    if (batch.cancelled) return;
-    sendJSON(c.res, 200, { ok: true, ...batch });
   });
 
   router.post('/api/accounts/test', async (c: Ctx) => {

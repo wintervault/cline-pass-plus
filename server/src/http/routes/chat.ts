@@ -70,11 +70,7 @@ export function chatHandler(ctx: AppContext, gatewayId: string): Handler {
     const runtime = ctx.gateways.get(gatewayId);
     if (!gateway || !runtime) return sendError(c.res, 503, 'gateway not available', 'gateway_error');
     const meta = gatewayModels(ctx.metaStore.value, gatewayId)[modelId];
-    const accountState = gatewayAccountState(
-      ctx.configStore.value,
-      gateway,
-      (name) => ctx.metaStore.value.accountClass[name]?.class ?? 'unknown',
-    );
+    const accountState = gatewayAccountState(ctx.configStore.value, gateway);
     const isStream = payload.stream === true;
 
     const result = await runtime.chain.run({

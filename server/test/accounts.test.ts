@@ -4,7 +4,7 @@ import { ensureUniqueAccountNames } from '../src/accounts/naming.ts';
 import { AccountPool } from '../src/accounts/pool.ts';
 import { defaultConfig } from '../src/config/schema.ts';
 
-const acc = (name: string, key = `sk_${name}`) => ({ name, key });
+const acc = (name: string, key = `sk_${name}`) => ({ name, key, groups: [] });
 
 describe('ensureUniqueAccountNames', () => {
   it('原型链保留名会被改成可见的普通名字', () => {

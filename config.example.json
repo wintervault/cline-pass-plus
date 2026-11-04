@@ -1,14 +1,19 @@
 {
-  "version": 5,
+  "version": 6,
   "upstreamBase": "https://api.cline.bot/api/v1",
   "accounts": [
     {
       "name": "主力",
       "key": "sk_你的_Cline_Pass_Key",
-      "expiresAt": "2026-12-31"
+      "expiresAt": "2026-12-31",
+      "groups": ["主力"]
+    },
+    {
+      "name": "备用",
+      "key": "sk_你的另一个_Cline_Pass_Key",
+      "groups": ["备用"]
     }
   ],
-  "classifyModel": "cline-pass/deepseek-v4.1-flash",
   "gateways": [
     {
       "id": "main",
@@ -21,6 +26,7 @@
       "corsOrigins": [],
       "exposeCatalog": false,
       "accountScope": "all",
+      "scopeGroups": [],
       "accounts": [],
       "accountOrder": [],
       "accountMode": "sticky",
@@ -31,7 +37,8 @@
           "upstreams": ["deepseek"],
           "exclude": [],
           "pinMode": "strict",
-          "sort": null
+          "sort": null,
+          "regionGuard": true
         }
       },
       "failover": {
@@ -44,8 +51,8 @@
       }
     },
     {
-      "id": "risk",
-      "name": "风控号专用",
+      "id": "backup",
+      "name": "备用分组专用",
       "enabled": true,
       "port": 3127,
       "bindHost": "127.0.0.1",
@@ -53,10 +60,11 @@
       "publicBaseUrl": "",
       "corsOrigins": [],
       "exposeCatalog": false,
-      "accountScope": "private",
+      "accountScope": "groups",
+      "scopeGroups": ["备用"],
       "accounts": [],
       "accountOrder": [],
-      "accountMode": "single",
+      "accountMode": "sticky",
       "activeAccount": "",
       "knownModels": ["cline-pass/glm-5.3-flash"],
       "perModel": {},

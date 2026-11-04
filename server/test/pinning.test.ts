@@ -15,7 +15,7 @@ const routedBody = (provider: string, plan = PLAN_TEXT) => ({
   },
 });
 
-const ACCOUNT = { name: 'A', key: 'sk_a' };
+const ACCOUNT = { name: 'A', key: 'sk_a', groups: [] };
 
 let upstream: FakeUpstream;
 let base: string;

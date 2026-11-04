@@ -423,7 +423,7 @@ export default function Models() {
         desc={t('models.desc')}
         actions={
           <Space size={8}>
-            <DetectionAccountPicker label={t('models.account.label')} showClass />
+            <DetectionAccountPicker label={t('models.account.label')} showGroups />
             <Tooltip
               title={
                 official

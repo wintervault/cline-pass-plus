@@ -108,7 +108,7 @@ describe('applyEnvOverrides', () => {
   it('CLINE_PASS_KEY 注入账号池且不重复', () => {
     const cfg = defaultConfig();
     expect(applyEnvOverrides(cfg, { CLINE_PASS_KEY: 'sk_env' }).join()).toContain('CLINE_PASS_KEY 已注入账号池');
-    expect(cfg.accounts).toEqual([{ name: 'env-account', key: 'sk_env' }]);
+    expect(cfg.accounts).toEqual([{ name: 'env-account', key: 'sk_env', groups: [] }]);
     // 再次应用不重复插入
     applyEnvOverrides(cfg, { CLINE_PASS_KEY: 'sk_env' });
     expect(cfg.accounts).toHaveLength(1);
@@ -116,9 +116,9 @@ describe('applyEnvOverrides', () => {
 
   it('CLINE_PASS_KEY 只做首次启动引导：已有账号时忽略', () => {
     const cfg = defaultConfig();
-    cfg.accounts = [{ name: 'A', key: 'sk_a' }];
+    cfg.accounts = [{ name: 'A', key: 'sk_a', groups: [] }];
     const notes = applyEnvOverrides(cfg, { CLINE_PASS_KEY: 'sk_env' });
-    expect(cfg.accounts).toEqual([{ name: 'A', key: 'sk_a' }]);
+    expect(cfg.accounts).toEqual([{ name: 'A', key: 'sk_a', groups: [] }]);
     expect(notes.join()).toContain('已忽略 CLINE_PASS_KEY');
   });
 
@@ -171,35 +171,36 @@ describe('applyEnvOverrides', () => {
 describe('gatewayAccounts：账号范围与顺序', () => {
   const cfg = defaultConfig();
   cfg.accounts = [
-    { name: 'a', key: 'sk_a' },
-    { name: 'b', key: 'sk_b' },
-    { name: 'c', key: '' },
+    { name: 'a', key: 'sk_a', groups: ['主力'] },
+    { name: 'b', key: 'sk_b', groups: ['主力', '备用'] },
+    { name: 'c', key: '', groups: [] },
   ];
-  const classOf = (name: string): 'normal' | 'private' | 'unknown' =>
-    name === 'a' ? 'normal' : name === 'b' ? 'private' : 'unknown';
   const gw = (over: Partial<ReturnType<typeof defaultGateway>>) => ({ ...defaultGateway(), ...over });
 
-  it('all：全部账号（含未判定）', () => {
-    expect(gatewayAccounts(cfg, gw({ accountScope: 'all' }), classOf).map((a) => a.name)).toEqual(['a', 'b', 'c']);
+  it('all：全部账号', () => {
+    expect(gatewayAccounts(cfg, gw({ accountScope: 'all' })).map((a) => a.name)).toEqual(['a', 'b', 'c']);
   });
 
-  it('normal / private：按当前体检结论过滤，unknown 不猜', () => {
-    expect(gatewayAccounts(cfg, gw({ accountScope: 'normal' }), classOf).map((a) => a.name)).toEqual(['a']);
-    expect(gatewayAccounts(cfg, gw({ accountScope: 'private' }), classOf).map((a) => a.name)).toEqual(['b']);
-    // 没有结论来源时不把所有人当正常号
-    expect(gatewayAccounts(cfg, gw({ accountScope: 'normal' }))).toEqual([]);
+  it('groups：带任一指定标签即命中；没选分组 = 空', () => {
+    expect(gatewayAccounts(cfg, gw({ accountScope: 'groups', scopeGroups: ['主力'] })).map((a) => a.name)).toEqual([
+      'a',
+      'b',
+    ]);
+    expect(gatewayAccounts(cfg, gw({ accountScope: 'groups', scopeGroups: ['备用'] })).map((a) => a.name)).toEqual([
+      'b',
+    ]);
+    expect(gatewayAccounts(cfg, gw({ accountScope: 'groups', scopeGroups: [] }))).toEqual([]);
   });
 
   it('custom：只取列表里的账号', () => {
-    expect(
-      gatewayAccounts(cfg, gw({ accountScope: 'custom', accounts: ['c', 'a'] }), classOf).map((a) => a.name),
-    ).toEqual(['a', 'c']);
+    expect(gatewayAccounts(cfg, gw({ accountScope: 'custom', accounts: ['c', 'a'] })).map((a) => a.name)).toEqual([
+      'a',
+      'c',
+    ]);
   });
 
   it('accountOrder 决定顺序（= sticky 优先级），不存在的名字忽略', () => {
-    const out = gatewayAccounts(cfg, gw({ accountScope: 'all', accountOrder: ['b', 'nope', 'a'] }), classOf).map(
-      (a) => a.name,
-    );
+    const out = gatewayAccounts(cfg, gw({ accountScope: 'all', accountOrder: ['b', 'nope', 'a'] })).map((a) => a.name);
     expect(out).toEqual(['b', 'a', 'c']);
   });
 });
@@ -208,9 +209,9 @@ describe('derive', () => {
   it('isConfigured：只要有一个 key 非空的账号', () => {
     const cfg = defaultConfig();
     expect(isConfigured(cfg)).toBe(false);
-    cfg.accounts = [{ name: 'a', key: '' }];
+    cfg.accounts = [{ name: 'a', key: '', groups: [] }];
     expect(isConfigured(cfg)).toBe(false);
-    cfg.accounts.push({ name: 'b', key: 'sk_b' });
+    cfg.accounts.push({ name: 'b', key: 'sk_b', groups: [] });
     expect(isConfigured(cfg)).toBe(true);
     expect(usableAccounts(cfg)).toHaveLength(1);
   });
@@ -274,9 +275,9 @@ describe('mergeGatewayPayload（proxyKey 三态语义 + 显式校验）', () => 
 
 describe('mergeAccounts（key 归属防错位）', () => {
   const existing = [
-    { name: 'A', key: 'sk_aaaa' },
-    { name: 'B', key: 'sk_bbbb' },
-    { name: 'C', key: 'sk_cccc' },
+    { name: 'A', key: 'sk_aaaa', groups: [] },
+    { name: 'B', key: 'sk_bbbb', groups: [] },
+    { name: 'C', key: 'sk_cccc', groups: [] },
   ];
 
   it('existingIndex 指定 key 归属：留空 = 继承旧 key', () => {
@@ -297,7 +298,7 @@ describe('mergeAccounts（key 归属防错位）', () => {
 
   it('新增行（无 existingIndex）必须填 key', () => {
     const merged = mergeAccounts(existing, [
-      { name: '新', key: 'sk_new' },
+      { name: '新', key: 'sk_new', groups: [] },
       { name: 'B', existingIndex: 1 },
     ]);
     expect(merged.map((a) => a.key)).toEqual(['sk_new', 'sk_bbbb']);

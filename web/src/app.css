@@ -300,7 +300,8 @@ samp {
 }
 .cps-account-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 96px 120px 118px 136px;
+  /* 账号 / 分组 / 到期 / 使用情况 / 操作 */
+  grid-template-columns: minmax(0, 1fr) 150px 120px 118px 136px;
   gap: 16px;
   align-items: start;
 }
@@ -309,7 +310,7 @@ samp {
 }
 @media (max-width: 1240px) {
   .cps-account-grid {
-    grid-template-columns: minmax(0, 1fr) 88px 104px 100px 128px;
+    grid-template-columns: minmax(0, 1fr) 124px 104px 100px 128px;
     gap: 12px;
   }
 }

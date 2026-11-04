@@ -128,7 +128,7 @@ describe('网关 API', () => {
 
   async function harness(gateways: Gateway[]): Promise<Harness> {
     const config = defaultConfig();
-    config.accounts = [{ name: 'A', key: 'sk_a' }];
+    config.accounts = [{ name: 'A', key: 'sk_a', groups: [] }];
     config.gateways = gateways;
     const configStore = new JsonStore(path.join(dir, 'config.json'), config, { debounceMs: 1 });
     const meta = defaultMeta();
@@ -154,7 +154,6 @@ describe('网关 API', () => {
       gateways: manager,
       console: {} as AppContext['console'],
       probe: {} as AppContext['probe'],
-      classify: {} as AppContext['classify'],
       catalog: {} as AppContext['catalog'],
     };
     const router = new Router();
@@ -394,28 +393,24 @@ describe('网关 API', () => {
     expect(configStore.value.gateways[0]?.accountOrder).toEqual(['C']);
   });
 
-  it('/api/meta 的 configured 按账号范围与体检结论计算（回归：切到「全部正常」后误报未配置）', async () => {
+  it('/api/meta 的账号状态按分组计算（回归：切到某分组后误报未配置）', async () => {
     const p1 = await freePort();
-    const { port: apiPort, configStore, metaStore } = await harness([defaultGateway({ id: 'main', port: p1 })]);
+    const { port: apiPort, configStore } = await harness([defaultGateway({ id: 'main', port: p1 })]);
     await request(apiPort, '/api/accounts', {
       method: 'POST',
       body: {
         accounts: [
-          { name: 'A', key: 'sk_a', existingIndex: 0 },
-          { name: 'B', key: 'sk_b', existingIndex: null },
+          { name: 'A', key: 'sk_a', existingIndex: 0, groups: ['主力'] },
+          { name: 'B', key: 'sk_b', existingIndex: null, groups: ['备用'] },
         ],
       },
     });
-    metaStore.update((m) => {
-      m.accountClass['A'] = { class: 'normal', checkedAt: 1 };
-      m.accountClass['B'] = { class: 'private', checkedAt: 1 };
-    });
     await request(apiPort, '/api/gateways/save', {
       method: 'POST',
-      body: { gateway: { id: 'main', accountScope: 'normal' } },
+      body: { gateway: { id: 'main', accountScope: 'groups', scopeGroups: ['主力'] } },
     });
-    expect(configStore.value.gateways[0]?.accountScope).toBe('normal');
-    // 账号状态由网关视图给出：范围内有正常号 → ok（不再用「configured 布尔」误报）
+    expect(configStore.value.gateways[0]?.accountScope).toBe('groups');
+    // 账号状态由网关视图给出：范围内有账号 → ok（不再用「configured 布尔」误报）
     const list = await request(apiPort, '/api/gateways');
     expect(
       list.json<{ gateways: Array<{ id: string; accountState: { code: string; inScope: number } }> }>().gateways[0]
@@ -484,21 +479,17 @@ describe('网关 API', () => {
     expect(gatewayUsableAccounts(configStore.value, after)).toHaveLength(0);
   });
 
-  it('正常/风控范围按体检结论动态计算，账号顺序按 accountOrder 保存', async () => {
+  it('分组范围按账号标签动态计算，账号顺序按 accountOrder 保存', async () => {
     const mainPort = await freePort();
-    const { port: apiPort, configStore, metaStore } = await harness([defaultGateway({ id: 'main', port: mainPort })]);
+    const { port: apiPort, configStore } = await harness([defaultGateway({ id: 'main', port: mainPort })]);
     await request(apiPort, '/api/accounts', {
       method: 'POST',
       body: {
         accounts: [
-          { name: 'A', key: 'sk_a', existingIndex: 0 },
-          { name: 'B', key: 'sk_b', existingIndex: null },
+          { name: 'A', key: 'sk_a', existingIndex: 0, groups: ['主力'] },
+          { name: 'B', key: 'sk_b', existingIndex: null, groups: ['备用'] },
         ],
       },
-    });
-    metaStore.update((m) => {
-      m.accountClass['A'] = { class: 'normal', checkedAt: 1 };
-      m.accountClass['B'] = { class: 'private', checkedAt: 1 };
     });
 
     const save = (gateway: Record<string, unknown>) =>
@@ -511,16 +502,22 @@ describe('网关 API', () => {
       return list.json<{ gateways: Array<{ id: string; accountCount: number }> }>().gateways[0]?.accountCount ?? -1;
     };
 
-    expect((await save({ accountScope: 'private', accountOrder: ['B', 'A'] })).status).toBe(200);
+    expect((await save({ accountScope: 'groups', scopeGroups: ['备用'], accountOrder: ['B', 'A'] })).status).toBe(200);
     expect(configStore.value.gateways[0]?.accountOrder).toEqual(['B', 'A']);
-    expect(await count()).toBe(1); // 只有 B 是风控号
+    expect(await count()).toBe(1); // 只有 B 在「备用」组
 
-    expect((await save({ accountScope: 'normal' })).status).toBe(200);
+    expect((await save({ accountScope: 'groups', scopeGroups: ['主力'] })).status).toBe(200);
     expect(await count()).toBe(1); // A
 
-    // 结论翻转（体检是观测值）：范围跟着变，不需要重新保存网关
-    metaStore.update((m) => {
-      m.accountClass['B'] = { class: 'normal', checkedAt: 2 };
+    // 改分组后范围跟着变，不需要重新保存网关
+    await request(apiPort, '/api/accounts', {
+      method: 'POST',
+      body: {
+        accounts: [
+          { name: 'A', key: 'sk_a', existingIndex: 0, groups: ['主力'] },
+          { name: 'B', key: 'sk_b', existingIndex: 1, groups: ['主力'] },
+        ],
+      },
     });
     expect(await count()).toBe(2);
 

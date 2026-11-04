@@ -82,8 +82,8 @@ async function harness() {
 
   const config = defaultConfig();
   config.accounts = [
-    { name: 'A', key: 'sk_a' },
-    { name: 'B', key: 'sk_b' },
+    { name: 'A', key: 'sk_a', groups: [] },
+    { name: 'B', key: 'sk_b', groups: [] },
   ];
   const gateway = config.gateways[0];
   if (!gateway) throw new Error('defaultConfig 没有网关');
@@ -119,7 +119,6 @@ async function harness() {
     console: {} as AppContext['console'],
     catalog: {} as AppContext['catalog'],
     probe: {} as AppContext['probe'],
-    classify: {} as AppContext['classify'],
   };
 
   const server = createHttpServer({

@@ -60,19 +60,17 @@ const MODE_SHORT: Record<AccountMode, MsgKey> = {
   roundrobin: 'gateways.modeShort.roundrobin',
 };
 
-/** 账号范围四选一（顺序按用户习惯：正常 / 风控 / 全部 / 自选）。 */
+/**
+ * 账号范围三选一：全部 / 按分组 / 自选。
+ *
+ * 「按分组」取代了原来的「全部正常 / 全部风控」——账号分类是网关默认路由的观测值，
+ * 会随时间翻转；分组是用户的声明，稳定、可以按用途任意划分（主力/备用/客户甲）。
+ */
 const SCOPE_OPTIONS: Array<{ value: AccountScope; labelKey: MsgKey }> = [
-  { value: 'normal', labelKey: 'gateways.scope.normal' },
-  { value: 'private', labelKey: 'gateways.scope.private' },
   { value: 'all', labelKey: 'gateways.scope.all' },
+  { value: 'groups', labelKey: 'gateways.scope.groups' },
   { value: 'custom', labelKey: 'gateways.scope.custom' },
 ];
-
-const CLASS_TAG: Record<'normal' | 'private' | 'unknown', { tone: ChipTone; labelKey: MsgKey }> = {
-  normal: { tone: 'ok', labelKey: 'labels.class.normal' },
-  private: { tone: 'warn', labelKey: 'labels.class.private' },
-  unknown: { tone: 'neutral', labelKey: 'labels.class.unknown' },
-};
 
 /** 新网关的标识：默认模式下用户不用填，自动生成合法 slug。 */
 const makeGatewayId = (): string => `gw-${Math.random().toString(36).slice(2, 8)}`;
@@ -161,6 +159,8 @@ interface Draft {
   corsOrigins: string;
   exposeCatalog: boolean;
   accountScope: AccountScope;
+  /** 按分组范围选中的分组（账号带任一即命中） */
+  scopeGroups: string[];
   /** 自选范围勾选的账号 */
   accounts: string[];
   /** 顺序 = 粘性优先级 */
@@ -183,6 +183,7 @@ function draftOf(gateway: GatewayView): Draft {
     corsOrigins: gateway.corsOrigins.join('\n'),
     exposeCatalog: gateway.exposeCatalog,
     accountScope: gateway.accountScope,
+    scopeGroups: gateway.scopeGroups,
     accounts: gateway.accounts,
     accountOrder: gateway.accountOrder,
     accountMode: gateway.accountMode,
@@ -215,6 +216,7 @@ function emptyDraft(usedPorts: number[], consolePort: number): Draft {
     corsOrigins: '',
     exposeCatalog: false,
     accountScope: 'all',
+    scopeGroups: [],
     accounts: [],
     accountOrder: [],
     accountMode: 'sticky',
@@ -307,13 +309,27 @@ function GatewayRow({
           )}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
-          <span className="cps-body" style={{ color: 'var(--cps-text-secondary)', whiteSpace: 'nowrap' }}>
+        {/* 范围 + 模式是第一层；按分组时把选中的分组放在第二层（截断，悬停看全） */}
+        <div style={{ display: 'grid', gap: 3, minWidth: 0 }}>
+          <span
+            className="cps-body"
+            style={{
+              color: 'var(--cps-text-secondary)',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
             {t(`gateways.scope.${gateway.accountScope}` as MsgKey)}
           </span>
-          <span className="cps-meta" style={{ whiteSpace: 'nowrap' }}>
-            · {t(modeKey)}
-          </span>
+          <Tooltip title={gateway.scopeGroups.length ? gateway.scopeGroups.join(' · ') : undefined}>
+            <span className="cps-meta" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {t(modeKey)}
+              {gateway.accountScope === 'groups' && gateway.scopeGroups.length > 0
+                ? ` · ${gateway.scopeGroups.join(' · ')}`
+                : ''}
+            </span>
+          </Tooltip>
         </div>
 
         <div style={{ minWidth: 0 }}>
@@ -381,22 +397,30 @@ export default function Gateways() {
   const maxGateways = gateways.data?.maxGateways ?? 8;
   const hasMain = list.some((g) => g.id === 'main');
   const accountNames = (accounts.data?.accounts ?? []).map((a) => a.name);
-  const accountClasses = new Map(
-    (accounts.data?.accounts ?? []).map((a) => [a.name, a.classify?.class ?? ('unknown' as const)]),
+  const accountGroupMap = new Map((accounts.data?.accounts ?? []).map((a) => [a.name, a.groups]));
+  /** 账号池里出现过的全部分组（新建的账号分组也从这里挑，避免手打出错别字） */
+  const allGroups = [...new Set((accounts.data?.accounts ?? []).flatMap((a) => a.groups))].sort((a, b) =>
+    a.localeCompare(b),
   );
-  const candidatesOf = (scope: AccountScope): string[] =>
-    scope === 'normal' || scope === 'private'
-      ? accountNames.filter((n) => accountClasses.get(n) === scope)
+  /**
+   * 候选账号：按分组范围先看选中的分组，账号带任一即命中；没选分组 = 空
+   * （与服务端 `gatewayAccounts` 一致，不放大成全部账号）。
+   */
+  const candidatesOf = (scope: AccountScope, groups: string[]): string[] =>
+    scope === 'groups'
+      ? accountNames.filter((n) => (accountGroupMap.get(n) ?? []).some((g) => groups.includes(g)))
       : accountNames;
-  const orderedCandidates = draft ? sortNames(candidatesOf(draft.accountScope), draft.accountOrder) : [];
+  const orderedCandidates = draft
+    ? sortNames(candidatesOf(draft.accountScope, draft.scopeGroups), draft.accountOrder)
+    : [];
   const orderedCustom = draft ? sortNames(draft.accounts, draft.accountOrder) : [];
   const scopeNames = draft?.accountScope === 'custom' ? orderedCustom : orderedCandidates;
 
   const changeScope = (scope: AccountScope): void => {
     if (!draft) return;
     // 第一次切到「自选」时，把当前范围内的账号作为初始勾选
-    const accounts =
-      scope === 'custom' && draft.accounts.length === 0 ? candidatesOf(draft.accountScope) : draft.accounts;
+    const seed = candidatesOf(draft.accountScope, draft.scopeGroups);
+    const accounts = scope === 'custom' && draft.accounts.length === 0 ? seed : draft.accounts;
     setDraft({ ...draft, accountScope: scope, accounts });
   };
 
@@ -441,6 +465,10 @@ export default function Gateways() {
       fb.fail(t('gateways.validate.accounts'));
       return;
     }
+    if (draft.accountScope === 'groups' && draft.scopeGroups.length === 0) {
+      fb.fail(t('gateways.validate.groups'));
+      return;
+    }
     const gateway: Record<string, unknown> = {
       id,
       name,
@@ -453,6 +481,7 @@ export default function Gateways() {
         .filter(Boolean),
       exposeCatalog: draft.exposeCatalog,
       accountScope: draft.accountScope,
+      scopeGroups: draft.scopeGroups,
       accounts: draft.accounts,
       accountOrder: scopeNames,
       accountMode: draft.accountMode,
@@ -694,13 +723,32 @@ export default function Gateways() {
                   onChange={(v) => changeScope(v as AccountScope)}
                   options={SCOPE_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) }))}
                 />
+                {draft.accountScope === 'groups' && (
+                  <>
+                    <Select
+                      mode="multiple"
+                      size="small"
+                      style={{ width: '100%', marginTop: 10 }}
+                      placeholder={t('gateways.field.scopeGroups.placeholder')}
+                      value={draft.scopeGroups}
+                      onChange={(v: string[]) => setDraft({ ...draft, scopeGroups: v })}
+                      options={allGroups.map((g) => ({ value: g, label: g }))}
+                    />
+                    <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 6 }}>
+                      {allGroups.length === 0
+                        ? t('gateways.field.scopeGroups.empty')
+                        : draft.scopeGroups.length === 0
+                          ? t('gateways.field.scopeGroups.noPick')
+                          : t('gateways.field.scopeGroups.hint')}
+                    </Typography.Text>
+                  </>
+                )}
                 <div style={{ display: 'grid', gap: 2, marginTop: 10, maxHeight: 230, overflow: 'auto' }}>
                   {(draft.accountScope === 'custom'
                     ? sortNames(accountNames, draft.accountOrder)
                     : orderedCandidates
                   ).map((name, idx) => {
-                    const cls = accountClasses.get(name) ?? 'unknown';
-                    const tag = CLASS_TAG[cls];
+                    const groups = accountGroupMap.get(name) ?? [];
                     const checked = draft.accountScope !== 'custom' || draft.accounts.includes(name);
                     const position = draft.accountScope === 'custom' ? orderedCustom.indexOf(name) : idx;
                     const max = (draft.accountScope === 'custom' ? orderedCustom : orderedCandidates).length - 1;
@@ -716,9 +764,12 @@ export default function Gateways() {
                         <Typography.Text style={{ flex: 1, minWidth: 0 }} ellipsis>
                           {name}
                         </Typography.Text>
-                        <StatusChip tone={tag.tone} small>
-                          {t(tag.labelKey)}
-                        </StatusChip>
+                        <Typography.Text
+                          type="secondary"
+                          style={{ fontSize: 12, whiteSpace: 'nowrap', color: 'var(--cps-text-tertiary)' }}
+                        >
+                          {groups.join(' · ')}
+                        </Typography.Text>
                         <Button
                           size="small"
                           type="text"
@@ -736,12 +787,13 @@ export default function Gateways() {
                       </div>
                     );
                   })}
-                  {(draft.accountScope === 'normal' || draft.accountScope === 'private') &&
-                    orderedCandidates.length === 0 && (
-                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                        {t('gateways.field.accounts.emptyScope')}
-                      </Typography.Text>
-                    )}
+                  {draft.accountScope === 'groups' && orderedCandidates.length === 0 && (
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      {draft.scopeGroups.length === 0
+                        ? t('gateways.field.scopeGroups.noPick')
+                        : t('gateways.field.accounts.emptyScope')}
+                    </Typography.Text>
+                  )}
                 </div>
                 <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 6 }}>
                   {t('gateways.field.accounts.orderHint')}

@@ -177,5 +177,31 @@ export function migrateConfig(input: Record<string, unknown>): MigrationResult {
     );
   }
 
+  if (from < 6) {
+    // ---- v5 → v6：账号级分类 → 用户分组 ----
+    // 「正常号 / 风控号」是账号级体检结论，但它并不预测什么：同一个号在不同模型上
+    // 可能一个能钉、一个被 VMC contributor 接管；能钉的模型靠区域约束就能回到官方渠道
+    // （docs/pinning.md 第六节）。范围改用用户自己的分组，分类不再参与路由。
+    const accounts = Array.isArray(raw.accounts) ? raw.accounts.filter(isPlainObject) : [];
+    for (const account of accounts) {
+      if (!Array.isArray(account['groups'])) account['groups'] = [];
+    }
+    let resetScopes = 0;
+    const gateways = Array.isArray(raw.gateways) ? raw.gateways.filter(isPlainObject) : [];
+    for (const gateway of gateways) {
+      if (!Array.isArray(gateway['scopeGroups'])) gateway['scopeGroups'] = [];
+      if (gateway['accountScope'] === 'normal' || gateway['accountScope'] === 'private') {
+        gateway['accountScope'] = 'all';
+        resetScopes += 1;
+      }
+    }
+    delete raw['classifyModel'];
+    raw.version = 6;
+    applied.push('配置格式 v5 → v6：账号范围改为按「分组」设置，账号体检分类不再参与路由');
+    if (resetScopes > 0) {
+      applied.push(`${resetScopes} 个网关的范围原先按体检结论设置，已改为「全部」——请给账号分组后重新选择范围`);
+    }
+  }
+
   return { raw, applied };
 }

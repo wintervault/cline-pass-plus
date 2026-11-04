@@ -20,8 +20,8 @@ export async function chainStream(): Promise<StreamFixture> {
   const base = await upstream.listen();
   const config = defaultConfig();
   config.accounts = [
-    { name: 'A', key: 'sk_a' },
-    { name: 'B', key: 'sk_b' },
+    { name: 'A', key: 'sk_a', groups: [] },
+    { name: 'B', key: 'sk_b', groups: [] },
   ];
   const chain = new ChatChain({
     upstreamBase: base,

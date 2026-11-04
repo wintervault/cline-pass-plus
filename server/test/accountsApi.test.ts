@@ -4,7 +4,6 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { ClassifyService } from '../src/accounts/classify.ts';
 import type { AppContext } from '../src/appContext.ts';
 import { type Account, defaultConfig } from '../src/config/schema.ts';
 import { sendError } from '../src/http/respond.ts';
@@ -62,16 +61,6 @@ async function harness(
     await Promise.all([configStore.flush(), metaStore.flush()]);
   });
 
-  const classify = new ClassifyService(() => ({
-    upstreamBase,
-    classifyModel: configStore.value.classifyModel,
-    get: (name) => metaStore.value.accountClass[name],
-    set: (name, record) =>
-      metaStore.update((m) => {
-        m.accountClass[name] = record;
-      }),
-  }));
-
   const ctx: AppContext = {
     version: 'test',
     startedAt: Date.now(),
@@ -87,7 +76,6 @@ async function harness(
     } as unknown as AppContext['gateways'],
     console: {} as AppContext['console'],
     probe: {} as AppContext['probe'],
-    classify,
     catalog: {} as AppContext['catalog'],
   };
 
@@ -112,24 +100,17 @@ async function harness(
 const acc = (name: string, extra: Partial<Account> = {}): Account => ({
   name,
   key: `sk_${name}`,
+  groups: [],
   ...extra,
 });
 
-const planner = (finalProvider: string) => ({
-  choices: [{ message: { content: 'pong', provider_metadata: { gateway: { routing: { finalProvider } } } } }],
-});
-
 describe('GET /api/accounts', () => {
-  it('返回到期状态、体检结论与判定模型（到期状态由服务端计算）', async () => {
+  it('返回到期状态与分组（到期状态由服务端计算）', async () => {
     const today = new Date();
     const iso = (d: Date) =>
       `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     const soon = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 3);
-    const { port } = await harness([acc('a', { expiresAt: iso(soon) }), acc('b')], {
-      meta: (m) => {
-        m.accountClass['a'] = { class: 'private', checkedAt: 123 };
-      },
-    });
+    const { port } = await harness([acc('a', { expiresAt: iso(soon), groups: ['主力'] }), acc('b')]);
 
     const res = await request(port, '/api/accounts');
     const body = res.json<{
@@ -137,17 +118,15 @@ describe('GET /api/accounts', () => {
         name: string;
         expiresAt: string | null;
         expiry: { kind: string; days: number | null };
-        classify: { class: string; checkedAt: number | null } | null;
+        groups: string[];
       }>;
-      classifyModel: string;
     }>();
     expect(body.accounts[0]?.expiresAt).toBe(iso(soon));
     expect(body.accounts[0]?.expiry).toEqual({ kind: 'soon', days: 3 });
-    expect(body.accounts[0]?.classify).toEqual({ class: 'private', checkedAt: 123 });
+    expect(body.accounts[0]?.groups).toEqual(['主力']);
     expect(body.accounts[1]?.expiresAt).toBeNull();
     expect(body.accounts[1]?.expiry).toEqual({ kind: 'none', days: null });
-    expect(body.accounts[1]?.classify).toBeNull();
-    expect(body.classifyModel).toBe('cline-pass/deepseek-v4.1-flash');
+    expect(body.accounts[1]?.groups).toEqual([]);
   });
 });
 
@@ -159,15 +138,23 @@ describe('POST /api/accounts', () => {
     expect(configStore.value.accounts).toHaveLength(0);
   });
 
-  it('缺省 accounts 时保持现有账号（只改判定模型不会清空账号池）', async () => {
+  it('缺省 accounts 时保持现有账号', async () => {
+    const { port, configStore } = await harness([acc('a')]);
+    const res = await request(port, '/api/accounts', { method: 'POST', body: {} });
+    expect(res.status).toBe(200);
+    expect(configStore.value.accounts.map((a) => a.name)).toEqual(['a']);
+  });
+
+  it('保存分组：数组写入、去重、上限 8 个', async () => {
     const { port, configStore } = await harness([acc('a')]);
     const res = await request(port, '/api/accounts', {
       method: 'POST',
-      body: { classifyModel: 'cline-pass/glm-5.3-flash' },
+      body: {
+        accounts: [{ name: 'a', key: 'sk_a', groups: [' 主力 ', '主力', '', '备用'] }],
+      },
     });
     expect(res.status).toBe(200);
-    expect(configStore.value.accounts.map((a) => a.name)).toEqual(['a']);
-    expect(configStore.value.classifyModel).toBe('cline-pass/glm-5.3-flash');
+    expect(configStore.value.accounts[0]?.groups).toEqual(['主力', '备用']);
   });
 
   it('accounts 不是数组 → 400 且不清空账号池', async () => {
@@ -206,7 +193,6 @@ describe('POST /api/accounts', () => {
     const { port, metaStore } = await harness([acc('旧名'), acc('另一个')], {
       meta: (m) => {
         m.stats['旧名'] = { requests: 7, lastUsed: 1000, lastError: null };
-        m.accountClass['旧名'] = { class: 'normal', checkedAt: 2000 };
         m.accountModels['旧名'] = {
           'cline-pass/x': { ...blankModelMeta(), pinState: 'enforced', upstreams: ['deepseek'] },
         };
@@ -224,10 +210,8 @@ describe('POST /api/accounts', () => {
     });
     expect(res.status).toBe(200);
     expect(metaStore.value.stats['新名']?.requests).toBe(7);
-    expect(metaStore.value.accountClass['新名']?.class).toBe('normal');
     expect(metaStore.value.accountModels['新名']?.['cline-pass/x']?.upstreams).toEqual(['deepseek']);
     expect(metaStore.value.stats['旧名']).toBeUndefined();
-    expect(metaStore.value.accountClass['旧名']).toBeUndefined();
     expect(metaStore.value.accountModels['旧名']).toBeUndefined();
   });
 
@@ -289,50 +273,6 @@ describe('POST /api/accounts', () => {
     expect(metaStore.value.stats['b']?.requests).toBe(4);
     expect(metaStore.value.accountModels['a']).toBeUndefined();
     expect(metaStore.value.history[0]?.account).toBe('a');
-  });
-
-  it('可以保存判定模型', async () => {
-    const { port, configStore } = await harness([acc('a')]);
-    await request(port, '/api/accounts', {
-      method: 'POST',
-      body: {
-        accounts: [{ name: 'a', existingIndex: 0 }],
-        classifyModel: 'cline-pass/glm-5.3-flash',
-      },
-    });
-    expect(configStore.value.classifyModel).toBe('cline-pass/glm-5.3-flash');
-  });
-});
-
-describe('POST /api/accounts/classify', () => {
-  it('默认体检全部有 key 的账号，结论写入 metadata', async () => {
-    const { port, metaStore } = await harness([acc('a'), acc('b')], {
-      script: [{ body: planner('deepseek') }, { body: planner('deepseek') }],
-    });
-    const res = await request(port, '/api/accounts/classify', { method: 'POST', body: {} });
-    expect(res.status).toBe(200);
-    const body = res.json<{ results: Array<{ name: string; class: string }>; summary: Record<string, number> }>();
-    expect(body.results.map((r) => r.name)).toEqual(['a', 'b']);
-    expect(body.summary['normal']).toBe(2);
-    expect(metaStore.value.accountClass['a']?.class).toBe('normal');
-  });
-
-  it('显式点名时只体检指定账号', async () => {
-    const { port } = await harness([acc('a'), acc('b')], {
-      script: [{ body: planner('openai-compatible-private') }],
-    });
-    const res = await request(port, '/api/accounts/classify', {
-      method: 'POST',
-      body: { names: ['b'] },
-    });
-    const body = res.json<{ results: Array<{ name: string; class: string }> }>();
-    expect(body.results).toEqual([expect.objectContaining({ name: 'b', class: 'private' })]);
-  });
-
-  it('没有可体检的账号（key 全空）→ 400', async () => {
-    const { port } = await harness([acc('off', { key: '' })]);
-    const res = await request(port, '/api/accounts/classify', { method: 'POST', body: {} });
-    expect(res.status).toBe(400);
   });
 });
 

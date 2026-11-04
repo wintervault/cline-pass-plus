@@ -1,7 +1,5 @@
 /** 上游可观测数据与故障转移共用类型。 */
 
-import type { AccountClassRecord } from '../accounts/types.ts';
-
 /** 两条路由管道（实测结论，README 有证据）。 */
 export type Pipeline = 'planner' | 'direct';
 
@@ -125,8 +123,6 @@ export interface MetaFile {
   orModelsFetchedAt: number;
   officialModelsFetch: OfficialModelsFetch | null;
   stats: Record<string, AccountStats>;
-  /** 账号风控体检结论（按账号名）。观测值：会随时间翻转，见 accounts/types.ts。 */
-  accountClass: Record<string, AccountClassRecord>;
 }
 
 export function defaultMeta(): MetaFile {
@@ -140,7 +136,6 @@ export function defaultMeta(): MetaFile {
     orModelsFetchedAt: 0,
     officialModelsFetch: null,
     stats: {},
-    accountClass: {},
   };
 }
 
