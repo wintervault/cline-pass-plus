@@ -76,6 +76,10 @@ function Field({
    * 其余各格必须 `flex: 0 0 auto` + `nowrap`：状态栏是固定高度的一行，
    * 一旦允许收缩，中文会被逐字挤成竖排（「网 / 关」），看起来像 UI 坏了。
    * 地址太长时由它自己省略，复制按钮仍在。
+   *
+   * **只收缩、不生长**（`0 1 auto`）：允许生长的话，宽窗口下的富余全部被它吃掉，
+   * 网关状态会被推到老远，中间空出一大块——看起来就像状态属于右边那一组。
+   * 富余应该留在「服务簇」之后，由右侧的 `marginLeft: auto` 统一吃掉。
    */
   flexible?: boolean;
 }) {
@@ -87,7 +91,7 @@ function Field({
         gap: 8,
         /* 地址可以省略，但不能缩到看不见——再窄就让整条状态栏横向滚动 */
         minWidth: flexible ? 150 : 0,
-        flex: flexible ? '1 1 auto' : '0 0 auto',
+        flex: flexible ? '0 1 auto' : '0 0 auto',
         whiteSpace: 'nowrap',
       }}
     >
@@ -95,11 +99,37 @@ function Field({
         {label}
       </span>
       <div
-        style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: flexible ? '1 1 auto' : undefined }}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: flexible ? '0 1 auto' : undefined }}
       >
         {children}
       </div>
     </div>
+  );
+}
+
+/**
+ * 状态栏右侧的图标动作：固定 28×28 命中区。
+ *
+ * 不这样做的后果是实测出来的：`type="text"` 的按钮宽度由内容决定，三个图标
+ * 各按自己的宽度排，右侧看起来就是「一堆元素没对齐」——语言/主题/刷新之间
+ * 间距不相等，版本号又贴着第一个图标。
+ */
+function IconAction({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick?: () => void }) {
+  return (
+    <Button
+      size="small"
+      type="text"
+      icon={icon}
+      aria-label={label}
+      onClick={onClick}
+      style={{
+        width: 28,
+        height: 28,
+        minWidth: 28,
+        paddingInline: 0,
+        color: 'var(--cps-text-tertiary)',
+      }}
+    />
   );
 }
 
@@ -175,50 +205,53 @@ function ServiceCluster({ control }: { control: HostControl }) {
           </StatusChip>
         </span>
       </Tooltip>
+      {/*
+        窄窗口（≤1100）会收起按钮文字，只剩图标——所以三个动作都必须有 Tooltip，
+        否则「暂停图标 / 同步图标」要靠猜。
+      */}
       {status.state === 'stopped' || status.state === 'error' ? (
-        <Button
-          size="small"
-          type="primary"
-          ghost
-          icon={<PlayCircleOutlined />}
-          loading={busy}
-          onClick={() => void control.start()}
-        >
-          {t('service.action.startShort')}
-        </Button>
+        <Tooltip title={t('service.action.start')}>
+          <Button
+            size="small"
+            type="primary"
+            ghost
+            icon={<PlayCircleOutlined />}
+            loading={busy}
+            onClick={() => void control.start()}
+          >
+            <span className="cps-sb-text">{t('service.action.startShort')}</span>
+          </Button>
+        </Tooltip>
       ) : (
-        <Space size={2}>
-          <Button
-            size="small"
-            type="text"
-            icon={<PauseCircleOutlined />}
-            loading={busy}
-            onClick={() => void control.stop()}
-            style={{ color: 'var(--cps-text-secondary)', paddingInline: 6 }}
-          >
-            {t('service.action.stopShort')}
-          </Button>
-          <Button
-            size="small"
-            type="text"
-            icon={<SyncOutlined />}
-            loading={busy}
-            onClick={() => void control.restart()}
-            style={{ color: 'var(--cps-text-secondary)', paddingInline: 6 }}
-          >
-            {t('service.action.restartShort')}
-          </Button>
+        <Space size={4}>
+          <Tooltip title={t('service.action.stop')}>
+            <Button
+              size="small"
+              type="text"
+              icon={<PauseCircleOutlined />}
+              loading={busy}
+              onClick={() => void control.stop()}
+              style={{ color: 'var(--cps-text-secondary)', paddingInline: 6 }}
+            >
+              <span className="cps-sb-text">{t('service.action.stopShort')}</span>
+            </Button>
+          </Tooltip>
+          <Tooltip title={t('service.action.restart')}>
+            <Button
+              size="small"
+              type="text"
+              icon={<SyncOutlined />}
+              loading={busy}
+              onClick={() => void control.restart()}
+              style={{ color: 'var(--cps-text-secondary)', paddingInline: 6 }}
+            >
+              <span className="cps-sb-text">{t('service.action.restartShort')}</span>
+            </Button>
+          </Tooltip>
         </Space>
       )}
       <Tooltip title={t('service.action.logs')}>
-        <Button
-          size="small"
-          type="text"
-          icon={<FileTextOutlined />}
-          aria-label={t('service.action.logs')}
-          onClick={control.openLogs}
-          style={{ color: 'var(--cps-text-tertiary)' }}
-        />
+        <IconAction icon={<FileTextOutlined />} label={t('service.action.logs')} onClick={control.openLogs} />
       </Tooltip>
     </Space>
   );
@@ -318,57 +351,58 @@ export function StatusBar({
         <ServiceCluster control={control} />
       </div>
 
-      <Space size={2} style={{ marginLeft: 'auto', flex: '0 0 auto' }}>
-        <span className="cps-data" style={{ fontSize: 11.5, color: 'var(--cps-text-tertiary)' }}>
+      {/*
+        ④ 应用区：版本是「静信息」，用一条分隔线与三个动作分开。
+        动作按钮固定 28×28 命中区：antd 的 text 按钮内边距会随内容与图标宽度变化，
+        三个图标各按自己的宽度排，看起来就是「一堆元素没对齐」。
+      */}
+      <div
+        style={{
+          marginLeft: 'auto',
+          flex: '0 0 auto',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          whiteSpace: 'nowrap',
+        }}
+      >
+        <span className="cps-data cps-sb-version" style={{ fontSize: 11.5, color: 'var(--cps-text-tertiary)' }}>
           v{version ?? '…'}
         </span>
-        {/*
-          语言切换：即时生效，不刷新页面。
-          **不要用 Tooltip、也不要加原生 title**：状态栏贴着窗口底部，菜单和提示都会被
-          自动翻到上方并重叠；WebView2 的原生 title 是独立窗口，会直接压在菜单上，
-          antd Tooltip 则会截走菜单项的点击。这个按钮只靠图标与 aria-label。
-        */}
-        <Dropdown
-          trigger={['click']}
-          menu={{
-            selectable: true,
-            selectedKeys: [lang],
-            items: [
-              { key: 'zh-CN', label: '中文' },
-              { key: 'en-US', label: 'English' },
-            ],
-            onClick: ({ key }) => onToggleLang(key as Lang),
-          }}
-        >
-          <Button
-            size="small"
-            type="text"
-            icon={<TranslationOutlined />}
-            aria-label={t('app.lang.switch')}
-            style={{ color: 'var(--cps-text-tertiary)' }}
-          />
-        </Dropdown>
-        <Tooltip title={mode === 'dark' ? t('statusbar.theme.dark') : t('statusbar.theme.light')}>
-          <Button
-            size="small"
-            type="text"
-            icon={mode === 'dark' ? <SunOutlined /> : <MoonOutlined />}
-            aria-label={t('statusbar.theme.switch')}
-            onClick={onToggleTheme}
-            style={{ color: 'var(--cps-text-tertiary)' }}
-          />
-        </Tooltip>
-        <Tooltip title={t('statusbar.refresh')}>
-          <Button
-            size="small"
-            type="text"
-            icon={<ReloadOutlined />}
-            aria-label={t('statusbar.refresh')}
-            onClick={onRefresh}
-            style={{ color: 'var(--cps-text-tertiary)' }}
-          />
-        </Tooltip>
-      </Space>
+        <div style={{ width: 1, height: 14, background: token.colorBorderSecondary, flex: '0 0 auto' }} />
+        <Space size={0} align="center">
+          {/*
+            语言切换：即时生效，不刷新页面。
+            **不要用 Tooltip、也不要加原生 title**：状态栏贴着窗口底部，菜单和提示都会被
+            自动翻到上方并重叠；WebView2 的原生 title 是独立窗口，会直接压在菜单上，
+            antd Tooltip 则会截走菜单项的点击。这个按钮只靠图标与 aria-label。
+          */}
+          <Dropdown
+            trigger={['click']}
+            menu={{
+              selectable: true,
+              selectedKeys: [lang],
+              items: [
+                { key: 'zh-CN', label: '中文' },
+                { key: 'en-US', label: 'English' },
+              ],
+              onClick: ({ key }) => onToggleLang(key as Lang),
+            }}
+          >
+            <IconAction icon={<TranslationOutlined />} label={t('app.lang.switch')} />
+          </Dropdown>
+          <Tooltip title={mode === 'dark' ? t('statusbar.theme.dark') : t('statusbar.theme.light')}>
+            <IconAction
+              icon={mode === 'dark' ? <SunOutlined /> : <MoonOutlined />}
+              label={t('statusbar.theme.switch')}
+              onClick={onToggleTheme}
+            />
+          </Tooltip>
+          <Tooltip title={t('statusbar.refresh')}>
+            <IconAction icon={<ReloadOutlined />} label={t('statusbar.refresh')} onClick={onRefresh} />
+          </Tooltip>
+        </Space>
+      </div>
     </div>
   );
 }

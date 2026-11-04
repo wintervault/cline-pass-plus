@@ -886,6 +886,14 @@ samp {
 .cps-statusbar {
   box-shadow: inset 0 1px 0 0 var(--cps-highlight);
 }
+/* 窄窗口（桌面窗口最小 960）先把可省略的文字收起来，宁可变紧凑，也不要冒出一条横向滚动条：
+   版本号与「停止 / 重启」的按钮文字。图标仍带 aria-label 与 Tooltip，功能不丢。 */
+@media (max-width: 1100px) {
+  .cps-statusbar .cps-sb-version,
+  .cps-statusbar .cps-sb-text {
+    display: none;
+  }
+}
 /* 空态与提示出现时淡入，而不是「啪」地占位 */
 .ant-alert,
 .ant-empty,
