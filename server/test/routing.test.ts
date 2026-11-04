@@ -311,6 +311,25 @@ describe('injectPrefs：区域约束排掉私有渠道', () => {
     expect(gatewayOf(out)['inferenceRegion']).toEqual(mine);
   });
 
+  it('preferred 的最后一个候选（放开网关回退）→ 不加区域约束', () => {
+    // 用户要的就是让网关自己选，包括私有渠道；加约束等于把回退取消
+    const { body: out } = injectPrefs(
+      {},
+      { pipeline: 'planner', knownUpstreams: ['deepseek'] },
+      basePrefs({ upstream: 'deepseek', strict: false, allowGatewayFallback: true }),
+    );
+    expect(gatewayOf(out)).toEqual({ order: ['deepseek'] });
+  });
+
+  it('放开回退但显式排除了私有渠道 → 仍然加约束（排除优先）', () => {
+    const { body: out } = injectPrefs(
+      {},
+      { pipeline: 'planner', knownUpstreams: [PRIVATE, 'deepseek', 'together'] },
+      basePrefs({ upstream: 'deepseek', strict: false, allowGatewayFallback: true, excludeList: [PRIVATE] }),
+    );
+    expect(gatewayOf(out)['inferenceRegion']).toEqual(GUARD);
+  });
+
   it('direct 管道不注入（那条路走 OpenRouter 的 provider 字段）', () => {
     const { body: out } = injectPrefs(
       {},

@@ -79,6 +79,44 @@ describe('probeModel 钉住探针（docs/pinning.md D1）', () => {
     expect(r.pinState).toBe('ignored');
     expect(r.pinDisabledReason).toContain('网关忽略钉住参数');
     expect(r.pinDisabledReason).toContain('openai-compatible-private');
+    // 基线不在私有渠道 → 不做区域复核，只用掉两次请求
+    expect(upstream.count).toBe(2);
+  });
+
+  it('基线在私有渠道：区域复核能把请求挪到官方渠道 → enforced（2026-11 的新判据）', async () => {
+    upstream.script([
+      // 基线：落私有渠道
+      { status: 200, body: routedBody('openai-compatible-private') },
+      // 无效 slug 探针：被网关静默过滤，仍返回 200（旧判据会误判为 ignored）
+      { status: 200, body: routedBody('openai-compatible-private') },
+      // 区域约束复核：参数被读取 → 改走官方渠道
+      {
+        status: 200,
+        body: routedBody(
+          'deepseek',
+          'System credentials planned for: deepseek, alibaba. Total execution order: deepseek(system) → alibaba(system)',
+        ),
+      },
+    ]);
+    const { probe } = makeService();
+    const r = await probe.probeModel('cline-pass/x', ACCOUNT);
+    expect(r.ok).toBe(true);
+    expect(r.pinState).toBe('enforced');
+    expect(r.pinDisabledReason).toBeNull();
+    expect(r.upstreams).toEqual(expect.arrayContaining(['deepseek', 'alibaba']));
+    expect(upstream.count).toBe(3);
+  });
+
+  it('基线在私有渠道但区域复核仍落私有 → 保持 ignored', async () => {
+    upstream.script([
+      { status: 200, body: routedBody('openai-compatible-private') },
+      { status: 200, body: routedBody('openai-compatible-private') },
+      { status: 200, body: routedBody('openai-compatible-private') },
+    ]);
+    const { probe } = makeService();
+    const r = await probe.probeModel('cline-pass/x', ACCOUNT);
+    expect(r.pinState).toBe('ignored');
+    expect(upstream.count).toBe(3);
   });
 
   it('探针报 empty response content → ignored（请求穿过路由层执行到了模型）', async () => {

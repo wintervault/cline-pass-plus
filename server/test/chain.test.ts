@@ -404,6 +404,29 @@ describe('ChatChain 钉住语义（本地说了算）', () => {
     });
   });
 
+  it('preferred + 区域约束：前面带约束，最后一个放开回退的不带', async () => {
+    gw().failover.retriesPerChannel = 0;
+    pool = makePool();
+    upstream.script([
+      { status: 429, body: err('rate limited') },
+      { status: 200, body: okBody('ch2') },
+    ]);
+    const guard = { scope: 'global', providers: { 'openai-compatible-private': { scope: 'zone', geoRegion: 'us' } } };
+    await makeChain().run({
+      modelId: 'cline-pass/x',
+      body: bodyOf(),
+      cfg: cfgOf({ pinMode: 'preferred', upstreams: ['ch1', 'ch2'], regionGuard: true }),
+      meta: metaOf({ upstreams: ['ch1', 'ch2', 'ch3'] }),
+      stream: false,
+    });
+    expect(upstream.requests[0]?.body['providerOptions']).toEqual({
+      gateway: { only: ['ch1'], inferenceRegion: guard },
+    });
+    expect(upstream.requests[1]?.body['providerOptions']).toEqual({
+      gateway: { order: ['ch2'], only: ['ch2', 'ch3'] },
+    });
+  });
+
   it('自动模式：不钉住，排除换算成白名单', async () => {
     upstream.script([{ status: 200, body: okBody('ch2') }]);
     const chain = makeChain();

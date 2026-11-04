@@ -135,6 +135,11 @@ export interface UpstreamPrefs {
   /** strict：只钉 upstream；preferred：order 首位 + 允许网关回退。 */
   strict: boolean;
   sort: SortKey | null;
+  /**
+   * 这一次就是「放开网关回退」的那次尝试（preferred 的最后一个候选）。
+   * 此时不该再加区域约束——用户要的就是让网关自己选，包括私有渠道。
+   */
+  allowGatewayFallback?: boolean;
 }
 
 export interface InjectContext {
@@ -172,7 +177,7 @@ export const PRIVATE_UPSTREAM = 'openai-compatible-private';
  *
  * 每次返回新对象：它会写进请求体，别让调用方的后续修改污染共享常量。
  */
-function privateRegionGuard(): Record<string, unknown> {
+export function privateRegionGuard(): Record<string, unknown> {
   return { scope: 'global', providers: { [PRIVATE_UPSTREAM]: { scope: 'zone', geoRegion: 'us' } } };
 }
 
@@ -214,8 +219,17 @@ export function injectPrefs(body: Record<string, unknown>, ctx: InjectContext, p
    * 这里**故意不要求「已知渠道清单里出现过它」**：健康账号的探测清单里只有官方渠道
    * （私有 contributor 不在 `planningReasoning` 里），而私有渠道恰恰是网关默认会先走的
    * 那一条——按观测结果决定要不要防它，正好会在最需要防的时候不防。
+   *
+   * 例外：preferred 的最后一个候选是「放开网关回退」，那是用户明确要的自由，
+   * 加约束等于把回退取消（`allowGatewayFallback`）。但如果用户**显式排除了**私有渠道，
+   * 就仍按排除生效——「放开回退」不等于「允许被你排除的渠道」。
    */
-  const applyRegionGuard = (ctx.regionGuard ?? true) && restrictsProviders && !privateAllowed;
+  const privateExplicitlyExcluded = prefs.excludeList.includes(PRIVATE_UPSTREAM);
+  const applyRegionGuard =
+    (ctx.regionGuard ?? true) &&
+    restrictsProviders &&
+    !privateAllowed &&
+    (!prefs.allowGatewayFallback || privateExplicitlyExcluded);
 
   if (useVercel) {
     const gw: Record<string, unknown> = {};

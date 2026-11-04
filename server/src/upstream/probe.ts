@@ -2,7 +2,7 @@ import type { Account } from '../config/schema.ts';
 import { fetchJSON } from './client.ts';
 import { classifyChannelStatus, isQuotaExhausted } from './errors.ts';
 import { unwrap } from './response.ts';
-import { injectPrefs, parsePlannedChain, parseRouting } from './routing.ts';
+import { injectPrefs, PRIVATE_UPSTREAM, parsePlannedChain, parseRouting, privateRegionGuard } from './routing.ts';
 import { blankModelMeta, type ModelMeta, type PinState, type UpstreamStatusKind } from './types.ts';
 
 /** 探测与校验共用的上游访问依赖。 */
@@ -68,13 +68,19 @@ interface PinProbeOutcome {
  *   推理模型在小 max_tokens 下把额度烧在思考上，网关回 HTTP 500，不是路由故障）
  *   → 参数被整体丢弃 → ignored
  * - **其他错误**（429 限流 / 网络失败）→ 无法判定 → unknown（保守：沿用既有状态）
+ *
+ * 2026-11-04 起，「无效 slug 应当报错」这条判据会漏判：网关改为把不存在的 provider
+ * 静默过滤，于是**参数明明被读取**也会回 200。基线的实际渠道若是私有渠道，就再用
+ * 一次「只加区域约束」的真请求复核（`regionRescueProbe`）——参数被读取时它会从私有
+ * 渠道挪走（linux.do 3119385；本机 A/B 见 docs/pinning.md 第六节）。
  */
 async function pinProbe(
   deps: ProbeDeps,
   modelId: string,
   pipeline: 'planner' | 'direct',
   key: string,
-  signal?: AbortSignal,
+  signal: AbortSignal | undefined,
+  baselineProvider: string | null,
 ): Promise<PinProbeOutcome> {
   const base = { model: modelId, messages: [{ role: 'user', content: 'Reply with the word OK' }], max_tokens: 512 };
   const body =
@@ -112,9 +118,55 @@ async function pinProbe(
     return { pinState: 'unknown', providers: null, routedTo: null };
   }
 
-  // 200：探针本应被路由层拒绝，却正常完成了 → 参数被丢弃
+  // 200：探针本应被路由层拒绝，却正常完成了 → 可能是参数被丢弃，也可能只是 slug 被过滤
   const routing = parseRouting(json);
+  if (pipeline === 'planner' && baselineProvider === PRIVATE_UPSTREAM) {
+    const rescued = await regionRescueProbe(deps, modelId, key, signal);
+    if (rescued) return rescued;
+  }
   return { pinState: 'ignored', providers: null, routedTo: routing.finalProvider };
+}
+
+/**
+ * 区域约束复核：只带 `inferenceRegion`（不带 only）发一次最小请求。
+ *
+ * 基线落在私有渠道时，参数被读取的账号会因此改走官方渠道——返回 enforced 与那一刻的
+ * 执行链；参数被丢弃的账号仍然落在私有渠道，返回 null（沿用 ignored）。
+ */
+async function regionRescueProbe(
+  deps: ProbeDeps,
+  modelId: string,
+  key: string,
+  signal: AbortSignal | undefined,
+): Promise<PinProbeOutcome | null> {
+  const body = {
+    model: modelId,
+    messages: [{ role: 'user', content: 'Reply with the word OK' }],
+    max_tokens: 512,
+    providerOptions: { gateway: { inferenceRegion: privateRegionGuard() } },
+  };
+  let json: unknown = null;
+  try {
+    const res = await fetchJSON(
+      `${deps.upstreamBase}${CHAT}`,
+      { method: 'POST', headers: authHeaders(key), body: JSON.stringify(body), signal },
+      90_000,
+    );
+    if (res.status >= 400) return null;
+    json = res.json;
+  } catch {
+    return null; // 复核失败不改结论：宁可保持 ignored
+  }
+  if (extractErrorText(json) !== null) return null;
+
+  const routing = parseRouting(json);
+  const final = routing.finalProvider;
+  if (!final || final === PRIVATE_UPSTREAM) return null;
+
+  const providers = [...new Set([...parsePlannedChain(routing.plan), ...routing.fallbacks, final])].filter(
+    (u) => u !== PRIVATE_UPSTREAM,
+  );
+  return { pinState: 'enforced', providers: providers.length ? providers : null, routedTo: final };
 }
 
 function extractErrorText(json: unknown): string | null {
@@ -197,7 +249,7 @@ export class ProbeService {
     // 钉住探针（D1）：判定 providerOptions/provider 是否还被网关读取
     let probe: PinProbeOutcome = { pinState: 'unknown', providers: null, routedTo: null };
     if (routing.pipeline) {
-      probe = await pinProbe(this.#deps, modelId, routing.pipeline, account.key, signal);
+      probe = await pinProbe(this.#deps, modelId, routing.pipeline, account.key, signal, routing.finalProvider);
     }
 
     let endpoints: Array<{ slug: string; name?: string; endpoints?: number; context?: number; uptime?: number }> = [];
