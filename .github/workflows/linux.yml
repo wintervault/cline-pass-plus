@@ -95,6 +95,23 @@ jobs:
             desktop/target/release/bundle/deb/*.deb
             desktop/target/release/bundle/rpm/*.rpm
 
+      # Windows 的安装包与 SHA256SUMS.txt 由本机发布流程先上传；这里把 Linux 包补进同一份
+      # 清单，免得每次发版都要人工重算（漏算的清单看起来完整，实际上少了两个包）。
+      - name: Add Linux packages to SHA256SUMS
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TMP=$(mktemp -d)
+          if ! gh release download "$GITHUB_REF_NAME" -p SHA256SUMS.txt -D "$TMP" 2>/dev/null; then
+            echo "release has no SHA256SUMS.txt yet — nothing to update"
+            exit 0
+          fi
+          ( cd desktop/target/release/bundle && sha256sum deb/*.deb rpm/*.rpm | sed -E 's#\s+(deb|rpm)/#  #' ) > "$TMP/linux.txt"
+          { cat "$TMP/SHA256SUMS.txt"; cat "$TMP/linux.txt"; } | sort -k2 -u > "$TMP/SHA256SUMS.txt.new"
+          gh release upload "$GITHUB_REF_NAME" "$TMP/SHA256SUMS.txt.new#SHA256SUMS.txt" --clobber
+
   smoke:
     needs: build
     runs-on: ubuntu-22.04
