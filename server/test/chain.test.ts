@@ -85,7 +85,8 @@ const cfgOf = (over: Record<string, unknown> = {}) => ({
   exclude: [],
   pinMode: 'strict' as const,
   sort: null,
-  regionGuard: true,
+  // 默认关：这组用例断言的是 only/order 语义本身，区域约束另有用例覆盖
+  regionGuard: false,
   ...over,
 });
 
@@ -348,6 +349,36 @@ describe('ChatChain 钉住语义（本地说了算）', () => {
     await chain.run({ modelId: 'cline-pass/x', body: bodyOf(), cfg: cfgOf(), meta: metaOf(), stream: false });
     expect(upstream.requests[0]?.body['providerOptions']).toEqual({ gateway: { only: ['ch1'] } });
     expect(upstream.requests[1]?.body['providerOptions']).toEqual({ gateway: { only: ['ch2'] } });
+  });
+
+  /** 2.2.3：只写 only 挡不住私有渠道，钉别的渠道时要额外把私有渠道降级到它没有节点的区域。 */
+  it('区域约束：钉住非私有渠道时注入 inferenceRegion，钉私有渠道本身时不注入', async () => {
+    gw().failover.retriesPerChannel = 0;
+    pool = makePool();
+    const guard = { scope: 'global', providers: { 'openai-compatible-private': { scope: 'zone', geoRegion: 'us' } } };
+
+    upstream.script([{ status: 200, body: okBody('ch1') }]);
+    await makeChain().run({
+      modelId: 'cline-pass/x',
+      body: bodyOf(),
+      cfg: cfgOf({ upstreams: ['ch1'], regionGuard: true }),
+      meta: metaOf(),
+      stream: false,
+    });
+    expect(upstream.requests[0]?.body['providerOptions']).toEqual({
+      gateway: { only: ['ch1'], inferenceRegion: guard },
+    });
+
+    upstream.reset();
+    upstream.script([{ status: 200, body: okBody('openai-compatible-private') }]);
+    await makeChain().run({
+      modelId: 'cline-pass/x',
+      body: bodyOf(),
+      cfg: cfgOf({ upstreams: ['openai-compatible-private'], regionGuard: true }),
+      meta: metaOf({ pinState: 'ignored' }),
+      stream: false,
+    });
+    expect(upstream.requests[0]?.body['providerOptions']).toEqual({ gateway: { only: ['openai-compatible-private'] } });
   });
 
   it('preferred 模式：前面的候选 strict，只给最后一个放开网关回退', async () => {

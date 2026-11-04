@@ -99,7 +99,7 @@ export const PerModelSchema = z.object({
    *
    * 只写 `gateway.only` 挡不住它：网关会先走「私有 contributor」再回退官方
    * （linux.do 3119385 实测）。给私有渠道加一个它没有节点的区域，它就不成立，
-   * 请求才会真正落到清单内的渠道。只在「本次观测到该渠道 + 它不在允许集合里」时注入，
+   * 请求才会真正落到清单内的渠道。只在「本次限定了渠道 + 它不在允许集合」时注入，
    * 见 `routing.ts` 的 `injectPrefs`；关掉本开关即退回旧写法。
    */
   regionGuard: z.boolean().catch(true).default(true),

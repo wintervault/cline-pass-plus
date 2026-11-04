@@ -144,7 +144,7 @@ export interface InjectContext {
   knownUpstreams: readonly string[];
   /**
    * 用区域约束排掉私有渠道（默认 true，`PerModelConfig.regionGuard` 可关）。
-   * 只在「观测到私有渠道 + 它不在允许集合里」时生效，见下方 `applyRegionGuard`。
+   * 只在「本次限定了渠道、且私有渠道不在允许集合里」时生效，见下方 `applyRegionGuard`。
    */
   regionGuard?: boolean;
 }
@@ -208,8 +208,14 @@ export function injectPrefs(body: Record<string, unknown>, ctx: InjectContext, p
   const privateAllowed = prefs.upstream === PRIVATE_UPSTREAM || allowList?.includes(PRIVATE_UPSTREAM) === true;
   /** 本次是否在「限定渠道」：只设排序不算。 */
   const restrictsProviders = prefs.upstream !== null || (allowList?.length ?? 0) > 0;
-  const applyRegionGuard =
-    (ctx.regionGuard ?? true) && restrictsProviders && ctx.knownUpstreams.includes(PRIVATE_UPSTREAM) && !privateAllowed;
+  /*
+   * 只要限定了渠道、又没把私有渠道列进允许集合，就加区域约束。
+   *
+   * 这里**故意不要求「已知渠道清单里出现过它」**：健康账号的探测清单里只有官方渠道
+   * （私有 contributor 不在 `planningReasoning` 里），而私有渠道恰恰是网关默认会先走的
+   * 那一条——按观测结果决定要不要防它，正好会在最需要防的时候不防。
+   */
+  const applyRegionGuard = (ctx.regionGuard ?? true) && restrictsProviders && !privateAllowed;
 
   if (useVercel) {
     const gw: Record<string, unknown> = {};

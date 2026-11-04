@@ -100,7 +100,7 @@ describe('injectPrefs', () => {
     const body = { model: 'cline-pass/x', messages: [] };
     const { body: out, degraded } = injectPrefs(
       body,
-      { pipeline: 'planner', knownUpstreams: [] },
+      { pipeline: 'planner', knownUpstreams: [], regionGuard: false },
       basePrefs({ upstream: 'alibaba' }),
     );
     expect(degraded).toBe(false);
@@ -112,7 +112,7 @@ describe('injectPrefs', () => {
     const body = {};
     const { body: out } = injectPrefs(
       body,
-      { pipeline: 'planner', knownUpstreams: [] },
+      { pipeline: 'planner', knownUpstreams: [], regionGuard: false },
       basePrefs({ upstream: 'alibaba', orderRest: ['baseten', 'targon'], strict: false }),
     );
     expect(out['providerOptions']).toEqual({ gateway: { order: ['alibaba', 'baseten', 'targon'] } });
@@ -129,7 +129,11 @@ describe('injectPrefs', () => {
   });
 
   it('管道未知：两种形式同时注入（各自取用、互不干扰）', () => {
-    const { body: out } = injectPrefs({}, { pipeline: null, knownUpstreams: [] }, basePrefs({ upstream: 'alibaba' }));
+    const { body: out } = injectPrefs(
+      {},
+      { pipeline: null, knownUpstreams: [], regionGuard: false },
+      basePrefs({ upstream: 'alibaba' }),
+    );
     expect(out['providerOptions']).toEqual({ gateway: { only: ['alibaba'] } });
     expect(out['provider']).toEqual({ only: ['alibaba'] });
   });
@@ -137,7 +141,7 @@ describe('injectPrefs', () => {
   it('排除换算成 only 白名单（自动模式）', () => {
     const { body: out } = injectPrefs(
       {},
-      { pipeline: 'planner', knownUpstreams: ['a', 'b', 'c', 'd'] },
+      { pipeline: 'planner', knownUpstreams: ['a', 'b', 'c', 'd'], regionGuard: false },
       basePrefs({ excludeList: ['b'] }),
     );
     expect(out['providerOptions']).toEqual({ gateway: { only: ['a', 'c', 'd'] } });
@@ -146,7 +150,7 @@ describe('injectPrefs', () => {
   it('preferred + 排除：order 首位之外仍带白名单（防止网关回退到被排除渠道）', () => {
     const { body: out } = injectPrefs(
       {},
-      { pipeline: 'planner', knownUpstreams: ['a', 'b', 'c'] },
+      { pipeline: 'planner', knownUpstreams: ['a', 'b', 'c'], regionGuard: false },
       basePrefs({ upstream: 'a', orderRest: ['b'], excludeList: ['c'], strict: false }),
     );
     // 排除项同时从 orderRest 中剔除
@@ -217,7 +221,11 @@ describe('injectPrefs', () => {
 
   it('保留调用方已有的 providerOptions 字段', () => {
     const body = { providerOptions: { gateway: { custom: 'keep' }, other: 1 } };
-    const { body: out } = injectPrefs(body, { pipeline: 'planner', knownUpstreams: [] }, basePrefs({ upstream: 'a' }));
+    const { body: out } = injectPrefs(
+      body,
+      { pipeline: 'planner', knownUpstreams: [], regionGuard: false },
+      basePrefs({ upstream: 'a' }),
+    );
     expect(out['providerOptions']).toEqual({ gateway: { custom: 'keep', only: ['a'] }, other: 1 });
   });
 });
@@ -250,13 +258,15 @@ describe('injectPrefs：区域约束排掉私有渠道', () => {
     expect(gatewayOf(out)['inferenceRegion']).toBeUndefined();
   });
 
-  it('没观测到私有渠道 → 不注入（不猜）', () => {
+  it('没观测到私有渠道也注入（健康账号的计划清单里本来就没有它）', () => {
+    // 私有 contributor 不出现在 planningReasoning 里，按观测结果决定要不要防它，
+    // 正好会在最需要防的时候不防——所以这里故意不要求「已知清单包含它」。
     const { body: out } = injectPrefs(
       {},
       { pipeline: 'planner', knownUpstreams: ['deepseek'] },
       basePrefs({ upstream: 'deepseek' }),
     );
-    expect(gatewayOf(out)['inferenceRegion']).toBeUndefined();
+    expect(gatewayOf(out)).toEqual({ only: ['deepseek'], inferenceRegion: GUARD });
   });
 
   it('开关关闭 → 不注入（退回旧写法）', () => {
