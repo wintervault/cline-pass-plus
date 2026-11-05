@@ -108,6 +108,10 @@ jobs:
             echo "release has no SHA256SUMS.txt yet — nothing to update"
             exit 0
           fi
+          # Windows 侧的清单是用 PowerShell 写的，行尾是 CRLF。`sha256sum -c` 不会去掉 \r：
+          # 它会被当成文件名的一部分（实测：'x.zip'$'\r': No such file），两条 Windows 记录
+          # 全部校验失败。追加 Linux 记录前先统一成 LF。
+          sed -i 's/\r$//' "$TMP/SHA256SUMS.txt"
           ( cd desktop/target/release/bundle && sha256sum deb/*.deb rpm/*.rpm | sed -E 's#\s+(deb|rpm)/#  #' ) > "$TMP/linux.txt"
           { cat "$TMP/SHA256SUMS.txt"; cat "$TMP/linux.txt"; } | sort -k2 -u > "$TMP/SHA256SUMS.txt.new"
           # `gh release upload` 按**文件名**上传，不支持改名（`file#name` 只对 create 生效）：
