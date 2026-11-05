@@ -5,8 +5,7 @@
 <h1 align="center">Cline Pass+</h1>
 
 <p align="center">
-  <b>Cline Pass Plus</b> · Make the real upstream channels behind your Cline Pass subscription
-  visible, pinnable, and failover-ready through a local endpoint.
+  Probe channels · Pin upstreams · Failover · Account management
 </p>
 
 <p align="center">

@@ -5,7 +5,7 @@
 <h1 align="center">Cline Pass+</h1>
 
 <p align="center">
-  <b>Cline Pass Plus</b> · 把 Cline Pass 订阅背后的真实上游渠道，变成可观测、可钉住、可故障转移的本地接入面。
+  探测渠道 · 钉住上游 · 故障转移 · 账号管理
 </p>
 
 <p align="center">
