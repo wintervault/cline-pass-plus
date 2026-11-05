@@ -83,8 +83,6 @@ export function normalizePerModel(raw: unknown): PerModelConfig {
     exclude,
     pinMode: source['pinMode'] === 'preferred' ? 'preferred' : 'strict',
     sort: source['sort'] === 'cost' || source['sort'] === 'ttft' || source['sort'] === 'tps' ? source['sort'] : null,
-    /* 缺省为开：只写白名单挡不住私有渠道（docs/pinning.md D7），显式 false 才关。 */
-    regionGuard: source['regionGuard'] !== false,
   };
 }
 
@@ -619,9 +617,7 @@ export function registerApiRoutes(
 
     // 临时配置覆盖：不落盘，仅本次请求生效（与保存的配置叠加）
     const base = gateway.perModel[model];
-    const cfg: PerModelConfig = base
-      ? { ...base }
-      : { upstreams: [], exclude: [], pinMode: 'strict', sort: null, regionGuard: true };
+    const cfg: PerModelConfig = base ? { ...base } : { upstreams: [], exclude: [], pinMode: 'strict', sort: null };
     if (payload.upstreams !== undefined) cfg.upstreams = normalizePerModel({ upstreams: payload.upstreams }).upstreams;
     else if (payload.upstream !== undefined)
       cfg.upstreams = typeof payload.upstream === 'string' && payload.upstream ? [payload.upstream] : [];
@@ -963,6 +959,38 @@ export function registerApiRoutes(
     sendJSON(c.res, 200, { ok: true, message: '服务正在优雅关停' });
     // 让响应先落到线上再关停
     setTimeout(() => ctx.onShutdown?.('control-api'), 50);
+  });
+
+  /**
+   * 全局设置（设置页）。目前只有「强行绑定渠道」：钉住非私有渠道时用区域约束排掉
+   * `openai-compatible-private`。**默认开**；关掉等于放弃钉住的强制力。
+   *
+   * 为什么是全局而不是按模型：按模型开关时，用户既看不出默认值，也看不出它为什么在
+   * 直连模型上没有任何反应（区域约束只对规划器管线生效）。
+   */
+  router.get('/api/settings', (c: Ctx) => {
+    sendJSON(c.res, 200, { forceChannelBinding: config().forceChannelBinding });
+  });
+
+  router.post('/api/settings', async (c: Ctx) => {
+    const body = await readJsonBody(c.req);
+    if (!body.ok) return sendError(c.res, 400, body.reason === 'bad-json' ? 'invalid JSON body' : 'body too large');
+    const raw = (body.value ?? {}) as Record<string, unknown>;
+    if (typeof raw['forceChannelBinding'] !== 'boolean') {
+      return sendError(
+        c.res,
+        400,
+        'forceChannelBinding must be a boolean',
+        'invalid_request_error',
+        'settings.forceBindingInvalid',
+      );
+    }
+    const next = raw['forceChannelBinding'];
+    updateConfig(ctx, (cfg) => {
+      cfg.forceChannelBinding = next;
+    });
+    // 立即生效：chain / probe 的 deps 都是读配置的 getter，不需要重建运行时
+    sendJSON(c.res, 200, { ok: true, forceChannelBinding: config().forceChannelBinding });
   });
 
   router.get('/api/config', (c: Ctx) => {

@@ -203,5 +203,30 @@ export function migrateConfig(input: Record<string, unknown>): MigrationResult {
     }
   }
 
+  if (from < 7) {
+    // ---- v6 → v7：按模型的「排除私有渠道」→ 全局「强行绑定渠道」 ----
+    // 按模型开关时用户看不出默认值，也看不出它为什么在直连模型上没反应；现在收成
+    // 设置页的一个全局开关（默认开）。旧配置里的 per-model 覆盖一律丢弃：留着会让
+    // 「全局开了但某个模型还关着」这种状态无法从界面上解释。
+    let dropped = 0;
+    const gateways = Array.isArray(raw.gateways) ? raw.gateways.filter(isPlainObject) : [];
+    for (const gateway of gateways) {
+      const perModel = isPlainObject(gateway['perModel']) ? gateway['perModel'] : null;
+      if (!perModel) continue;
+      for (const cfg of Object.values(perModel)) {
+        if (isPlainObject(cfg) && 'regionGuard' in cfg) {
+          delete cfg['regionGuard'];
+          dropped += 1;
+        }
+      }
+    }
+    if (typeof raw['forceChannelBinding'] !== 'boolean') raw['forceChannelBinding'] = true;
+    raw.version = 7;
+    applied.push('配置格式 v6 → v7：按模型的「排除私有渠道」改为全局设置「强行绑定渠道」（默认开，在设置页调整）');
+    if (dropped > 0) {
+      applied.push(`${dropped} 个模型原先单独关闭过区域约束，已改为跟随全局设置`);
+    }
+  }
+
   return { raw, applied };
 }

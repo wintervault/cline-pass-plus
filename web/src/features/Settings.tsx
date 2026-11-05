@@ -3,13 +3,13 @@ import { Alert, Button, Input, InputNumber, Popconfirm, Space, Switch, Tooltip, 
 import { useEffect, useState } from 'react';
 
 import { setAuthKey } from '../api/client.ts';
-import { useConsole, useMeta, useSaveConsole } from '../api/hooks.ts';
+import { useConsole, useMeta, useSaveConsole, useSaveSettings, useSettings } from '../api/hooks.ts';
 import type { ConsoleStatus } from '../api/types.ts';
 import { useFeedback } from '../feedback.ts';
 import { getHostBridge, type HostInfo } from '../hostBridge.ts';
 import { type MsgKey, useI18n } from '../i18n/index.tsx';
 import { PageHeader } from '../pageHeader.tsx';
-import { Panel } from '../panel.tsx';
+import { Panel, PanelHint } from '../panel.tsx';
 import { type ChipTone, StatusChip } from '../statusChip.tsx';
 
 /**
@@ -17,6 +17,7 @@ import { type ChipTone, StatusChip } from '../statusChip.tsx';
  *
  * - 启动：桌面壳的开机自启（操作系统级）
  * - 控制台访问：独立监听的端口/绑定/远端密钥（2.1 起与网关解耦）
+ * - 路由：强行绑定渠道（全局；2.3.1 起从按模型挪到这里）
  * - 数据：数据目录、日志、本机保存的访问密钥
  * - 关于：版本、仓库与许可证
  */
@@ -283,6 +284,45 @@ function ConsolePanel() {
   );
 }
 
+/**
+ * 路由（全局）：强行绑定渠道。
+ *
+ * 钉住渠道时用区域约束把网关的私有渠道（`openai-compatible-private`）排掉，
+ * 请求才会真的落到你勾选的渠道。**默认开启**，关闭后钉住不一定生效——
+ * 所以关掉时用提醒色把后果写在开关下面。
+ */
+function RoutingPanel() {
+  const { t } = useI18n();
+  const settings = useSettings();
+  const save = useSaveSettings();
+  const on = settings.data?.forceChannelBinding ?? true;
+
+  return (
+    <Panel title={t('settings.routing.title')} extra={<PanelHint>{t('settings.routing.panelHint')}</PanelHint>}>
+      <div style={{ display: 'grid', gap: 8 }}>
+        <Space size={10} align="center">
+          <Switch
+            size="small"
+            checked={on}
+            loading={settings.isLoading || save.isPending}
+            aria-label={t('settings.routing.forceBinding')}
+            onChange={(v) =>
+              save.mutate({
+                forceChannelBinding: v,
+                note: v ? t('settings.routing.note.on') : t('settings.routing.note.off'),
+              })
+            }
+          />
+          <span className="cps-body">{t('settings.routing.forceBinding')}</span>
+        </Space>
+        <Typography.Text type={on ? 'secondary' : 'warning'} style={{ fontSize: 12 }}>
+          {on ? t('settings.routing.onHint') : t('settings.routing.offHint')}
+        </Typography.Text>
+      </div>
+    </Panel>
+  );
+}
+
 function DataPanel() {
   const { t } = useI18n();
   const fb = useFeedback();
@@ -399,6 +439,7 @@ export default function Settings() {
       {/* 开机自启只在桌面版有意义：浏览器/服务器部署不显示这一块 */}
       {host?.autostart ? <AutostartPanel /> : null}
       <ConsolePanel />
+      <RoutingPanel />
       {/* 「数据」与「关于」都是短块：并排放在一行，整页在桌面形态下也能装进默认窗口 */}
       <div className="cps-grid-2">
         <DataPanel />

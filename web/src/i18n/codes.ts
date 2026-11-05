@@ -23,6 +23,7 @@ const CODE_KEYS: Record<string, MsgKey> = {
   'console.portConflict': 'api.console.portConflict',
   'console.bindFailed': 'api.console.bindFailed',
   'console.invalid': 'api.console.invalid',
+  'settings.forceBindingInvalid': 'settings.routing.invalid',
   'gateway.idInvalid': 'api.gateway.idInvalid',
   'gateway.limit': 'api.gateway.limit',
   'gateway.nameInvalid': 'api.gateway.nameInvalid',

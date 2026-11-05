@@ -32,6 +32,7 @@ export async function chainStream(): Promise<StreamFixture> {
       activeAccount: config.gateways[0]?.activeAccount ?? '',
     })),
     health: new ChannelHealth(),
+    forceChannelBinding: true,
   });
   const metaOf = (over: Partial<ModelMeta> = {}): ModelMeta => ({
     pipeline: 'planner',
@@ -58,7 +59,6 @@ export async function chainStream(): Promise<StreamFixture> {
     exclude: [],
     pinMode: 'strict',
     sort: null,
-    regionGuard: true,
     ...over,
   });
   return { upstream, chain, metaOf, cfgOf, close: () => upstream.close() };

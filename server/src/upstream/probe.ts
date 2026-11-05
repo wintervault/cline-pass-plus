@@ -8,6 +8,8 @@ import { blankModelMeta, type ModelMeta, type PinState, type UpstreamStatusKind 
 /** 探测与校验共用的上游访问依赖。 */
 export interface ProbeDeps {
   upstreamBase: string;
+  /** 全局「强行绑定渠道」：校验时与运行时用同一套注入（否则校验会被私有渠道假成功）。 */
+  forceChannelBinding: boolean;
   /** 读写**指定账号**的模型检测记录（检测结论只对该账号成立）。 */
   getMeta: (account: string, modelId: string) => ModelMeta | undefined;
   setMeta: (account: string, modelId: string, meta: ModelMeta) => void;
@@ -392,7 +394,7 @@ export class ProbeService {
           // 否则校验可能被私有渠道「假成功」——它本来就会被网关优先选中。
           const body = injectPrefs(
             base,
-            { pipeline: pipeline ?? null, knownUpstreams: list },
+            { pipeline: pipeline ?? null, knownUpstreams: list, forceChannelBinding: this.#deps.forceChannelBinding },
             { upstream: slug, orderRest: [], excludeList: [], strict: true, sort: null },
           ).body;
           let json: unknown = null;

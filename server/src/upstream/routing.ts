@@ -148,10 +148,10 @@ export interface InjectContext {
   /** 已知渠道清单，用于把排除换算成白名单。 */
   knownUpstreams: readonly string[];
   /**
-   * 用区域约束排掉私有渠道（默认 true，`PerModelConfig.regionGuard` 可关）。
+   * 用区域约束排掉私有渠道（全局「强行绑定渠道」，默认 true）。
    * 只在「本次限定了渠道、且私有渠道不在允许集合里」时生效，见下方 `applyRegionGuard`。
    */
-  regionGuard?: boolean;
+  forceChannelBinding?: boolean;
 }
 
 export interface InjectResult {
@@ -226,7 +226,7 @@ export function injectPrefs(body: Record<string, unknown>, ctx: InjectContext, p
    */
   const privateExplicitlyExcluded = prefs.excludeList.includes(PRIVATE_UPSTREAM);
   const applyRegionGuard =
-    (ctx.regionGuard ?? true) &&
+    (ctx.forceChannelBinding ?? true) &&
     restrictsProviders &&
     !privateAllowed &&
     (!prefs.allowGatewayFallback || privateExplicitlyExcluded);

@@ -18,6 +18,8 @@ export interface ChainDeps {
   failover: FailoverConfig;
   pool: AccountPool;
   health: ChannelHealth;
+  /** 全局「强行绑定渠道」（设置页的开关）：钉住渠道时是否用区域约束排掉私有渠道。 */
+  forceChannelBinding: boolean;
 }
 
 export interface ChainInput {
@@ -295,7 +297,7 @@ export class ChatChain {
 
         const injected = injectPrefs(
           input.body,
-          { pipeline, knownUpstreams: known, regionGuard: input.cfg?.regionGuard ?? true },
+          { pipeline, knownUpstreams: known, forceChannelBinding: this.#deps.forceChannelBinding },
           {
             upstream,
             orderRest: [],

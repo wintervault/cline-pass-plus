@@ -4,7 +4,7 @@ import { isIsoDate } from './date.ts';
 import { MAX_GROUPS_PER_ACCOUNT, normalizeTags } from './tags.ts';
 
 /** 当前配置格式版本。加载到更低版本会触发迁移，更高版本拒绝启动（避免新版写的配置被旧版改坏）。 */
-export const CONFIG_VERSION = 6;
+export const CONFIG_VERSION = 7;
 
 /**
  * 控制台监听默认端口（2.1 起独立于网关）。
@@ -100,15 +100,6 @@ export const PerModelSchema = z.object({
   exclude: z.array(z.string().min(1)).max(10).catch([]).default([]),
   pinMode: PinModeSchema.catch('strict').default('strict'),
   sort: SortSchema.nullable().catch(null).default(null),
-  /**
-   * 钉住时用区域约束把私有渠道（`openai-compatible-private`）排出去（2026-11-04 起默认开）。
-   *
-   * 只写 `gateway.only` 挡不住它：网关会先走「私有 contributor」再回退官方
-   * （linux.do 3119385 实测）。给私有渠道加一个它没有节点的区域，它就不成立，
-   * 请求才会真正落到清单内的渠道。只在「本次限定了渠道 + 它不在允许集合」时注入，
-   * 见 `routing.ts` 的 `injectPrefs`；关掉本开关即退回旧写法。
-   */
-  regionGuard: z.boolean().catch(true).default(true),
 });
 export type PerModelConfig = z.infer<typeof PerModelSchema>;
 
@@ -230,6 +221,19 @@ export const ConfigSchema = z.object({
   /** 上游网关地址（所有网关共用同一个 Cline 网关）。 */
   upstreamBase: z.string().url().catch(DEFAULT_UPSTREAM_BASE).default(DEFAULT_UPSTREAM_BASE),
 
+  /**
+   * 强行绑定渠道：钉住非私有渠道时，用区域约束把 `openai-compatible-private` 排出去。
+   *
+   * 只写 `gateway.only` 挡不住它——网关会先走「私有 contributor」再回退官方
+   * （linux.do 3119385，2026-11-04 实测）。给私有渠道加一个它没有节点的区域，它就不成立，
+   * 请求才会真正落到清单内的渠道。**默认开启**；关掉等于放弃钉住的强制力
+   * （请求可能仍被网关送到私有渠道），只留给「某模型只有私有渠道能服务」这类特殊情况。
+   *
+   * 2.3.1 起是**全局设置**（界面上在「设置」页）：按模型分别开关时，用户既看不出
+   * 默认值、也不知道它为什么在直连模型上没反应。
+   */
+  forceChannelBinding: z.boolean().catch(true).default(true),
+
   // ---- 账号池（全局） ----
   accounts: z.array(z.unknown()).catch([]).default([]),
 
@@ -278,6 +282,7 @@ export function defaultConfig(): Config {
   return {
     version: CONFIG_VERSION,
     upstreamBase: DEFAULT_UPSTREAM_BASE,
+    forceChannelBinding: true,
     accounts: [],
     gateways: [defaultGateway()],
     console: ConsoleSchema.parse({}),

@@ -66,11 +66,6 @@ export interface PerModelConfig {
   exclude: string[];
   pinMode: PinMode;
   sort: SortKey | null;
-  /**
-   * 钉住时用区域约束排掉私有渠道（默认开）。
-   * 可选：老版本 API 不会返回这个字段，缺省按服务端默认（开）处理。
-   */
-  regionGuard?: boolean;
 }
 
 /**
@@ -85,7 +80,6 @@ export const EMPTY_PER_MODEL: PerModelConfig = {
   exclude: [],
   pinMode: 'strict',
   sort: null,
-  regionGuard: true,
 };
 
 export interface SubscriptionRow {
@@ -212,6 +206,15 @@ export interface ConsoleInfo {
   hasProxyKey: boolean;
   url: string;
   status: ConsoleStatus;
+}
+
+/** 全局设置（/api/settings）。 */
+export interface SettingsInfo {
+  /**
+   * 强行绑定渠道：钉住非私有渠道时用区域约束排掉 `openai-compatible-private`。
+   * 默认开；关闭后网关可能绕过钉住的渠道、把请求送到私有渠道。
+   */
+  forceChannelBinding: boolean;
 }
 
 export interface FailoverConfig {

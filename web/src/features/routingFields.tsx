@@ -1,17 +1,18 @@
-import { Select, Space, Switch, Tooltip, Typography } from 'antd';
+import { Select, Space, Tooltip, Typography } from 'antd';
 
 import type { PerModelConfig, SortKey } from '../api/types.ts';
 import { useT } from '../i18n/index.tsx';
 
 /**
- * 路由策略的三个控件（钉住模式 / 排除私有渠道 / 渠道排序）。
+ * 路由策略的两个控件（钉住模式 / 渠道排序）。
  *
  * 「订阅模型」和「测试台」编辑的是**同一份配置**，两边各写一遍必然漂移
  * （之前一处带标签、一处是光头下拉，同一个设置两种样子）。抽成一处，
  * 只保留调用点决定的「改动后回执文案」。
  *
- * 「排除私有渠道」跟在钉住模式同一格里，而不是另起一行：测试台在默认窗口下
- * 不允许出现纵向滚动条，多一整行 48px 正好会把它顶出去。
+ * 「强行绑定渠道」不在这里：它是**全局**设置，放在「设置」页（2.3.1 起）。
+ * 之前按模型放在这一行时，用户既看不出它默认是开的，也看不出它为什么在直连
+ * （OpenRouter）模型上没有任何反应——区域约束只对规划器管线生效。
  */
 export function RoutingFields({
   cfg,
@@ -22,7 +23,6 @@ export function RoutingFields({
 }) {
   const t = useT();
   const selectWidth = 180;
-  const guard = cfg.regionGuard ?? true;
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '16px 40px' }}>
       <div>
@@ -51,19 +51,6 @@ export function RoutingFields({
               { value: 'preferred', label: t('routing.pinMode.preferred') },
             ]}
           />
-          <Tooltip title={t('routing.regionGuard.hint')}>
-            <Space size={8} align="center" style={{ whiteSpace: 'nowrap' }}>
-              <Switch
-                size="small"
-                checked={guard}
-                aria-label={t('routing.regionGuard')}
-                onChange={(v) =>
-                  onChange({ regionGuard: v }, v ? t('routing.note.regionGuardOn') : t('routing.note.regionGuardOff'))
-                }
-              />
-              <span className="cps-meta">{t('routing.regionGuard')}</span>
-            </Space>
-          </Tooltip>
         </Space>
       </div>
       <div>

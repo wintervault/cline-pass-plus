@@ -151,13 +151,8 @@ const enUS: Record<keyof typeof zhCN, string> = {
   'routing.sort.ttft': 'Fastest first token',
   'routing.sort.tps': 'Highest throughput',
   'routing.sort.hint': 'Execution-order preference across usable channels.',
-  'routing.regionGuard': 'Exclude private',
-  'routing.regionGuard.hint':
-    'A provider whitelist alone does not stop openai-compatible-private — the gateway tries it first. With this on, that channel is pinned to a region it has no nodes in, so requests land on the channels you listed. Models where the channel was never observed are unaffected.',
   'routing.note.pinMode': 'Pin mode set to "{name}"',
   'routing.note.sort': 'Channel order set to "{name}"',
-  'routing.note.regionGuardOn': 'Private-channel exclusion turned on',
-  'routing.note.regionGuardOff': 'Private-channel exclusion turned off',
   // ---------------- Models ----------------
   'models.title': 'Models',
   'models.desc': 'Probe for usable channels; tick "Use" and order them. Validate checks each one.',
@@ -211,9 +206,8 @@ const enUS: Record<keyof typeof zhCN, string> = {
     'Pinning, exclusions and ordering have no effect right now. Your ticks are kept and apply again once the gateway honours them; another account or a later probe may restore this.',
   'models.meta.canonical': 'Backing model',
   'models.meta.lastHit': 'Default route',
-  'models.meta.rescueHit': 'Hit with private excluded',
-  'models.meta.rescueHit.tip':
-    'The official channel the probe actually reached when only the region constraint was applied.',
+  'models.meta.rescueHit': 'Hit when binding is forced',
+  'models.meta.rescueHit.tip': 'The official channel the probe actually reached while channel binding was forced.',
   'models.meta.tier0': 'tier-0',
   'models.meta.listSeparator': ', ',
   'models.meta.pipeline': 'Pipeline',
@@ -607,6 +601,8 @@ const enUS: Record<keyof typeof zhCN, string> = {
   'toast.gateway.deleted': 'Deleted gateway "{name}"',
   'toast.console.saved': 'Console settings saved',
   'toast.console.failed': 'Could not save console settings',
+  'toast.settings.saved': 'Settings saved',
+  'toast.settings.failed': 'Could not save settings',
   // ---------------- Settings ----------------
   'settings.title': 'Settings',
   'settings.desc':
@@ -641,6 +637,16 @@ const enUS: Record<keyof typeof zhCN, string> = {
   'settings.console.cleared': 'Console access key cleared',
   'settings.console.note':
     'Local console access never needs a key. Only remote access does, and a non-loopback bind requires one. The desktop app always uses 3125 on 127.0.0.1 and ignores these port/bind settings; changing the port disconnects this page, so reopen the console at the new address.',
+  'settings.routing.title': 'Routing',
+  'settings.routing.panelHint': 'Applies to every model; changes take effect immediately',
+  'settings.routing.forceBinding': 'Force channel binding',
+  'settings.routing.onHint':
+    'When you pin a channel, the gateway will not send requests to its private channel (openai-compatible-private) — they go only to the channels you picked. On by default.',
+  'settings.routing.offHint':
+    'Turning this off is not recommended: the gateway may bypass the channels you pinned and route to its private channel, so pinning may stop taking effect.',
+  'settings.routing.note.on': '"Force channel binding" turned on',
+  'settings.routing.note.off': '"Force channel binding" turned off',
+  'settings.routing.invalid': 'This setting only accepts on or off',
   'settings.data.title': 'Data',
   'settings.data.dir': 'Data directory',
   'settings.data.logs': 'Log directory',

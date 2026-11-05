@@ -1,6 +1,7 @@
 {
-  "version": 6,
+  "version": 7,
   "upstreamBase": "https://api.cline.bot/api/v1",
+  "forceChannelBinding": true,
   "accounts": [
     {
       "name": "主力",
@@ -37,8 +38,7 @@
           "upstreams": ["deepseek"],
           "exclude": [],
           "pinMode": "strict",
-          "sort": null,
-          "regionGuard": true
+          "sort": null
         }
       },
       "failover": {

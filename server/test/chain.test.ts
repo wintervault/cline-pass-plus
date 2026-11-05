@@ -52,12 +52,13 @@ afterEach(async () => {
   await upstream.close();
 });
 
-const makeChain = (): ChatChain =>
+const makeChain = (forceChannelBinding = false): ChatChain =>
   new ChatChain({
     upstreamBase: base,
     failover: gw().failover,
     pool,
     health,
+    forceChannelBinding,
   });
 
 const metaOf = (over: Partial<ModelMeta> = {}): ModelMeta => ({
@@ -87,7 +88,6 @@ const cfgOf = (over: Record<string, unknown> = {}) => ({
   pinMode: 'strict' as const,
   sort: null,
   // 默认关：这组用例断言的是 only/order 语义本身，区域约束另有用例覆盖
-  regionGuard: false,
   ...over,
 });
 
@@ -359,10 +359,10 @@ describe('ChatChain 钉住语义（本地说了算）', () => {
     const guard = { scope: 'global', providers: { 'openai-compatible-private': { scope: 'zone', geoRegion: 'us' } } };
 
     upstream.script([{ status: 200, body: okBody('ch1') }]);
-    await makeChain().run({
+    await makeChain(true).run({
       modelId: 'cline-pass/x',
       body: bodyOf(),
-      cfg: cfgOf({ upstreams: ['ch1'], regionGuard: true }),
+      cfg: cfgOf({ upstreams: ['ch1'] }),
       meta: metaOf(),
       stream: false,
     });
@@ -372,10 +372,10 @@ describe('ChatChain 钉住语义（本地说了算）', () => {
 
     upstream.reset();
     upstream.script([{ status: 200, body: okBody('openai-compatible-private') }]);
-    await makeChain().run({
+    await makeChain(true).run({
       modelId: 'cline-pass/x',
       body: bodyOf(),
-      cfg: cfgOf({ upstreams: ['openai-compatible-private'], regionGuard: true }),
+      cfg: cfgOf({ upstreams: ['openai-compatible-private'] }),
       meta: metaOf({ pinState: 'ignored' }),
       stream: false,
     });
@@ -413,10 +413,10 @@ describe('ChatChain 钉住语义（本地说了算）', () => {
       { status: 200, body: okBody('ch2') },
     ]);
     const guard = { scope: 'global', providers: { 'openai-compatible-private': { scope: 'zone', geoRegion: 'us' } } };
-    await makeChain().run({
+    await makeChain(true).run({
       modelId: 'cline-pass/x',
       body: bodyOf(),
-      cfg: cfgOf({ pinMode: 'preferred', upstreams: ['ch1', 'ch2'], regionGuard: true }),
+      cfg: cfgOf({ pinMode: 'preferred', upstreams: ['ch1', 'ch2'] }),
       meta: metaOf({ upstreams: ['ch1', 'ch2', 'ch3'] }),
       stream: false,
     });

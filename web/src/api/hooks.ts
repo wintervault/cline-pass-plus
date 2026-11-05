@@ -14,6 +14,7 @@ import type {
   ModelsResponse,
   PerModelConfig,
   ProbeResult,
+  SettingsInfo,
   TestResult,
   ValidationResult,
 } from './types.ts';
@@ -26,6 +27,7 @@ export const qk = {
   gateways: ['gateways'] as const,
   history: ['history'] as const,
   console: ['console'] as const,
+  settings: ['settings'] as const,
 };
 
 /**
@@ -74,6 +76,7 @@ export function useRefresh(): () => void {
     void qc.invalidateQueries({ queryKey: qk.gateways });
     void qc.invalidateQueries({ queryKey: qk.history });
     void qc.invalidateQueries({ queryKey: qk.console });
+    void qc.invalidateQueries({ queryKey: qk.settings });
   };
 }
 
@@ -263,6 +266,30 @@ export function useConsole(): ReturnType<typeof useQuery<ConsoleInfo & { ok: boo
     queryKey: qk.console,
     queryFn: () => api<ConsoleInfo & { ok: boolean }>('/api/console'),
     refetchInterval: 3000,
+  });
+}
+
+/** 全局设置（设置页：强行绑定渠道）。 */
+export function useSettings(): ReturnType<typeof useQuery<SettingsInfo>> {
+  return useQuery({ queryKey: qk.settings, queryFn: () => api<SettingsInfo>('/api/settings') });
+}
+
+/** 保存全局设置。服务端立即生效（chain / probe 都读配置的 getter）。 */
+export function useSaveSettings() {
+  const refresh = useRefresh();
+  const fb = useFeedback();
+  const { t } = useI18n();
+  return useMutation({
+    mutationFn: (vars: { forceChannelBinding: boolean; note?: string }) =>
+      api<SettingsInfo & { ok: boolean }>('/api/settings', { json: { forceChannelBinding: vars.forceChannelBinding } }),
+    onSuccess: (_data, vars) => {
+      refresh();
+      fb.ok(vars.note ?? t('toast.settings.saved'));
+    },
+    onError: (err) => {
+      refresh();
+      fb.fail(t('toast.settings.failed'), err);
+    },
   });
 }
 

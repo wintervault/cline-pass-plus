@@ -150,6 +150,9 @@ async function main(): Promise<void> {
     get upstreamBase() {
       return configStore.value.upstreamBase;
     },
+    get forceChannelBinding() {
+      return configStore.value.forceChannelBinding;
+    },
     getMeta: (account, modelId) => accountModels(metaStore.value, account)[modelId],
     setMeta: (account, modelId, model) =>
       metaStore.update((meta) => {
@@ -185,6 +188,9 @@ async function main(): Promise<void> {
       },
       get failover() {
         return gatewayById(configStore.value, id)?.failover ?? FALLBACK_FAILOVER;
+      },
+      get forceChannelBinding() {
+        return configStore.value.forceChannelBinding;
       },
       pool,
       health,

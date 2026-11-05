@@ -148,13 +148,8 @@ const zhCN = {
   'routing.sort.ttft': '最快首字',
   'routing.sort.tps': '最高吞吐',
   'routing.sort.hint': '多个可用渠道之间的执行顺序偏好',
-  'routing.regionGuard': '排除私有渠道',
-  'routing.regionGuard.hint':
-    '只写白名单时，网关仍可能先走 openai-compatible-private。开启后给它加一个没有节点的区域约束，请求才会真正落到清单里的渠道；观测不到该渠道的模型不受影响。',
   'routing.note.pinMode': '钉住模式已改为「{name}」',
   'routing.note.sort': '渠道排序偏好已改为「{name}」',
-  'routing.note.regionGuardOn': '已开启「排除私有渠道」',
-  'routing.note.regionGuardOff': '已关闭「排除私有渠道」',
   // ---------------- 订阅模型 ----------------
   'models.title': '订阅模型',
   'models.desc': '探测可用渠道；勾选「使用」并排序，「校验」逐个渠道实测。',
@@ -201,8 +196,8 @@ const zhCN = {
     '钉住/排除/排序均不生效；勾选仅保留意图，网关恢复执行后自动生效。换个账号或稍后重新探测可能恢复。',
   'models.meta.canonical': '背后模型',
   'models.meta.lastHit': '默认路由',
-  'models.meta.rescueHit': '排除私有渠道后命中',
-  'models.meta.rescueHit.tip': '只加区域约束、不限定渠道时，探针实际落到的官方渠道。',
+  'models.meta.rescueHit': '强行绑定后命中',
+  'models.meta.rescueHit.tip': '强行绑定时，探针实际落到的官方渠道。',
   'models.meta.tier0': 'tier-0',
   'models.meta.listSeparator': '、',
   'models.meta.pipeline': '管线',
@@ -570,6 +565,8 @@ const zhCN = {
   'toast.gateway.deleted': '已删除网关「{name}」',
   'toast.console.saved': '控制台设置已保存',
   'toast.console.failed': '保存控制台设置失败',
+  'toast.settings.saved': '设置已保存',
+  'toast.settings.failed': '保存设置失败',
   // ---------------- 设置 ----------------
   'settings.title': '设置',
   'settings.desc': '应用级设置：启动方式、控制台访问、数据与关于。账号与网关的配置在各自页面。',
@@ -601,6 +598,16 @@ const zhCN = {
   'settings.console.cleared': '控制台访问密钥已清除',
   'settings.console.note':
     '本机访问控制台永远免密钥。只有远端访问才需要这个密钥；绑定非回环地址时必须设置。桌面版固定使用 3125 与 127.0.0.1，不受这里的端口/绑定设置影响；改端口后当前页面会断开，请用新地址重新打开。',
+  'settings.routing.title': '路由',
+  'settings.routing.panelHint': '对所有模型生效，改动立即生效',
+  'settings.routing.forceBinding': '强行绑定渠道',
+  'settings.routing.onHint':
+    '钉住渠道时，网关不会把请求送到私有渠道（openai-compatible-private），只走你勾选的渠道。默认开启。',
+  'settings.routing.offHint':
+    '不建议取消勾选：关闭后网关可能绕过你钉住的渠道、把请求送到私有渠道，钉住也就不一定生效了。',
+  'settings.routing.note.on': '已开启「强行绑定渠道」',
+  'settings.routing.note.off': '已关闭「强行绑定渠道」',
+  'settings.routing.invalid': '这个设置只接受开或关',
   'settings.data.title': '数据',
   'settings.data.dir': '数据目录',
   'settings.data.logs': '日志目录',

@@ -100,7 +100,7 @@ describe('injectPrefs', () => {
     const body = { model: 'cline-pass/x', messages: [] };
     const { body: out, degraded } = injectPrefs(
       body,
-      { pipeline: 'planner', knownUpstreams: [], regionGuard: false },
+      { pipeline: 'planner', knownUpstreams: [], forceChannelBinding: false },
       basePrefs({ upstream: 'alibaba' }),
     );
     expect(degraded).toBe(false);
@@ -112,7 +112,7 @@ describe('injectPrefs', () => {
     const body = {};
     const { body: out } = injectPrefs(
       body,
-      { pipeline: 'planner', knownUpstreams: [], regionGuard: false },
+      { pipeline: 'planner', knownUpstreams: [], forceChannelBinding: false },
       basePrefs({ upstream: 'alibaba', orderRest: ['baseten', 'targon'], strict: false }),
     );
     expect(out['providerOptions']).toEqual({ gateway: { order: ['alibaba', 'baseten', 'targon'] } });
@@ -131,7 +131,7 @@ describe('injectPrefs', () => {
   it('管道未知：两种形式同时注入（各自取用、互不干扰）', () => {
     const { body: out } = injectPrefs(
       {},
-      { pipeline: null, knownUpstreams: [], regionGuard: false },
+      { pipeline: null, knownUpstreams: [], forceChannelBinding: false },
       basePrefs({ upstream: 'alibaba' }),
     );
     expect(out['providerOptions']).toEqual({ gateway: { only: ['alibaba'] } });
@@ -141,7 +141,7 @@ describe('injectPrefs', () => {
   it('排除换算成 only 白名单（自动模式）', () => {
     const { body: out } = injectPrefs(
       {},
-      { pipeline: 'planner', knownUpstreams: ['a', 'b', 'c', 'd'], regionGuard: false },
+      { pipeline: 'planner', knownUpstreams: ['a', 'b', 'c', 'd'], forceChannelBinding: false },
       basePrefs({ excludeList: ['b'] }),
     );
     expect(out['providerOptions']).toEqual({ gateway: { only: ['a', 'c', 'd'] } });
@@ -150,7 +150,7 @@ describe('injectPrefs', () => {
   it('preferred + 排除：order 首位之外仍带白名单（防止网关回退到被排除渠道）', () => {
     const { body: out } = injectPrefs(
       {},
-      { pipeline: 'planner', knownUpstreams: ['a', 'b', 'c'], regionGuard: false },
+      { pipeline: 'planner', knownUpstreams: ['a', 'b', 'c'], forceChannelBinding: false },
       basePrefs({ upstream: 'a', orderRest: ['b'], excludeList: ['c'], strict: false }),
     );
     // 排除项同时从 orderRest 中剔除
@@ -223,7 +223,7 @@ describe('injectPrefs', () => {
     const body = { providerOptions: { gateway: { custom: 'keep' }, other: 1 } };
     const { body: out } = injectPrefs(
       body,
-      { pipeline: 'planner', knownUpstreams: [], regionGuard: false },
+      { pipeline: 'planner', knownUpstreams: [], forceChannelBinding: false },
       basePrefs({ upstream: 'a' }),
     );
     expect(out['providerOptions']).toEqual({ gateway: { custom: 'keep', only: ['a'] }, other: 1 });
@@ -272,7 +272,7 @@ describe('injectPrefs：区域约束排掉私有渠道', () => {
   it('开关关闭 → 不注入（退回旧写法）', () => {
     const { body: out } = injectPrefs(
       {},
-      { pipeline: 'planner', knownUpstreams: [PRIVATE, 'deepseek'], regionGuard: false },
+      { pipeline: 'planner', knownUpstreams: [PRIVATE, 'deepseek'], forceChannelBinding: false },
       basePrefs({ upstream: 'deepseek' }),
     );
     expect(gatewayOf(out)).toEqual({ only: ['deepseek'] });

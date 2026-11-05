@@ -92,7 +92,6 @@ async function harness() {
     exclude: [],
     pinMode: 'strict',
     sort: null,
-    regionGuard: true,
   };
 
   const meta = defaultMeta();

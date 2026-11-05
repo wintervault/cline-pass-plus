@@ -197,6 +197,31 @@ describe('migrateConfig', () => {
     expect(r.applied.join()).toContain('2 个网关的范围原先按体检结论设置');
   });
 
+  it('v6 → v7：按模型的区域约束收成全局「强行绑定渠道」', () => {
+    const r = migrateConfig({
+      version: 6,
+      accounts: [{ name: 'A', key: 'sk_a', groups: [] }],
+      gateways: [
+        {
+          id: 'main',
+          perModel: {
+            'cline-pass/x': { upstreams: ['deepseek'], exclude: [], pinMode: 'strict', sort: null, regionGuard: false },
+            'cline-pass/y': { upstreams: [], exclude: [], pinMode: 'strict', sort: null },
+          },
+        },
+      ],
+      console: { port: 3125, bindHost: '127.0.0.1', proxyKey: '' },
+    });
+    expect(r.raw.version).toBe(CONFIG_VERSION);
+    expect(r.applied.join()).toContain('v6 → v7');
+    const gateways = r.raw.gateways as Array<Record<string, unknown>>;
+    const perModel = gateways[0]?.perModel as Record<string, Record<string, unknown>>;
+    // 旧的按模型覆盖被丢弃：留着会让「全局开了但某个模型还关着」无法从界面解释
+    expect(perModel['cline-pass/x']?.['regionGuard']).toBeUndefined();
+    expect(r.raw['forceChannelBinding']).toBe(true);
+    expect(r.applied.join()).toContain('1 个模型原先单独关闭过');
+  });
+
   it('v4 → v5：原网关占用 3125 时让位给控制台，避免控制台绑不上', () => {
     const r = migrateConfig({
       version: 4,
@@ -450,7 +475,6 @@ describe('loadConfig', () => {
       exclude: [],
       pinMode: 'strict',
       sort: 'cost',
-      regionGuard: true,
     });
     expect(gateway?.failover.budgetMs).toBe(90000);
     expect(r.backupPath).toBeNull();

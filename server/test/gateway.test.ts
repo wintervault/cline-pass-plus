@@ -192,6 +192,27 @@ describe('网关 API', () => {
     expect((main['status'] as { state: string }).state).toBe('running');
   });
 
+  it('GET/POST /api/settings：强行绑定渠道默认开，可关可开，非法值 400', async () => {
+    const mainPort = await freePort();
+    const { port: apiPort, configStore } = await harness([defaultGateway({ id: 'main', port: mainPort })]);
+
+    const initial = await request(apiPort, '/api/settings');
+    expect(initial.json<{ forceChannelBinding: boolean }>().forceChannelBinding).toBe(true);
+
+    const off = await request(apiPort, '/api/settings', { method: 'POST', body: { forceChannelBinding: false } });
+    expect(off.status).toBe(200);
+    expect(configStore.value.forceChannelBinding).toBe(false);
+
+    const on = await request(apiPort, '/api/settings', { method: 'POST', body: { forceChannelBinding: true } });
+    expect(on.status).toBe(200);
+    expect(configStore.value.forceChannelBinding).toBe(true);
+
+    // 非布尔值必须报错，不能被 schema 兜底成 true（否则用户以为关了、其实没关）
+    const bad = await request(apiPort, '/api/settings', { method: 'POST', body: { forceChannelBinding: 'no' } });
+    expect(bad.status).toBe(400);
+    expect(configStore.value.forceChannelBinding).toBe(true);
+  });
+
   it('保存新网关：创建、绑定、出现在列表里', async () => {
     const mainPort = await freePort();
     const secondPort = await freePort();

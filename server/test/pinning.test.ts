@@ -33,6 +33,7 @@ function makeService() {
   const store = new Map<string, ModelMeta>();
   const probe = new ProbeService({
     upstreamBase: base,
+    forceChannelBinding: true,
     getMeta: (_account, id) => store.get(id),
     setMeta: (_account, id, m) => void store.set(id, m),
   });
@@ -43,6 +44,7 @@ describe('probeModel 钉住探针（docs/pinning.md D1）', () => {
   it('没有账号时本地失败，不发上游请求', async () => {
     const probe = new ProbeService({
       upstreamBase: base,
+      forceChannelBinding: true,
       getMeta: () => undefined,
       setMeta: () => {},
     });
@@ -219,6 +221,7 @@ describe('validateUpstreams 防假绿闸（D5）', () => {
     });
     const probe = new ProbeService({
       upstreamBase: base,
+      forceChannelBinding: true,
       getMeta: (_account, id) => store.get(id),
       setMeta: (_account, id, m) => void store.set(id, m),
     });
