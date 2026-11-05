@@ -74,6 +74,7 @@ const metaOf = (over: Partial<ModelMeta> = {}): ModelMeta => ({
   canonicalSlug: null,
   openrouterSlug: null,
   lastProvider: null,
+  rescueProvider: null,
   lastMs: null,
   probedAt: null,
   validatedAt: null,

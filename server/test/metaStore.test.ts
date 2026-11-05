@@ -210,6 +210,7 @@ describe('MetaStore 写回', () => {
           canonicalSlug: 'zai/glm-5.2',
           openrouterSlug: null,
           lastProvider: 'alibaba',
+          rescueProvider: null,
           lastMs: 2500,
           probedAt: 1234,
           validatedAt: null,

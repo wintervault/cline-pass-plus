@@ -210,7 +210,10 @@ const enUS: Record<keyof typeof zhCN, string> = {
   'models.pin.ignored.tip':
     'Pinning, exclusions and ordering have no effect right now. Your ticks are kept and apply again once the gateway honours them; another account or a later probe may restore this.',
   'models.meta.canonical': 'Backing model',
-  'models.meta.lastHit': 'Last hit',
+  'models.meta.lastHit': 'Default route',
+  'models.meta.rescueHit': 'Hit with private excluded',
+  'models.meta.rescueHit.tip':
+    'The official channel the probe actually reached when only the region constraint was applied.',
   'models.meta.tier0': 'tier-0',
   'models.meta.listSeparator': ', ',
   'models.meta.pipeline': 'Pipeline',

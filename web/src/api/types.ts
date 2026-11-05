@@ -46,11 +46,20 @@ export interface ModelMeta {
   tier0: string[];
   canonicalSlug: string | null;
   openrouterSlug: string | null;
+  /** 探针未钉住时的命中（默认路由）。 */
   lastProvider: string | null;
+  /** 只加区域约束、不限定渠道时命中的官方渠道；仅 pinState=enforced 时有值（老服务端不返回）。 */
+  rescueProvider?: string | null;
   lastMs: number | null;
   probedAt: number | null;
   validatedAt: number | null;
 }
+
+/**
+ * 网关的「私有 contributing」渠道：默认路由可能把请求拉到这里，
+ * 它不是用户想选的渠道，界面上永远排在最后（与 server 的 `PRIVATE_UPSTREAM` 同名）。
+ */
+export const PRIVATE_UPSTREAM = 'openai-compatible-private';
 
 export interface PerModelConfig {
   upstreams: string[];

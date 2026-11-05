@@ -67,6 +67,7 @@ const ModelMetaSchema = z.object({
   canonicalSlug: z.string().nullable().catch(null).default(null),
   openrouterSlug: z.string().nullable().catch(null).default(null),
   lastProvider: z.string().nullable().catch(null).default(null),
+  rescueProvider: z.string().nullable().catch(null).default(null),
   lastMs: z.number().nullable().catch(null).default(null),
   probedAt: z.number().nullable().catch(null).default(null),
   validatedAt: z.number().nullable().catch(null).default(null),

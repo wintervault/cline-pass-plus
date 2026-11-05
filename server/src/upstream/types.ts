@@ -61,7 +61,17 @@ export interface ModelMeta {
   tier0: string[];
   canonicalSlug: string | null;
   openrouterSlug: string | null;
+  /** 探针**未钉住**时的实际命中（网关默认路由）；pinState=ignored 时就是真实去向。 */
   lastProvider: string | null;
+  /**
+   * 探针在「只加区域约束、不限定渠道」时实际命中的官方渠道（2.3.1 起）。
+   *
+   * 为什么单独存：`lastProvider` 是**未钉住**的结果，私有渠道账号永远是
+   * `openai-compatible-private`——它证明「参数被读取了」，却没回答「那钉住以后走哪」。
+   * 这个字段就是后者：区域约束把私有渠道排掉之后，网关真正选中的那条官方渠道。
+   * 只在 `pinState=enforced` 时有意义；判成 ignored 时必须清空，免得留下过期的好消息。
+   */
+  rescueProvider: string | null;
   lastMs: number | null;
   probedAt: number | null;
   validatedAt: number | null;
@@ -182,6 +192,7 @@ export function ensureAccountModels(meta: MetaFile, account: string): Record<str
     canonicalSlug: null,
     openrouterSlug: null,
     lastProvider: null,
+    rescueProvider: null,
     lastMs: null,
     probedAt: null,
     validatedAt: null,

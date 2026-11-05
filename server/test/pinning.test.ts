@@ -65,6 +65,8 @@ describe('probeModel 钉住探针（docs/pinning.md D1）', () => {
     // D2：执行链（含链首 deepseek）全部进清单
     expect(r.upstreams).toEqual(expect.arrayContaining(['deepseek', 'alibaba', 'baseten', 'fireworks']));
     expect(r.pinDisabledReason).toBeNull();
+    // 这条判据来自报错文本，没有真的执行请求：没有「排除私有后命中」
+    expect(r.rescueProvider).toBeNull();
     expect(store.get('cline-pass/x')?.pinProbeAt).not.toBeNull();
   });
 
@@ -104,6 +106,9 @@ describe('probeModel 钉住探针（docs/pinning.md D1）', () => {
     expect(r.pinState).toBe('enforced');
     expect(r.pinDisabledReason).toBeNull();
     expect(r.upstreams).toEqual(expect.arrayContaining(['deepseek', 'alibaba']));
+    // 两个命中各记一处：默认路由是私有渠道（未钉住时的事实），排除私有后落在 deepseek
+    expect(r.lastProvider).toBe('openai-compatible-private');
+    expect(r.rescueProvider).toBe('deepseek');
     expect(upstream.count).toBe(3);
   });
 
@@ -116,7 +121,21 @@ describe('probeModel 钉住探针（docs/pinning.md D1）', () => {
     const { probe } = makeService();
     const r = await probe.probeModel('cline-pass/x', ACCOUNT);
     expect(r.pinState).toBe('ignored');
+    expect(r.rescueProvider).toBeNull();
     expect(upstream.count).toBe(3);
+  });
+
+  it('判成 ignored 时清空上一次的「排除私有后命中」', async () => {
+    upstream.script([
+      { status: 200, body: routedBody('openai-compatible-private') },
+      { status: 200, body: routedBody('openai-compatible-private') },
+      { status: 200, body: routedBody('openai-compatible-private') },
+    ]);
+    const { probe, store } = makeService();
+    store.set('cline-pass/x', { ...blankModelMeta(), pinState: 'enforced', rescueProvider: 'deepseek' });
+    const r = await probe.probeModel('cline-pass/x', ACCOUNT);
+    expect(r.pinState).toBe('ignored');
+    expect(r.rescueProvider).toBeNull();
   });
 
   it('探针报 empty response content → ignored（请求穿过路由层执行到了模型）', async () => {

@@ -200,7 +200,9 @@ const zhCN = {
   'models.pin.ignored.tip':
     '钉住/排除/排序均不生效；勾选仅保留意图，网关恢复执行后自动生效。换个账号或稍后重新探测可能恢复。',
   'models.meta.canonical': '背后模型',
-  'models.meta.lastHit': '最近命中',
+  'models.meta.lastHit': '默认路由',
+  'models.meta.rescueHit': '排除私有渠道后命中',
+  'models.meta.rescueHit.tip': '只加区域约束、不限定渠道时，探针实际落到的官方渠道。',
   'models.meta.tier0': 'tier-0',
   'models.meta.listSeparator': '、',
   'models.meta.pipeline': '管线',

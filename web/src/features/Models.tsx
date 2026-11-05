@@ -18,6 +18,7 @@ import {
   type ModelMeta,
   type ModelsResponse,
   type PerModelConfig,
+  PRIVATE_UPSTREAM,
   STATUS_RANK,
   type SubscriptionRow,
   type UpstreamStatusKind,
@@ -34,10 +35,18 @@ import { RoutingGatewayPicker, useRoutingGateway } from '../routingGateway.tsx';
 import { StatusChip } from '../statusChip.tsx';
 import { RoutingFields } from './routingFields.tsx';
 
-/** 按校验状态排序的渠道列表（可用优先），供详情面板与测试台共用。 */
+/**
+ * 按校验状态排序的渠道列表（可用优先），供详情面板与测试台共用。
+ *
+ * **私有渠道永远排最后**：它是网关「默认路由可能把你拉过去」的那条兜底，不是用户要选的
+ * 渠道。按网关返回顺序排的话它排第一个——2.3.0 实测就是这样：`-1017` 的 25 个渠道里
+ * private 排第一、deepseek 排第 16，面板只有四行高，用户直接看不到 deepseek。
+ */
 export function sortedUpstreams(meta: ModelMeta | null): string[] {
   const statusOf = (u: string): UpstreamStatusKind => meta?.upstreamStatus[u]?.status ?? 'unknown';
-  return [...(meta?.upstreams ?? [])].sort((a, b) => (STATUS_RANK[statusOf(a)] ?? 2) - (STATUS_RANK[statusOf(b)] ?? 2));
+  const rank = (u: string): number => STATUS_RANK[statusOf(u)] ?? 2;
+  const tail = (u: string): number => (u === PRIVATE_UPSTREAM ? 1 : 0);
+  return [...(meta?.upstreams ?? [])].sort((a, b) => tail(a) - tail(b) || rank(a) - rank(b));
 }
 
 const fmtTime = (ts: number | null | undefined, lang: Lang): string =>
@@ -653,6 +662,19 @@ export default function Models() {
                         ) : null}
                       </span>
                     )}
+                    {/*
+                      钉住生效时最重要的那一行：只加区域约束、不限定渠道，探针实际落到了哪。
+                      `lastProvider` 是**未钉住**的默认路由（私有账号上永远是 private），
+                      不回答「钉住以后走哪」——2.3.0 就因此让人以为 deepseek 没被识别到。
+                    */}
+                    {meta?.pinState === 'enforced' && meta.rescueProvider ? (
+                      <Tooltip title={t('models.meta.rescueHit.tip')}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          <Typography.Text type="secondary">{t('models.meta.rescueHit')} </Typography.Text>
+                          <span className="cps-mono">{meta.rescueProvider}</span>
+                        </span>
+                      </Tooltip>
+                    ) : null}
                     {meta?.tier0?.length ? (
                       <span>
                         <Typography.Text type="secondary">{t('models.meta.tier0')} </Typography.Text>

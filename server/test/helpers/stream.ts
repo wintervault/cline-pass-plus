@@ -47,6 +47,7 @@ export async function chainStream(): Promise<StreamFixture> {
     canonicalSlug: null,
     openrouterSlug: null,
     lastProvider: null,
+    rescueProvider: null,
     lastMs: null,
     probedAt: null,
     validatedAt: null,

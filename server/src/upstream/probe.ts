@@ -291,6 +291,19 @@ export class ProbeService {
           ? null
           : (prev?.pinDisabledReason ?? null);
 
+    /**
+     * 「区域约束下命中」：只加 inferenceRegion、不限定渠道时，网关实际落到的那条官方渠道。
+     * 它回答的是 `lastProvider` 回答不了的问题——后者是**未钉住**的默认路由，私有账号上
+     * 永远是 openai-compatible-private，看不出钉住到底有没有用。
+     * 只有 enforced 才保留；判成 ignored 时清空，别留下过期的好消息。
+     */
+    const rescueProvider =
+      probe.pinState === 'enforced'
+        ? (probe.routedTo ?? prev?.rescueProvider ?? null)
+        : probe.pinState === 'ignored'
+          ? null
+          : (prev?.rescueProvider ?? null);
+
     const meta: ModelMeta = {
       pipeline: routing.pipeline,
       pinnable: routing.pipeline !== null,
@@ -305,6 +318,7 @@ export class ProbeService {
       canonicalSlug: routing.canonicalSlug,
       openrouterSlug: orSlug ?? prev?.openrouterSlug ?? null,
       lastProvider: routing.finalProvider ?? prev?.lastProvider ?? null,
+      rescueProvider,
       lastMs: Date.now() - started,
       probedAt: Date.now(),
       validatedAt: prev?.validatedAt ?? null,
