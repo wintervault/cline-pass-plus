@@ -886,12 +886,33 @@ samp {
 .cps-statusbar {
   box-shadow: inset 0 1px 0 0 var(--cps-highlight);
 }
+/* 状态栏里的网关选择器跟随状态栏字号：antd 默认 14px，会比旁边的地址与状态大一圈。 */
+.cps-statusbar .ant-select {
+  font-size: var(--cps-type-meta);
+}
+/* 文字按钮的图标与图标动作同尺寸：antd 的 small 会把图标缩到 12px，
+   与右侧 28×28 动作里的 14px 图标并排时一小一大。 */
+.cps-statusbar .ant-btn-icon {
+  font-size: 14px;
+}
+/* 服务簇的文字按钮：与图标动作同高。内边距写在这里而不是行内——窄窗口收起文字后
+   要把它收成 28×28（行内样式会盖掉媒体查询），否则 14px 图标 + 两侧 8px = 30px，
+   与旁边的图标动作差 2px。 */
+.cps-statusbar .ant-btn.cps-sb-btn {
+  height: 28px;
+  padding-inline: 8px;
+  font-size: var(--cps-type-meta);
+}
 /* 窄窗口（桌面窗口最小 960）先把可省略的文字收起来，宁可变紧凑，也不要冒出一条横向滚动条：
    版本号与「停止 / 重启」的按钮文字。图标仍带 aria-label 与 Tooltip，功能不丢。 */
 @media (max-width: 1100px) {
   .cps-statusbar .cps-sb-version,
   .cps-statusbar .cps-sb-text {
     display: none;
+  }
+  .cps-statusbar .ant-btn.cps-sb-btn {
+    width: 28px;
+    padding-inline: 0;
   }
 }
 /* 空态与提示出现时淡入，而不是「啪」地占位 */

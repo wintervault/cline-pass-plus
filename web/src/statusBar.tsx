@@ -11,8 +11,8 @@ import {
   SyncOutlined,
   TranslationOutlined,
 } from '@ant-design/icons';
-import { Button, Dropdown, Select, Space, Tooltip, Typography, theme } from 'antd';
-import { useState } from 'react';
+import { Button, Dropdown, Select, Tooltip, Typography } from 'antd';
+import { type ComponentProps, type ReactNode, useState } from 'react';
 
 import { useGateways } from './api/hooks.ts';
 import type { GatewayView } from './api/types.ts';
@@ -30,7 +30,21 @@ import { type ChipTone, StatusChip } from './statusChip.tsx';
  *
  * 旧版把「服务运行中 + 停止/重启」放在最左，紧挨着网关选择器——用户会以为
  * 那是在说选中的网关；而它其实是整个进程。现在两者用分隔线明确分开。
+ *
+ * 排版只有两档间距（2.3.1 统一）：组内 8、组间 12。所有可点元素命中区 28×28，
+ * 文字 12px、标签 11px——同一行里五种字号/三种高度是「不和谐」的来源。
+ * **不要再用 antd 的 `Space` 排这一行**：`ant-space-item` 是块级 div，里面的
+ * 行内元素按基线对齐，状态芯片会被压低 2~3px，与旁边同样是「运行中」的芯片对不齐。
+ * 直接用 `display:flex; align-items:center`。
  */
+
+const GAP_ITEM = 8;
+const GAP_GROUP = 12;
+
+/** 可点元素统一 28×28、文字 12px：同一行里不再出现 24 / 28 / 14px 三种规格。 */
+const CONTROL_SIZE = 28;
+/** 服务簇里的文字按钮：高度/内边距/字号在 app.css 的 `.cps-sb-btn` 里（窄窗口要换成 28×28）。 */
+const SB_BTN = 'cps-sb-btn';
 
 const GATEWAY_TONE: Record<GatewayView['status']['state'], ChipTone> = {
   running: 'ok',
@@ -69,7 +83,7 @@ function Field({
   flexible,
 }: {
   label: string;
-  children: React.ReactNode;
+  children: ReactNode;
   /**
    * 允许这一格在窄窗口下收缩（只有接入地址需要）。
    *
@@ -88,7 +102,7 @@ function Field({
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 8,
+        gap: GAP_ITEM,
         /* 地址可以省略，但不能缩到看不见——再窄就让整条状态栏横向滚动 */
         minWidth: flexible ? 150 : 0,
         flex: flexible ? '0 1 auto' : '0 0 auto',
@@ -99,7 +113,13 @@ function Field({
         {label}
       </span>
       <div
-        style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: flexible ? '0 1 auto' : undefined }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: GAP_ITEM,
+          minWidth: 0,
+          flex: flexible ? '0 1 auto' : undefined,
+        }}
       >
         {children}
       </div>
@@ -107,27 +127,43 @@ function Field({
   );
 }
 
+/** 组与组之间的分隔线。高度与 28px 的控件成比例，两处必须一样高。 */
+function Sep() {
+  return <div aria-hidden style={{ width: 1, height: 20, background: 'var(--cps-border)', flex: '0 0 auto' }} />;
+}
+
+type IconActionProps = Omit<ComponentProps<typeof Button>, 'icon' | 'children'> & {
+  icon: ReactNode;
+  /** 无障碍名称：视觉上只有图标，悬停提示与读屏都靠它。 */
+  label: string;
+};
+
 /**
- * 状态栏右侧的图标动作：固定 28×28 命中区。
+ * 状态栏里的图标动作：固定 28×28 命中区。
  *
  * 不这样做的后果是实测出来的：`type="text"` 的按钮宽度由内容决定，三个图标
  * 各按自己的宽度排，右侧看起来就是「一堆元素没对齐」——语言/主题/刷新之间
  * 间距不相等，版本号又贴着第一个图标。
+ *
+ * **必须把 `ref` 与其余 props 透传给 Button**（2.3.1 修）：`<Dropdown>` / `<Tooltip>`
+ * 都是 clone 子元素并注入 `ref + onClick`，不透传时 antd 拿不到触发元素，语言菜单
+ * 被停到 `-1000vw / -1000vh`（点开就「消失」），提示也定不到位。
  */
-function IconAction({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick?: () => void }) {
+function IconAction({ icon, label, style, ...rest }: IconActionProps) {
   return (
     <Button
       size="small"
       type="text"
       icon={icon}
       aria-label={label}
-      onClick={onClick}
+      {...rest}
       style={{
-        width: 28,
-        height: 28,
-        minWidth: 28,
+        width: CONTROL_SIZE,
+        height: CONTROL_SIZE,
+        minWidth: CONTROL_SIZE,
         paddingInline: 0,
         color: 'var(--cps-text-tertiary)',
+        ...style,
       }}
     />
   );
@@ -139,18 +175,15 @@ function GatewayCluster({ gateway, onOpenGateways }: { gateway: GatewayView | un
     return <span className="cps-meta">{t('statusbar.notReady')}</span>;
   }
   const account = gateway.accountState;
+  const keyLabel = gateway.hasProxyKey ? t('statusbar.key.set') : t('statusbar.key.unset');
   return (
     <>
       <Tooltip title={gateway.status.error ?? undefined}>
-        <StatusChip tone={GATEWAY_TONE[gateway.status.state]} small>
-          {t(GATEWAY_KEY[gateway.status.state])}
-        </StatusChip>
+        <StatusChip tone={GATEWAY_TONE[gateway.status.state]}>{t(GATEWAY_KEY[gateway.status.state])}</StatusChip>
       </Tooltip>
       {account.code === 'no_accounts' && (
         <Tooltip title={t('statusbar.accountState.no_accounts.tip')}>
-          <StatusChip tone="warn" small>
-            {t('statusbar.accountState.no_accounts')}
-          </StatusChip>
+          <StatusChip tone="warn">{t('statusbar.accountState.no_accounts')}</StatusChip>
         </Tooltip>
       )}
       {account.code === 'empty_scope' && gateway.status.state !== 'disabled' && (
@@ -160,22 +193,15 @@ function GatewayCluster({ gateway, onOpenGateways }: { gateway: GatewayView | un
             total: account.usableTotal,
           })}
         >
-          <StatusChip tone="warn" small>
-            {t('statusbar.accountState.empty_scope')}
-          </StatusChip>
+          <StatusChip tone="warn">{t('statusbar.accountState.empty_scope')}</StatusChip>
         </Tooltip>
       )}
       <Tooltip title={gateway.hasProxyKey ? t('statusbar.key.tip.set') : t('statusbar.key.tip.unset')}>
-        <Button
-          size="small"
-          type="text"
+        <IconAction
           icon={gateway.hasProxyKey ? <LockOutlined /> : <KeyOutlined />}
-          aria-label={gateway.hasProxyKey ? t('statusbar.key.set') : t('statusbar.key.unset')}
-          style={{
-            paddingInline: 4,
-            color: gateway.hasProxyKey ? 'var(--cps-text-tertiary)' : 'var(--cps-warn-fg)',
-          }}
+          label={keyLabel}
           onClick={onOpenGateways}
+          style={{ color: gateway.hasProxyKey ? 'var(--cps-text-tertiary)' : 'var(--cps-warn-fg)' }}
         />
       </Tooltip>
     </>
@@ -191,19 +217,25 @@ function ServiceCluster({ control }: { control: HostControl }) {
   const label = t(SERVICE_KEY[status.state] ?? 'service.state.stopped');
 
   return (
-    <Space size={8} align="center" style={{ flex: '0 0 auto', whiteSpace: 'nowrap' }}>
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: GAP_ITEM,
+        flex: '0 0 auto',
+        whiteSpace: 'nowrap',
+      }}
+    >
       <span className="cps-label">{t('statusbar.service')}</span>
       <Tooltip
         title={
           status.port ? t('service.channel.title', { addr: `127.0.0.1:${status.port}` }) : t('service.channel.missing')
         }
       >
-        <span>
-          <StatusChip tone={tone} small dot={!busy}>
-            {busy && <LoadingOutlined style={{ fontSize: 11 }} />}
-            {label}
-          </StatusChip>
-        </span>
+        <StatusChip tone={tone} dot={!busy}>
+          {busy && <LoadingOutlined style={{ fontSize: 11 }} />}
+          {label}
+        </StatusChip>
       </Tooltip>
       {/*
         窄窗口（≤1100）会收起按钮文字，只剩图标——所以三个动作都必须有 Tooltip，
@@ -218,12 +250,13 @@ function ServiceCluster({ control }: { control: HostControl }) {
             icon={<PlayCircleOutlined />}
             loading={busy}
             onClick={() => void control.start()}
+            className={SB_BTN}
           >
             <span className="cps-sb-text">{t('service.action.startShort')}</span>
           </Button>
         </Tooltip>
       ) : (
-        <Space size={4}>
+        <>
           <Tooltip title={t('service.action.stop')}>
             <Button
               size="small"
@@ -231,7 +264,8 @@ function ServiceCluster({ control }: { control: HostControl }) {
               icon={<PauseCircleOutlined />}
               loading={busy}
               onClick={() => void control.stop()}
-              style={{ color: 'var(--cps-text-secondary)', paddingInline: 6 }}
+              className={SB_BTN}
+              style={{ color: 'var(--cps-text-secondary)' }}
             >
               <span className="cps-sb-text">{t('service.action.stopShort')}</span>
             </Button>
@@ -243,17 +277,18 @@ function ServiceCluster({ control }: { control: HostControl }) {
               icon={<SyncOutlined />}
               loading={busy}
               onClick={() => void control.restart()}
-              style={{ color: 'var(--cps-text-secondary)', paddingInline: 6 }}
+              className={SB_BTN}
+              style={{ color: 'var(--cps-text-secondary)' }}
             >
               <span className="cps-sb-text">{t('service.action.restartShort')}</span>
             </Button>
           </Tooltip>
-        </Space>
+        </>
       )}
       <Tooltip title={t('service.action.logs')}>
         <IconAction icon={<FileTextOutlined />} label={t('service.action.logs')} onClick={control.openLogs} />
       </Tooltip>
-    </Space>
+    </div>
   );
 }
 
@@ -276,7 +311,6 @@ export function StatusBar({
   onToggleTheme: () => void;
   onRefresh: () => void;
 }) {
-  const { token } = theme.useToken();
   const { t } = useI18n();
   // 多网关：状态栏可以查看任意网关的接入地址、状态与密钥（与控制台监听无关）。
   const gatewaysQuery = useGateways({ poll: false });
@@ -293,7 +327,7 @@ export function StatusBar({
         display: 'flex',
         flexWrap: 'nowrap',
         alignItems: 'center',
-        gap: 10,
+        gap: GAP_GROUP,
         padding: '0 16px',
         background: 'var(--cps-rail)',
         borderTop: '1px solid var(--cps-border)',
@@ -316,7 +350,7 @@ export function StatusBar({
             options={gateways.map((g) => ({ value: g.id, label: g.name }))}
           />
         ) : (
-          <Typography.Text ellipsis={{ tooltip: picked?.name }} style={{ fontSize: 12.5, maxWidth: 180 }}>
+          <Typography.Text ellipsis={{ tooltip: picked?.name }} style={{ fontSize: 12, maxWidth: 180 }}>
             {picked?.name ?? t('statusbar.notReady')}
           </Typography.Text>
         )}
@@ -340,16 +374,26 @@ export function StatusBar({
       </Field>
 
       {/* ② 同一个网关的状态 / 账号 / 密钥，紧挨着左侧选择 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: '0 0 auto', whiteSpace: 'nowrap' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: GAP_ITEM,
+          flex: '0 0 auto',
+          whiteSpace: 'nowrap',
+        }}
+      >
         <GatewayCluster gateway={picked} onOpenGateways={onOpenGateways} />
       </div>
 
-      <div style={{ width: 1, height: 18, background: token.colorBorderSecondary, flex: '0 0 auto' }} />
-
-      {/* ③ 服务是进程级动作，明确标注，避免与上面的网关状态混淆 */}
-      <div style={{ flex: '0 0 auto', whiteSpace: 'nowrap' }}>
-        <ServiceCluster control={control} />
-      </div>
+      {/* ③ 服务是进程级动作，明确标注，避免与上面的网关状态混淆。
+             浏览器直开没有桌面壳桥时整簇（连同分隔线）不渲染。 */}
+      {control.host && (
+        <>
+          <Sep />
+          <ServiceCluster control={control} />
+        </>
+      )}
 
       {/*
         ④ 应用区：版本是「静信息」，用一条分隔线与三个动作分开。
@@ -362,15 +406,15 @@ export function StatusBar({
           flex: '0 0 auto',
           display: 'flex',
           alignItems: 'center',
-          gap: 6,
+          gap: GAP_ITEM,
           whiteSpace: 'nowrap',
         }}
       >
-        <span className="cps-data cps-sb-version" style={{ fontSize: 11.5, color: 'var(--cps-text-tertiary)' }}>
+        <span className="cps-data cps-sb-version" style={{ color: 'var(--cps-text-tertiary)' }}>
           v{version ?? '…'}
         </span>
-        <div style={{ width: 1, height: 14, background: token.colorBorderSecondary, flex: '0 0 auto' }} />
-        <Space size={0} align="center">
+        <Sep />
+        <div style={{ display: 'flex', alignItems: 'center' }}>
           {/*
             语言切换：即时生效，不刷新页面。
             **不要用 Tooltip、也不要加原生 title**：状态栏贴着窗口底部，菜单和提示都会被
@@ -401,7 +445,7 @@ export function StatusBar({
           <Tooltip title={t('statusbar.refresh')}>
             <IconAction icon={<ReloadOutlined />} label={t('statusbar.refresh')} onClick={onRefresh} />
           </Tooltip>
-        </Space>
+        </div>
       </div>
     </div>
   );
