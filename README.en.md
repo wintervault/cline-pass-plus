@@ -28,6 +28,12 @@
   <a href="#development">Development</a>
 </p>
 
+> **Upstream restriction, 2026-11-06**: Cline now rejects client-supplied **planner** routing
+> (any `providerOptions` returns 403). Starting with **2.3.2**, pinning is offline for planner
+> models: existing settings are kept (and shown locked in the console) but are no longer sent
+> upstream. Pinning still works for **direct (OpenRouter) models**; probing, accounts, failover
+> and multiple gateways are unaffected. It will return once a supported method is found.
+
 ![Console: subscription models and channel priority](assets/console-en.png)
 
 ---
@@ -85,6 +91,8 @@ Installers live on the [Releases](../../releases/latest) page. Pick the package 
 - **Precise pinning**: separate injection for the planner and direct pipelines. Strict mode
   only uses the listed channels; preferred mode lets only the last candidate fall back to
   the gateway's own choice. Pinning belongs to the gateway; detection belongs to the account.
+  Planner pinning has been offline since 2026-11-06 (see the note above); direct models still
+  work.
 - **Failover**: errors are classified as account-level, channel-level, or request-level.
   Failing channels sink to the bottom of the list instead of being removed; a global budget
   caps total failover time.
@@ -131,11 +139,11 @@ Cline / OpenAI-compatible endpoint
 
 ## Configuration
 
-The config file is `config.json` (version 5). Minimal shape:
+The config file is `config.json` (version 7). Minimal shape:
 
 ```json
 {
-  "version": 5,
+  "version": 7,
   "accounts": [{ "name": "primary", "key": "sk_..." }],
   "gateways": [{ "id": "main", "name": "Main", "port": 3126 }],
   "console": { "port": 3125, "bindHost": "127.0.0.1", "proxyKey": "" }
