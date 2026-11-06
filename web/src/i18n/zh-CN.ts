@@ -190,10 +190,18 @@ const zhCN = {
   'models.action.validate.tip': '对清单内每个渠道各发一次最小请求（消耗 {count} 次最小额度），标注可用 / 限流 / 不可钉',
   'models.action.validate.tip.ignored': '网关已忽略钉住参数：钉不住时每个渠道都会“成功”，校验结果不可信（先重新探测）',
   'models.action.validate.tip.unverified': '尚未确认钉住参数生效：先点「探测」确认网关会按清单路由，再做校验',
+  'models.action.validate.tip.unsupported': '上游已不允许客户端指定渠道，校验暂不可用',
   'models.pin.ignored.notice': '网关已忽略钉住参数：当前按网关默认路由，勾选与排序暂不生效',
   'models.pin.ignored.routed': '探针实测被路由到 {provider}。',
   'models.pin.ignored.tip':
     '钉住/排除/排序均不生效；勾选仅保留意图，网关恢复执行后自动生效。换个账号或稍后重新探测可能恢复。',
+  'models.pinUnavailable.chip': '上游已停止支持',
+  'models.pinUnavailable.notice':
+    '2026-11-06 起，Cline 拒绝客户端指定规划器渠道：规划器模型的钉住、排除与校验暂不可用。直连（OpenRouter）模型不受影响；已保存的配置会保留，但不会发送给网关。',
+  'models.pinUnavailable.hint': '配置保留，当前不会生效',
+  'models.pinUnavailable.panel':
+    '这份配置会保留，但不会发送给网关：Cline 已不允许客户端指定规划器渠道。找到可用写法后会自动恢复。',
+  'models.meta.pin': '钉住',
   'models.meta.canonical': '背后模型',
   'models.meta.lastHit': '默认路由',
   'models.meta.rescueHit': '强行绑定后命中',
@@ -431,6 +439,8 @@ const zhCN = {
   'playground.routing.preferred': '优先 + 回退：逐个严格尝试，仅最后一个候选放开网关',
   'playground.routing.empty': '这个网关还没有为它配置渠道；可以直接采用该账号探测到的渠道作为起点',
   'playground.routing.emptyNoProbe': '该模型尚未探测到渠道：去「订阅模型」页点「探测渠道」，回来这里就能看到候选',
+  'playground.pinUnavailable':
+    '这个模型的钉住已暂停：Cline 拒绝客户端指定规划器渠道。测试会按网关默认路由发送，渠道选择与路由配置仅作展示。',
   'playground.routing.useProbed': '采用探测到的渠道',
   'playground.note.useProbed': '已按探测结果加入 {count} 个渠道',
   'playground.col.order': '顺序',
@@ -605,6 +615,9 @@ const zhCN = {
     '钉住渠道时，网关不会把请求送到私有渠道（openai-compatible-private），只走你勾选的渠道。默认开启。',
   'settings.routing.offHint':
     '不建议取消勾选：关闭后网关可能绕过你钉住的渠道、把请求送到私有渠道，钉住也就不一定生效了。',
+  'settings.routing.lockedHint': '规划器钉住暂停期间不可用',
+  'settings.routing.pinUnavailable':
+    'Cline 已不允许客户端指定规划器渠道，这个开关暂不起作用。直连（OpenRouter）模型的钉住不受影响。',
   'settings.routing.note.on': '已开启「强行绑定渠道」',
   'settings.routing.note.off': '已关闭「强行绑定渠道」',
   'settings.routing.invalid': '这个设置只接受开或关',
@@ -647,6 +660,7 @@ const zhCN = {
   'api.gateway.lastOne': '至少保留一个网关',
   'api.validate.pinIgnored': '网关忽略钉住参数，校验结果不可信；请先重新探测',
   'api.validate.pinUnverified': '尚未确认钉住参数生效，校验结果不可信；请先重新探测',
+  'api.validate.pinningUnsupported': '上游已不允许客户端指定渠道，钉住与校验暂不可用',
   'api.validate.noAccount': '尚未添加上游账号，无法校验；请先在「账号池」添加账号',
   'api.gateway.notRunning': '该网关当前未运行，无法作为控制台网关',
 } as const;

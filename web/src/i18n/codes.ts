@@ -37,6 +37,7 @@ const CODE_KEYS: Record<string, MsgKey> = {
   'gateway.lastOne': 'api.gateway.lastOne',
   'validate.pinIgnored': 'api.validate.pinIgnored',
   'validate.pinUnverified': 'api.validate.pinUnverified',
+  'validate.pinningUnsupported': 'api.validate.pinningUnsupported',
   'validate.noAccount': 'api.validate.noAccount',
   'gateway.notRunning': 'api.gateway.notRunning',
 };

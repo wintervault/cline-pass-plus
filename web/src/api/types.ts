@@ -2,7 +2,7 @@
 
 export type Pipeline = 'planner' | 'direct';
 /** 钉住参数是否被网关读取（探针判定，见 docs/pinning.md D1）。 */
-export type PinState = 'enforced' | 'ignored' | 'unknown';
+export type PinState = 'enforced' | 'ignored' | 'unknown' | 'unsupported';
 /** 渠道校验状态。`quota` = 账号额度用尽（换渠道无用），`limited` = 瞬时限流。 */
 export type UpstreamStatusKind = 'ok' | 'limited' | 'quota' | 'bad' | 'auth' | 'unknown';
 export type PinMode = 'strict' | 'preferred';
@@ -291,6 +291,16 @@ export interface ValidationResult {
   upstreams: string[];
 }
 
+/**
+ * 上游能力开关（2026-11-06）：由服务端 `/api/meta` 下发，前端**不要另写一份常量**。
+ * - planner=false：Cline 拒绝任何 `providerOptions`，规划器钉住/排除/校验不可用
+ * - direct=true：顶层 `provider` 仍被 OpenRouter 读取，直连模型照常可钉
+ */
+export interface PinningCapability {
+  planner: boolean;
+  direct: boolean;
+}
+
 export interface MetaInfo {
   version: string;
   /** 远端访问控制台是否需要密钥（本机永远免密钥）。 */
@@ -300,6 +310,8 @@ export interface MetaInfo {
   console: ConsoleInfo;
   /** 网关清单（只给选择器用的最小信息）。 */
   gateways: Array<{ id: string; name: string; enabled: boolean; accountState: GatewayAccountStateCode }>;
+  /** 上游能力。老服务端不返回，调用方用 `?? { planner: true, direct: true }` 兜底。 */
+  pinning?: PinningCapability;
 }
 
 /** 校验状态排序权重：可用优先、不可钉最后。 */

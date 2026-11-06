@@ -12,7 +12,16 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { Alert, Button, Card, Checkbox, Input, Skeleton, Space, Tooltip, Typography, theme } from 'antd';
 import { useEffect, useState } from 'react';
-import { qk, useFetchOfficial, useModels, useProbe, useSaveModelConfig, useTest, useValidate } from '../api/hooks.ts';
+import {
+  qk,
+  useFetchOfficial,
+  useMeta,
+  useModels,
+  useProbe,
+  useSaveModelConfig,
+  useTest,
+  useValidate,
+} from '../api/hooks.ts';
 import {
   EMPTY_PER_MODEL,
   type ModelMeta,
@@ -334,6 +343,16 @@ export default function Models() {
   const { t, lang } = useI18n();
   const { account: activeAccount, accounts } = useDetectionAccount();
 
+  /**
+   * 上游能力（2026-11-06）：Cline 拒绝任何 `providerOptions`，规划器模型的钉住暂时下线；
+   * 直连（OpenRouter）仍读顶层 `provider`，不受影响。
+   *
+   * 能力由服务端 `/api/meta` 下发，**前端不要写死 false**：恢复时只改
+   * `server/src/upstream/capabilities.ts` 一处，界面会自动解锁。
+   * 老服务端没有该字段时按「可用」兜底——那正是它当时的真实行为。
+   */
+  const pinning = useMeta().data?.pinning ?? { planner: true, direct: true };
+
   const models = useModels({ gatewayId, account: activeAccount });
   const qc = useQueryClient();
   const save = useSaveModelConfig(gatewayId);
@@ -401,7 +420,11 @@ export default function Models() {
   /** 探测/校验会按健康状态重排观测列表：让行滑过去，而不是瞬移。 */
   const observeRef = useFlipList<HTMLUListElement>(ups.join('|'));
   const pinIgnored = meta?.pinState === 'ignored';
-  /** 只有明确确认钉住生效才允许校验——ignored 与 unknown 都会产出不可信的结果。 */
+  /** 上游已拒绝路由参数（2026-11-06）：界面保留配置，但一句话说明它不再生效。 */
+  const pinUnsupported = meta?.pinState === 'unsupported';
+  /** 规划器模型 + 能力关闭：路由区块整体锁住（视觉保留、控件不可操作）。 */
+  const pinLocked = meta?.pipeline === 'planner' && !pinning.planner;
+  /** 只有明确确认钉住生效才允许校验——ignored / unknown / unsupported 都会产出不可信的结果。 */
   const pinUnverified = meta?.pinState !== 'enforced';
   const canAct = !!activeAccount;
 
@@ -451,6 +474,18 @@ export default function Models() {
           </Space>
         }
       />
+
+      {/*
+        2026-11-06：Cline 拒绝任何客户端 `providerOptions`，规划器模型的钉住暂时下线。
+        这条提示常驻，而不是只在选中规划器模型时出现——用户需要先知道「这个能力不可用」，
+        再决定是否改用直连模型。能力恢复时它随 `/api/meta` 的 `pinning` 一起消失。
+      */}
+      {!pinning.planner && (
+        <div className="cps-notice cps-notice-warn" style={{ width: '100%', alignItems: 'flex-start' }}>
+          <ExclamationCircleFilled style={{ marginTop: 3, flex: '0 0 auto' }} />
+          <span style={{ textWrap: 'pretty' }}>{t('models.pinUnavailable.notice')}</span>
+        </div>
+      )}
 
       {accounts.length === 0 ? (
         <Panel title={t('models.noAccount.title')}>
@@ -598,13 +633,15 @@ export default function Models() {
                     </Tooltip>
                     <Tooltip
                       title={
-                        pinUnverified
-                          ? t(
-                              pinIgnored
-                                ? 'models.action.validate.tip.ignored'
-                                : 'models.action.validate.tip.unverified',
-                            )
-                          : t('models.action.validate.tip', { count: ups.length })
+                        pinUnsupported || pinLocked
+                          ? t('models.action.validate.tip.unsupported')
+                          : pinUnverified
+                            ? t(
+                                pinIgnored
+                                  ? 'models.action.validate.tip.ignored'
+                                  : 'models.action.validate.tip.unverified',
+                              )
+                            : t('models.action.validate.tip', { count: ups.length })
                       }
                     >
                       <Button
@@ -641,6 +678,14 @@ export default function Models() {
                       <span>
                         <Typography.Text type="secondary">{t('models.meta.pipeline')} </Typography.Text>
                         {meta.pipeline === 'planner' ? t('models.pipeline.planner') : t('models.pipeline.direct')}
+                      </span>
+                    )}
+                    {/* 2026-11-06：上游拒绝路由参数。旧记录会被服务端降级成 unsupported，
+                        这里明确说出来，避免用户把「按网关默认路由」误当成钉住生效。 */}
+                    {pinUnsupported && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        <Typography.Text type="secondary">{t('models.meta.pin')} </Typography.Text>
+                        <StatusChip tone="warn">{t('models.pinUnavailable.chip')}</StatusChip>
                       </span>
                     )}
                     {meta?.canonicalSlug && (
@@ -817,15 +862,36 @@ export default function Models() {
               title={t('models.routing.title')}
               extra={
                 <Space size={8} align="center">
+                  {pinLocked && <StatusChip tone="warn">{t('models.pinUnavailable.chip')}</StatusChip>}
                   <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                     {t('models.routing.gateway')}
                   </Typography.Text>
                   <RoutingGatewayPicker />
-                  <PanelHint>{t('models.routing.hint')}</PanelHint>
+                  <PanelHint>{pinLocked ? t('models.pinUnavailable.hint') : t('models.routing.hint')}</PanelHint>
                 </Space>
               }
             >
-              <div style={{ display: 'grid', gap: 12 }}>
+              {/*
+                2026-11-06：规划器模型的渠道配置保留展示，但上游已拒绝任何 providerOptions。
+                不删配置（恢复后原样可用），只把这块封死：
+                - `inert` 同时挡掉鼠标、键盘焦点与读屏导航，比逐个 disabled 可靠；
+                - 半透明表示「历史配置」，不是坏值；
+                - 提示放在 inert 外面，保证可读。
+              */}
+              {pinLocked && (
+                <div
+                  className="cps-notice cps-notice-warn"
+                  style={{ marginBottom: 12, width: '100%', alignItems: 'flex-start' }}
+                >
+                  <ExclamationCircleFilled style={{ marginTop: 3, flex: '0 0 auto' }} />
+                  <span style={{ textWrap: 'pretty' }}>{t('models.pinUnavailable.panel')}</span>
+                </div>
+              )}
+              <div
+                inert={pinLocked}
+                aria-disabled={pinLocked}
+                style={{ display: 'grid', gap: 12, opacity: pinLocked ? 0.55 : 1 }}
+              >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <Typography.Text strong style={{ fontSize: 13 }}>
                     {t('models.chain.title')}

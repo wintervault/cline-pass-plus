@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-
+import { PINNING } from '../src/upstream/capabilities.ts';
 import { ProbeService } from '../src/upstream/probe.ts';
 import { blankModelMeta, type ModelMeta } from '../src/upstream/types.ts';
 import { FakeUpstream } from './helpers/upstream.ts';
@@ -21,11 +21,14 @@ let upstream: FakeUpstream;
 let base: string;
 
 beforeEach(async () => {
+  /* 既有用例验证「上游恢复后」的探针与校验逻辑；默认关闭状态在文件末尾单独覆盖。 */
+  PINNING.planner = true;
   upstream = new FakeUpstream();
   base = await upstream.listen();
 });
 
 afterEach(async () => {
+  PINNING.planner = false;
   await upstream.close();
 });
 
@@ -268,5 +271,76 @@ describe('validateUpstreams 防假绿闸（D5）', () => {
       expect(r.results['deepseek']?.status).toBe('quota');
       expect(r.results['deepseek']?.note).toContain('INFERENCE_CAP_ERROR');
     }
+  });
+});
+
+/**
+ * 2026-11-06：Cline 对任何客户端 `providerOptions` 回 403（连 `{}` 都拒绝）。
+ * 规划器管线不再跑钉住探针，直接把结论写成 `unsupported`；直连（顶层 `provider`）
+ * 仍然照旧。事实与实测见 `docs/pinning.md` 第七节。
+ */
+describe('上游拒绝 providerOptions（2026-11-06）', () => {
+  beforeEach(() => {
+    PINNING.planner = false;
+  });
+
+  /** direct 管道的基线响应：顶层 provider（显示名）+ model（真实 ID）。 */
+  const directBody = () => ({
+    data: {
+      choices: [{ message: { content: 'OK' } }],
+      provider: 'OpenRouter',
+      model: 'z-ai/glm-5.3-flash',
+    },
+  });
+
+  it('planner：只发基线，不跑钉住探针，结论写 unsupported', async () => {
+    upstream.script([{ status: 200, body: routedBody('openai-compatible-private') }]);
+    const { probe, store } = makeService();
+    const r = await probe.probeModel('cline-pass/x', ACCOUNT);
+    expect(r.ok).toBe(true);
+    expect(r.pipeline).toBe('planner');
+    expect(r.pinState).toBe('unsupported');
+    expect(r.pinnable).toBe(false);
+    expect(r.rescueProvider).toBeNull();
+    // 不再有无效 slug 探针、也不再做区域复核：只有基线这一发
+    expect(upstream.count).toBe(1);
+    expect(store.get('cline-pass/x')?.pinState).toBe('unsupported');
+  });
+
+  it('direct：仍跑钉住探针，不受这次上游变化影响', async () => {
+    upstream.script([
+      { status: 200, body: directBody() },
+      {
+        status: 400,
+        body: { error: 'invalid_request_error: No allowed providers are available for the selected model' },
+      },
+    ]);
+    const { probe } = makeService();
+    const r = await probe.probeModel('cline-pass/y', ACCOUNT);
+    expect(r.pipeline).toBe('direct');
+    expect(r.pinState).toBe('enforced');
+    expect(r.pinnable).toBe(true);
+    expect(upstream.count).toBe(2);
+  });
+
+  it('validate：旧的 enforced 记录在能力关闭时直接拒绝，不发任何渠道请求', async () => {
+    const meta: ModelMeta = {
+      ...blankModelMeta(),
+      pipeline: 'planner',
+      pinState: 'enforced',
+      pinnable: true,
+      upstreams: ['deepseek'],
+    };
+    const probe = new ProbeService({
+      upstreamBase: base,
+      forceChannelBinding: true,
+      getMeta: () => meta,
+      setMeta: () => {},
+    });
+    const r = await probe.validateUpstreams('cline-pass/x', ACCOUNT);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.code).toBe('validate.pinningUnsupported');
+    expect(upstream.count).toBe(0);
   });
 });

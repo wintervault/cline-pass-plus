@@ -73,6 +73,18 @@ export function isQuotaExhausted(message: string): boolean {
   return CAP_MSG.test(String(message || ''));
 }
 
+/**
+ * Cline 自 2026-11-06 起对**客户端自带路由参数**的拒绝（规划器管线）：
+ * `client-supplied "providerOptions" model routing is not supported`（HTTP 403）。
+ *
+ * 能力开关已经不再主动写 `providerOptions`，这个判定用于链路层的**兜底**：
+ * 客户端自带、或将来漏掉某条注入路径时，去掉该字段同渠道重试一次，
+ * 不让「钉住」把正常请求打死。原始事实见 `docs/pinning.md` 第七节。
+ */
+export function isProviderOptionsRejected(message: string): boolean {
+  return /providerOptions[^\n]*model routing is not supported/i.test(String(message || ''));
+}
+
 /** 钉住相关的路由失败：换渠道有意义。 */
 const PROVIDER_MSG = /no allowed providers|no available providers|available providers are:|modelid/i;
 const TIMEOUT_MSG = /\btimeout\b|timed?\s*out/i;

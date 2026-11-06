@@ -56,7 +56,7 @@ const UpstreamStatusSchema = z.object({
 const ModelMetaSchema = z.object({
   pipeline: z.enum(['planner', 'direct']).nullable().catch(null).default(null),
   pinnable: z.boolean().catch(false).default(false),
-  pinState: z.enum(['enforced', 'ignored', 'unknown']).catch('unknown').default('unknown'),
+  pinState: z.enum(['enforced', 'ignored', 'unknown', 'unsupported']).catch('unknown').default('unknown'),
   pinProbeAt: z.number().nullable().catch(null).default(null),
   pinDisabledReason: z.string().nullable().catch(null).default(null),
   availableProviders: z.array(z.string()).catch([]).default([]),

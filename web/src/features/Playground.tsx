@@ -9,7 +9,7 @@ import {
 import { Alert, Button, Descriptions, InputNumber, Select, Space, Switch, Table, Tooltip, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 
-import { useModels, useSaveModelConfig, useTest } from '../api/hooks.ts';
+import { useMeta, useModels, useSaveModelConfig, useTest } from '../api/hooks.ts';
 import {
   EMPTY_PER_MODEL,
   type ModelMeta,
@@ -40,6 +40,13 @@ function RoutingPanel({ model, cfg, meta }: { model: string; cfg: PerModelConfig
   const { gatewayId } = useRoutingGateway();
   const { t, lang } = useI18n();
   const save = useSaveModelConfig(gatewayId);
+  /*
+   * 2026-11-06：上游拒绝任何 `providerOptions`。规划器模型的这份配置只作展示，
+   * 控件全部封死；直连（OpenRouter）模型不受影响。能力由 `/api/meta` 下发，
+   * 恢复时这里自动解封——前端不写死 false。
+   */
+  const pinning = useMeta().data?.pinning ?? { planner: true, direct: true };
+  const pinLocked = meta?.pipeline === 'planner' && !pinning.planner;
 
   const patch = (next: Partial<PerModelConfig>, note: string): void => {
     save.mutate({ modelId: model, config: { ...cfg, ...next }, note });
@@ -89,136 +96,150 @@ function RoutingPanel({ model, cfg, meta }: { model: string; cfg: PerModelConfig
         </Space>
       }
     >
-      <RoutingFields cfg={cfg} onChange={patch} />
-      {rows.length === 0 ? (
-        <div className="cps-notice" style={{ marginTop: 12 }}>
-          <ExclamationCircleFilled style={{ color: 'var(--cps-warn-fg)' }} />
-          <span>
-            {(meta?.upstreams?.length ?? 0) > 0 ? t('playground.routing.empty') : t('playground.routing.emptyNoProbe')}
-          </span>
-          {(meta?.upstreams?.length ?? 0) > 0 && (
-            <Button
-              size="small"
-              type="link"
-              style={{ paddingInline: 2, height: 'auto' }}
-              onClick={() =>
-                patch(
-                  { upstreams: [...(meta?.upstreams ?? [])], exclude: [] },
-                  t('playground.note.useProbed', { count: meta?.upstreams?.length ?? 0 }),
-                )
-              }
-            >
-              {t('playground.routing.useProbed')}
-            </Button>
-          )}
+      {pinLocked && (
+        <div
+          className="cps-notice cps-notice-warn"
+          style={{ marginBottom: 12, width: '100%', alignItems: 'flex-start' }}
+        >
+          <ExclamationCircleFilled style={{ marginTop: 3, flex: '0 0 auto' }} />
+          <span style={{ textWrap: 'pretty' }}>{t('playground.pinUnavailable')}</span>
         </div>
-      ) : (
-        <Table
-          className="cps-table"
-          size="small"
-          rowKey="key"
-          pagination={false}
-          dataSource={rows}
-          columns={[
-            {
-              title: t('playground.col.order'),
-              width: 64,
-              align: 'center',
-              render: (_, r) => (
-                <Typography.Text
-                  type={r.enabled ? undefined : 'secondary'}
-                  style={{ fontVariantNumeric: 'tabular-nums' }}
-                >
-                  {r.index ?? '—'}
-                </Typography.Text>
-              ),
-            },
-            {
-              title: t('playground.col.channel'),
-              dataIndex: 'name',
-              /* 渠道是一个标识符，不是一枚标签：等宽字 + 复制，与订阅模型的路由表同一种写法 */
-              render: (v: string, r) => (
-                <Space size={8}>
-                  <Typography.Text
-                    copyable={{ text: v, tooltips: [t('playground.copyChannel'), t('common.copied')] }}
-                    className="cps-mono"
-                    style={{
-                      whiteSpace: 'nowrap',
-                      color: r.enabled ? 'var(--cps-text)' : 'var(--cps-text-quaternary)',
-                    }}
-                  >
-                    {v}
-                  </Typography.Text>
-                  {r.detail?.context ? (
-                    <span className="cps-meta" style={{ whiteSpace: 'nowrap' }}>
-                      {t('playground.channel.context', { k: Math.round(r.detail.context / 1000) })}
-                    </span>
-                  ) : null}
-                </Space>
-              ),
-            },
-            {
-              title: t('playground.col.health'),
-              width: 130,
-              render: (_, r) => {
-                const s = r.status;
-                if (!s) return <Typography.Text type="secondary">{t('labels.upstream.unknown')}</Typography.Text>;
-                const tag = STATUS_TAG[s.status];
-                return (
-                  <Tooltip title={diagnosticText(lang, s.note) || undefined}>
-                    <span>
-                      <StatusChip tone={tag.tone} small>
-                        {t(tag.labelKey)}
-                      </StatusChip>
-                    </span>
-                  </Tooltip>
-                );
-              },
-            },
-            {
-              title: t('playground.col.lastMs'),
-              width: 104,
-              align: 'right',
-              /* 来自「校验渠道」的实测往返（那是小请求，只用于渠道之间的相对比较）。
-                 以前这里恒为「—」——列头写着耗时却没有数据，等于没有这一列。 */
-              render: (_, r) =>
-                r.status?.ms != null ? (
-                  <Typography.Text className="cps-num">{r.status.ms} ms</Typography.Text>
-                ) : (
-                  <Typography.Text type="secondary">—</Typography.Text>
-                ),
-            },
-            {
-              title: t('playground.col.enabled'),
-              width: 88,
-              align: 'center',
-              render: (_, r) => (
-                <Switch
-                  size="small"
-                  checked={r.enabled}
-                  loading={save.isPending}
-                  onChange={(v) =>
-                    patch(
-                      v
-                        ? {
-                            upstreams: [...cfg.upstreams.filter((x) => x !== r.name), r.name],
-                            exclude: cfg.exclude.filter((x) => x !== r.name),
-                          }
-                        : {
-                            upstreams: cfg.upstreams.filter((x) => x !== r.name),
-                            exclude: [...cfg.exclude.filter((x) => x !== r.name), r.name],
-                          },
-                      v
-                        ? t('playground.note.enabled', { name: r.name })
-                        : t('playground.note.excluded', { name: r.name }),
-                    )
-                  }
-                />
-              ),
-            },
-          ]}
-        />
       )}
+      {/* 视觉保留、功能封死：inert 同时挡掉点击、键盘焦点与读屏导航 */}
+      <div inert={pinLocked} aria-disabled={pinLocked} style={{ opacity: pinLocked ? 0.55 : 1 }}>
+        <RoutingFields cfg={cfg} onChange={patch} />
+        {rows.length === 0 ? (
+          <div className="cps-notice" style={{ marginTop: 12 }}>
+            <ExclamationCircleFilled style={{ color: 'var(--cps-warn-fg)' }} />
+            <span>
+              {(meta?.upstreams?.length ?? 0) > 0
+                ? t('playground.routing.empty')
+                : t('playground.routing.emptyNoProbe')}
+            </span>
+            {(meta?.upstreams?.length ?? 0) > 0 && (
+              <Button
+                size="small"
+                type="link"
+                style={{ paddingInline: 2, height: 'auto' }}
+                onClick={() =>
+                  patch(
+                    { upstreams: [...(meta?.upstreams ?? [])], exclude: [] },
+                    t('playground.note.useProbed', { count: meta?.upstreams?.length ?? 0 }),
+                  )
+                }
+              >
+                {t('playground.routing.useProbed')}
+              </Button>
+            )}
+          </div>
+        ) : (
+          <Table
+            className="cps-table"
+            size="small"
+            rowKey="key"
+            pagination={false}
+            dataSource={rows}
+            columns={[
+              {
+                title: t('playground.col.order'),
+                width: 64,
+                align: 'center',
+                render: (_, r) => (
+                  <Typography.Text
+                    type={r.enabled ? undefined : 'secondary'}
+                    style={{ fontVariantNumeric: 'tabular-nums' }}
+                  >
+                    {r.index ?? '—'}
+                  </Typography.Text>
+                ),
+              },
+              {
+                title: t('playground.col.channel'),
+                dataIndex: 'name',
+                /* 渠道是一个标识符，不是一枚标签：等宽字 + 复制，与订阅模型的路由表同一种写法 */
+                render: (v: string, r) => (
+                  <Space size={8}>
+                    <Typography.Text
+                      copyable={{ text: v, tooltips: [t('playground.copyChannel'), t('common.copied')] }}
+                      className="cps-mono"
+                      style={{
+                        whiteSpace: 'nowrap',
+                        color: r.enabled ? 'var(--cps-text)' : 'var(--cps-text-quaternary)',
+                      }}
+                    >
+                      {v}
+                    </Typography.Text>
+                    {r.detail?.context ? (
+                      <span className="cps-meta" style={{ whiteSpace: 'nowrap' }}>
+                        {t('playground.channel.context', { k: Math.round(r.detail.context / 1000) })}
+                      </span>
+                    ) : null}
+                  </Space>
+                ),
+              },
+              {
+                title: t('playground.col.health'),
+                width: 130,
+                render: (_, r) => {
+                  const s = r.status;
+                  if (!s) return <Typography.Text type="secondary">{t('labels.upstream.unknown')}</Typography.Text>;
+                  const tag = STATUS_TAG[s.status];
+                  return (
+                    <Tooltip title={diagnosticText(lang, s.note) || undefined}>
+                      <span>
+                        <StatusChip tone={tag.tone} small>
+                          {t(tag.labelKey)}
+                        </StatusChip>
+                      </span>
+                    </Tooltip>
+                  );
+                },
+              },
+              {
+                title: t('playground.col.lastMs'),
+                width: 104,
+                align: 'right',
+                /* 来自「校验渠道」的实测往返（那是小请求，只用于渠道之间的相对比较）。
+                 以前这里恒为「—」——列头写着耗时却没有数据，等于没有这一列。 */
+                render: (_, r) =>
+                  r.status?.ms != null ? (
+                    <Typography.Text className="cps-num">{r.status.ms} ms</Typography.Text>
+                  ) : (
+                    <Typography.Text type="secondary">—</Typography.Text>
+                  ),
+              },
+              {
+                title: t('playground.col.enabled'),
+                width: 88,
+                align: 'center',
+                render: (_, r) => (
+                  <Switch
+                    size="small"
+                    checked={r.enabled}
+                    loading={save.isPending}
+                    onChange={(v) =>
+                      patch(
+                        v
+                          ? {
+                              upstreams: [...cfg.upstreams.filter((x) => x !== r.name), r.name],
+                              exclude: cfg.exclude.filter((x) => x !== r.name),
+                            }
+                          : {
+                              upstreams: cfg.upstreams.filter((x) => x !== r.name),
+                              exclude: [...cfg.exclude.filter((x) => x !== r.name), r.name],
+                            },
+                        v
+                          ? t('playground.note.enabled', { name: r.name })
+                          : t('playground.note.excluded', { name: r.name }),
+                      )
+                    }
+                  />
+                ),
+              },
+            ]}
+          />
+        )}
+      </div>
     </Panel>
   );
 }
@@ -319,6 +340,12 @@ export default function Playground() {
   const active = rows.some((r) => r.id === model) ? model : (rows[0]?.id ?? '');
   const activeRow = rows.find((r) => r.id === active);
   const cfg: PerModelConfig = activeRow?.config ?? EMPTY_PER_MODEL;
+  /*
+   * 2026-11-06：规划器模型的渠道钉住已被上游关闭。测试台的渠道选择同样锁成「自动」，
+   * 否则会出现「选了一个渠道、实际按默认路由」的假象。直连模型不受影响。
+   */
+  const pinning = useMeta().data?.pinning ?? { planner: true, direct: true };
+  const pinLocked = activeRow?.meta?.pipeline === 'planner' && !pinning.planner;
 
   // 切换账号或路由网关时清掉上一组选择与结果：结果只对执行它的账号成立。
   // biome-ignore lint/correctness/useExhaustiveDependencies: 依赖的用途是「变化时重置」，effect 内不读取它们
@@ -346,7 +373,7 @@ export default function Playground() {
     }
     // 成功/失败的回执由 useTest 统一给出，这里只负责把结果放进结果区
     test.mutate(
-      { model: active, upstreams: upstream ? [upstream] : [], exclude: [] },
+      { model: active, upstreams: !pinLocked && upstream ? [upstream] : [], exclude: [] },
       {
         onSuccess: (r) => {
           setResult(r);
@@ -413,7 +440,13 @@ export default function Playground() {
                 <Typography.Text type="secondary" style={{ fontSize: 13 }}>
                   {t('playground.field.channel')}
                 </Typography.Text>
-                <Select style={{ width: 190 }} value={upstream} onChange={setUpstream} options={upstreamOptions} />
+                <Select
+                  style={{ width: 190 }}
+                  disabled={pinLocked}
+                  value={pinLocked ? '' : upstream}
+                  onChange={setUpstream}
+                  options={upstreamOptions}
+                />
               </Space>
               <Space size={6} align="center">
                 <Tooltip title={t('playground.field.maxTokens.tip')}>

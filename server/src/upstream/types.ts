@@ -9,8 +9,13 @@ export type Pipeline = 'planner' | 'direct';
  * - enforced：探针报错（参数被读取），注入有意义，可审计钉住结果
  * - ignored：探针 200（参数被整体丢弃），注入空转，校验结果是假绿
  * - unknown：探针失败或未探测过——保守处理：继续注入但不审计
+ * - unsupported（2026-11-06）：上游**拒绝**写入路由参数本身。
+ *   规划器管线现在对任何 `providerOptions` 回 403（连空对象都拒绝），
+ *   所以不是「能不能钉」的问题，而是「连参数都不能发」。探测不再跑钉住探针，
+ *   界面据此锁定钉住 UI；能力恢复（`upstream/capabilities.ts`）后重新探测即可回到
+ *   enforced / ignored。
  */
-export type PinState = 'enforced' | 'ignored' | 'unknown';
+export type PinState = 'enforced' | 'ignored' | 'unknown' | 'unsupported';
 
 /** 渠道校验后的状态。`quota` = 账号额度用尽（换渠道无用），`limited` = 瞬时限流。 */
 export type UpstreamStatusKind = 'ok' | 'limited' | 'quota' | 'bad' | 'auth' | 'unknown';

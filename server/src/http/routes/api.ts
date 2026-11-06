@@ -28,11 +28,12 @@ import { moduleLogger } from '../../log/logger.ts';
 import type { ChainResult } from '../../proxy/chain.ts';
 import { bindingsConflict } from '../../security/bind.ts';
 import { isLoopbackHost, maskSecret } from '../../security/compare.ts';
+import { PINNING, pinningEnabled } from '../../upstream/capabilities.ts';
 import { fetchJSON } from '../../upstream/client.ts';
 import { isQuotaExhausted } from '../../upstream/errors.ts';
 import { unwrap } from '../../upstream/response.ts';
 import type { RoutingInfo } from '../../upstream/routing.ts';
-import { accountModels, gatewayModels } from '../../upstream/types.ts';
+import { accountModels, gatewayModels, type ModelMeta } from '../../upstream/types.ts';
 import { sendError, sendJSON } from '../respond.ts';
 import type { Ctx, Handler } from '../router.ts';
 
@@ -218,8 +219,23 @@ function subscriptionView(ctx: AppContext, gateway: Gateway, account: Account | 
   return allKnownModels(ctx.configStore.value).map((id) => ({
     id,
     config: gateway.perModel[id] ?? null,
-    meta: observed[id] ?? null,
+    meta: presentModelMeta(observed[id] ?? null),
   }));
+}
+
+/**
+ * 检测记录的对外视图：上游能力关闭时，把旧的 `enforced` 降级成 `unsupported`。
+ *
+ * 为什么不在存储层改写：旧值是真历史，能力恢复后重新探测即可回到真实结论；
+ * 但**所有客户端现在就该看到「上游不支持」**——否则界面会显示一个点不动的「可钉」，
+ * 用户还会以为钉住仍然生效（2.3.1 升级上来的旧记录正是这种状态）。
+ */
+function presentModelMeta(meta: ModelMeta | null): ModelMeta | null {
+  if (!meta) return null;
+  if (meta.pipeline && !pinningEnabled(meta.pipeline)) {
+    return { ...meta, pinState: 'unsupported', pinnable: false, rescueProvider: null };
+  }
+  return meta;
 }
 
 /**
@@ -406,6 +422,11 @@ export function registerApiRoutes(
         usable: usableAccounts(cfg).length,
       },
       defaultGatewayId: primary.id,
+      /**
+       * 上游能力（2026-11-06）：只下发给界面用来锁定/说明，**前端不要另写一份常量**。
+       * `planner:false` = Cline 拒绝任何 providerOptions；`direct:true` = 顶层 provider 仍可用。
+       */
+      pinning: PINNING,
       console: consoleView(c.req.headers.host),
       /** 只给选择器需要的字段；完整信息在 /api/gateways。 */
       gateways: cfg.gateways.map((g) => {
@@ -670,7 +691,7 @@ export function registerApiRoutes(
       actual: result.routing.finalProvider,
       actualName: result.routing.finalProviderName,
       pipeline: result.routing.pipeline,
-      pinnable: result.routing.pipeline !== null,
+      pinnable: result.routing.pipeline !== null && pinningEnabled(result.routing.pipeline),
       canonicalSlug: result.routing.canonicalSlug,
       fallbacks: result.routing.fallbacks,
       content: typeof result.routing.content === 'string' ? result.routing.content.slice(0, 120) : '',

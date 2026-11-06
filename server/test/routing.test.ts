@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { PINNING } from '../src/upstream/capabilities.ts';
 import {
   injectPrefs,
   parsePlannedChain,
@@ -96,6 +97,17 @@ const basePrefs = (over: Partial<UpstreamPrefs> = {}): UpstreamPrefs => ({
 });
 
 describe('injectPrefs', () => {
+  /*
+   * 这一组验证的是「上游恢复后」的 planner 注入逻辑——能力开关打开时它仍然必须是对的。
+   * 2026-11-06 起的默认状态（planner=false）由下面单独的 describe 覆盖。
+   */
+  beforeEach(() => {
+    PINNING.planner = true;
+  });
+  afterEach(() => {
+    PINNING.planner = false;
+  });
+
   it('planner：strict 注入 providerOptions.gateway.only', () => {
     const body = { model: 'cline-pass/x', messages: [] };
     const { body: out, degraded } = injectPrefs(
@@ -240,6 +252,14 @@ describe('injectPrefs：区域约束排掉私有渠道', () => {
   const gatewayOf = (out: Record<string, unknown>): Record<string, unknown> =>
     ((out['providerOptions'] as Record<string, unknown>)?.['gateway'] ?? {}) as Record<string, unknown>;
 
+  /* 区域约束只存在于 planner 那一半，验证它时把能力临时打开（默认见下面的 describe） */
+  beforeEach(() => {
+    PINNING.planner = true;
+  });
+  afterEach(() => {
+    PINNING.planner = false;
+  });
+
   it('钉住别的渠道、且观测到私有渠道 → 注入区域约束', () => {
     const { body: out } = injectPrefs(
       {},
@@ -338,6 +358,69 @@ describe('injectPrefs：区域约束排掉私有渠道', () => {
     );
     expect(out['providerOptions']).toBeUndefined();
     expect(out['provider']).toEqual({ only: ['deepseek'] });
+  });
+});
+
+/**
+ * 2026-11-06 的默认状态：Cline 对**任何**客户端 `providerOptions` 回 403
+ * （`client-supplied "providerOptions" model routing is not supported`，连 `{}` 都拒绝）。
+ * 直连（OpenRouter）的顶层 `provider` 仍然有效。事实见 `docs/pinning.md` 第七节。
+ */
+describe('injectPrefs：上游拒绝 providerOptions 时的默认行为', () => {
+  beforeEach(() => {
+    PINNING.planner = false;
+  });
+  afterEach(() => {
+    PINNING.planner = false;
+  });
+
+  it('planner：不再写 providerOptions（保留的注入代码不参与）', () => {
+    const { body: out } = injectPrefs(
+      {},
+      { pipeline: 'planner', knownUpstreams: ['deepseek'] },
+      basePrefs({ upstream: 'deepseek' }),
+    );
+    expect(out['providerOptions']).toBeUndefined();
+    expect(out['provider']).toBeUndefined();
+  });
+
+  it('planner：调用方自带的 providerOptions 被剥掉（自动路由的请求不能因此 403）', () => {
+    const input = { providerOptions: { gateway: { only: ['x'] } }, model: 'm' };
+    const { body: out } = injectPrefs(input, { pipeline: 'planner', knownUpstreams: [] }, basePrefs());
+    expect(out['providerOptions']).toBeUndefined();
+    expect(out['model']).toBe('m');
+    // 纯函数：不改入参
+    expect(input['providerOptions']).toEqual({ gateway: { only: ['x'] } });
+  });
+
+  it('未知管线：只写顶层 provider（对规划器惰性，对直连有效）', () => {
+    const { body: out } = injectPrefs(
+      {},
+      { pipeline: null, knownUpstreams: ['deepseek'] },
+      basePrefs({ upstream: 'deepseek' }),
+    );
+    expect(out['provider']).toEqual({ only: ['deepseek'] });
+    expect(out['providerOptions']).toBeUndefined();
+  });
+
+  it('direct：顶层 provider 照旧，不受这次上游变化影响', () => {
+    const { body: out } = injectPrefs(
+      {},
+      { pipeline: 'direct', knownUpstreams: ['deepseek'] },
+      basePrefs({ upstream: 'deepseek' }),
+    );
+    expect(out['provider']).toEqual({ only: ['deepseek'] });
+    expect(out['providerOptions']).toBeUndefined();
+  });
+
+  it('direct：客户端自带的 providerOptions 同样被剥掉（上游对所有模型都拒绝）', () => {
+    const { body: out } = injectPrefs(
+      { providerOptions: { reasoning: { effort: 'low' } } },
+      { pipeline: 'direct', knownUpstreams: [] },
+      basePrefs(),
+    );
+    expect(out['providerOptions']).toBeUndefined();
+    expect(out['provider']).toBeUndefined();
   });
 });
 

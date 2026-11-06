@@ -5,6 +5,7 @@ import { defaultConfig } from '../src/config/schema.ts';
 import { buildCandidates, type CoolingCheck } from '../src/proxy/candidates.ts';
 import { type ChainFailure, type ChainResult, type ChainSuccess, ChatChain } from '../src/proxy/chain.ts';
 import { ChannelHealth } from '../src/proxy/health.ts';
+import { PINNING } from '../src/upstream/capabilities.ts';
 import type { ModelMeta } from '../src/upstream/types.ts';
 import { FakeUpstream } from './helpers/upstream.ts';
 
@@ -37,6 +38,11 @@ const makePool = (): AccountPool =>
   }));
 
 beforeEach(async () => {
+  /*
+   * 这一组测试验证的是「上游恢复后」的钉住 / 故障转移语义（默认 meta 是 planner）。
+   * 2026-11-06 起的默认状态（planner 钉住暂停）由文件末尾的 describe 单独覆盖。
+   */
+  PINNING.planner = true;
   upstream = new FakeUpstream();
   base = await upstream.listen();
   health = new ChannelHealth();
@@ -49,6 +55,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  PINNING.planner = false;
   await upstream.close();
 });
 
@@ -800,5 +807,67 @@ describe('非流式请求内部走流式（docs/timeouts.md）', () => {
     setTimeout(() => abort.abort(), 50);
     const r = await pending;
     expect(r.outcome).toBe('cancelled');
+  });
+});
+
+/**
+ * 2026-11-06：Cline 对任何客户端 `providerOptions` 回 403
+ * （`client-supplied "providerOptions" model routing is not supported`）。
+ *
+ * 默认状态下：旧的 planner 钉住配置被当作自动路由（不注入、不审计、不循环候选），
+ * 请求照常成功；万一请求里还是带了该字段，链路 fail-open 去掉后同渠道重试一次。
+ */
+describe('上游拒绝 providerOptions 时的链路行为（2026-11-06）', () => {
+  beforeEach(() => {
+    PINNING.planner = false;
+  });
+
+  it('旧配置 + planner：按自动路由发一次，不发 providerOptions，也不审计', async () => {
+    upstream.script([{ status: 200, body: okBody('openai-compatible-private') }]);
+    const chain = makeChain();
+    const r = asSuccess(
+      await chain.run({
+        modelId: 'cline-pass/x',
+        body: bodyOf(),
+        cfg: cfgOf({ upstreams: ['ch1', 'ch2'], pinMode: 'strict' }),
+        meta: metaOf({ pinState: 'enforced', upstreams: ['ch1', 'ch2'] }),
+        stream: false,
+      }),
+    );
+    expect(upstream.count).toBe(1);
+    expect(upstream.requests[0]?.body['providerOptions']).toBeUndefined();
+    expect(r.trace).toHaveLength(1);
+    expect(r.trace[0]?.upstream).toBeNull();
+    expect(r.trace[0]?.note).toBe('ok');
+  });
+
+  it('fail-open：能力恢复后上游仍拒绝 → 去掉 providerOptions 同渠道重试并成功', async () => {
+    // 这条用例验证的是保留下来的兜底路径：注入发生、但上游仍然回 403。
+    // 当前默认能力关闭时请求里根本不会带这个字段，走不到这里。
+    PINNING.planner = true;
+    upstream.script([
+      {
+        status: 403,
+        body: {
+          code: 'API_REQUEST_ERROR_CODE',
+          message: 'Error 403: client-supplied "providerOptions" model routing is not supported',
+        },
+      },
+      { status: 200, body: okBody('ch1') },
+    ]);
+    const chain = makeChain();
+    const r = asSuccess(
+      await chain.run({
+        modelId: 'cline-pass/x',
+        body: bodyOf(),
+        cfg: cfgOf({ upstreams: ['ch1'] }),
+        meta: metaOf({ pipeline: 'planner', pinState: 'enforced', upstreams: ['ch1'] }),
+        stream: false,
+      }),
+    );
+    expect(upstream.count).toBe(2);
+    expect(upstream.requests[0]?.body['providerOptions']).toBeDefined();
+    expect(upstream.requests[1]?.body['providerOptions']).toBeUndefined();
+    expect(r.trace.map((t) => t.status)).toEqual([403, 200]);
   });
 });

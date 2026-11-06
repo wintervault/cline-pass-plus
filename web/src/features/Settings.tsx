@@ -295,15 +295,26 @@ function RoutingPanel() {
   const { t } = useI18n();
   const settings = useSettings();
   const save = useSaveSettings();
+  /*
+   * 2026-11-06：Cline 拒绝任何客户端 `providerOptions`。这个开关只影响规划器管线
+   * （区域约束只写进 `providerOptions`），因此上游限制期间它已经没有任何作用。
+   * 锁定但不重置：值保留，能力恢复（`pinning.planner`）后自动恢复可操作。
+   */
+  const pinning = useMeta().data?.pinning ?? { planner: true, direct: true };
+  const locked = !pinning.planner;
   const on = settings.data?.forceChannelBinding ?? true;
 
   return (
-    <Panel title={t('settings.routing.title')} extra={<PanelHint>{t('settings.routing.panelHint')}</PanelHint>}>
+    <Panel
+      title={t('settings.routing.title')}
+      extra={<PanelHint>{locked ? t('settings.routing.lockedHint') : t('settings.routing.panelHint')}</PanelHint>}
+    >
       <div style={{ display: 'grid', gap: 8 }}>
         <Space size={10} align="center">
           <Switch
             size="small"
             checked={on}
+            disabled={locked}
             loading={settings.isLoading || save.isPending}
             aria-label={t('settings.routing.forceBinding')}
             onChange={(v) =>
@@ -314,9 +325,14 @@ function RoutingPanel() {
             }
           />
           <span className="cps-body">{t('settings.routing.forceBinding')}</span>
+          {locked && <StatusChip tone="warn">{t('models.pinUnavailable.chip')}</StatusChip>}
         </Space>
-        <Typography.Text type={on ? 'secondary' : 'warning'} style={{ fontSize: 12 }}>
-          {on ? t('settings.routing.onHint') : t('settings.routing.offHint')}
+        <Typography.Text type={locked || !on ? 'warning' : 'secondary'} style={{ fontSize: 12 }}>
+          {locked
+            ? t('settings.routing.pinUnavailable')
+            : on
+              ? t('settings.routing.onHint')
+              : t('settings.routing.offHint')}
         </Typography.Text>
       </div>
     </Panel>

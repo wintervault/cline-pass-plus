@@ -1,7 +1,8 @@
 import type { AccountPool, AccountRotateInfo } from '../accounts/pool.ts';
 import type { Account, FailoverConfig, PerModelConfig } from '../config/schema.ts';
+import { pinningEnabled } from '../upstream/capabilities.ts';
 import { fetchJSON } from '../upstream/client.ts';
-import { classifyErrorKind } from '../upstream/errors.ts';
+import { classifyErrorKind, isProviderOptionsRejected } from '../upstream/errors.ts';
 import { errText, unwrap } from '../upstream/response.ts';
 import { emptyRouting, injectPrefs, parseRouting, type RoutingInfo } from '../upstream/routing.ts';
 import type { ModelMeta, PinState, TraceEntry, UpstreamErrorKind } from '../upstream/types.ts';
@@ -205,7 +206,27 @@ export class ChatChain {
     let known = activeMeta?.upstreams ?? [];
     let pipeline = activeMeta?.pipeline ?? null;
 
-    const plan = buildCandidates({ modelId, cfg: input.cfg, meta: activeMeta, health: this.#deps.health });
+    /**
+     * 2026-11-06：规划器钉住被上游关掉（`client-supplied providerOptions ... not supported`）。
+     * 旧配置**原样保留**，但运行时按自动路由对待——单候选、不注入、不审计、不做排除换算。
+     * 这样升级后的旧用户不会因为一份历史配置把每个请求打成 403（防呆）。
+     * 直连与尚未探测出管线的模型不受影响（`pinningEnabled(null)` 为 true）。
+     *
+     * 注意：账号轮转后 pipeline 可能变化，候选列表保持首次生成的结果；注入与审计
+     * 会在每次使用时按**当时**的 pipeline 重新判断，最坏情况只是多试一个候选，
+     * 不会因为旧候选而重新写 `providerOptions`。
+     */
+    const pinning = pinningEnabled(pipeline);
+    const plan = pinning
+      ? buildCandidates({ modelId, cfg: input.cfg, meta: activeMeta, health: this.#deps.health })
+      : {
+          channels: [] as readonly string[],
+          pinMode: 'strict' as const,
+          sort: null,
+          excludeList: [] as readonly string[],
+          degraded: false,
+          notes: [] as readonly string[],
+        };
     let degraded = plan.degraded;
 
     if (forcedInput && !account) {
@@ -272,6 +293,8 @@ export class ChatChain {
       const upstream = candidates[i] ?? null;
       const isLast = i === candidates.length - 1;
       let requestRetried = false;
+      /** providerOptions 被上游拒绝后的 fail-open 重试，每个候选只给一次。 */
+      let strippedOptionsRetry = false;
       const maxTries = 1 + (upstream !== null ? this.#deps.failover.retriesPerChannel : 0);
 
       for (let tryIndex = 0; tryIndex < maxTries; tryIndex++) {
@@ -310,18 +333,46 @@ export class ChatChain {
         if (injected.degraded) degraded = true;
 
         const timeoutMs = Math.min(this.#deps.failover.attemptTimeoutMs, remaining);
-        const outcome = await this.#attempt(input, injected.body, account, timeoutMs);
+        let outcome = await this.#attempt(input, injected.body, account, timeoutMs);
+
+        /*
+         * 兜底（2026-11-06）：Cline 对任何 `providerOptions` 回 403
+         * （`client-supplied "providerOptions" model routing is not supported`）。
+         *
+         * 正常情况下能力开关已经不再写它；这里覆盖剩下的漏网情况——客户端自带、
+         * 管线未探测时被误注入、或将来上游规则再次变化。去掉该字段、同渠道重试一次，
+         * **不消耗渠道重试次数**：钉住不可用时，请求本身应该照常成功。
+         * 只在请求确实带了这个字段时才重试，且每个候选只重试一次，不会打转。
+         */
+        if (
+          outcome.verdict === 'error' &&
+          !strippedOptionsRetry &&
+          isProviderOptionsRejected(outcome.message) &&
+          'providerOptions' in injected.body
+        ) {
+          const stripped = { ...injected.body };
+          delete stripped['providerOptions'];
+          trace.push({
+            upstream,
+            status: outcome.status ?? 502,
+            ms: outcome.ms,
+            note: '上游拒绝 providerOptions，已去掉该字段重试',
+          });
+          strippedOptionsRetry = true;
+          outcome = await this.#attempt(input, stripped, account, timeoutMs);
+        }
 
         if (outcome.verdict === 'success') {
           // 钉住结果审计（docs/pinning.md D3）：strict 钉住且探针确认参数被读取时，
           // 网关自报的 finalProvider 必须等于目标渠道。不符视为该渠道确定性失败
           // （重试同渠道无意义），直接进入下一个候选。
-          const mismatchNote = pinMismatchNote(
-            upstream,
-            !relax,
-            activeMeta?.pinState ?? 'unknown',
-            outcome.routing.finalProvider,
-          );
+          //
+          // 能力关闭时一律不审计：探测记录里可能还留着变更前的 `enforced`，
+          // 拿它去审计自动路由的请求，会把成功误判成「钉住未生效」。
+          const auditPinState: PinState = pinningEnabled(pipeline)
+            ? (activeMeta?.pinState ?? 'unknown')
+            : 'unsupported';
+          const mismatchNote = pinMismatchNote(upstream, !relax, auditPinState, outcome.routing.finalProvider);
           if (mismatchNote !== null) {
             trace.push({ upstream, status: 200, ms: outcome.ms, note: mismatchNote });
             lastError = { status: 502, message: mismatchNote, kind: 'channel' };
@@ -366,7 +417,8 @@ export class ChatChain {
             budgetExhausted,
             totalMs: Date.now() - startedAt,
             pinAudit: {
-              enforced: (activeMeta?.pinState ?? 'unknown') === 'enforced',
+              // 能力关闭时永远不标记：没有注入就没有「钉住未生效」这回事
+              enforced: pinningEnabled(pipeline) && (activeMeta?.pinState ?? 'unknown') === 'enforced',
               strict: !relax,
               target: upstream,
             },

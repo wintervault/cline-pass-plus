@@ -1,4 +1,5 @@
 import type { Account } from '../config/schema.ts';
+import { pinningEnabled } from './capabilities.ts';
 import { fetchJSON } from './client.ts';
 import { classifyChannelStatus, isQuotaExhausted } from './errors.ts';
 import { unwrap } from './response.ts';
@@ -251,7 +252,17 @@ export class ProbeService {
     // 钉住探针（D1）：判定 providerOptions/provider 是否还被网关读取
     let probe: PinProbeOutcome = { pinState: 'unknown', providers: null, routedTo: null };
     if (routing.pipeline) {
-      probe = await pinProbe(this.#deps, modelId, routing.pipeline, account.key, signal, routing.finalProvider);
+      if (pinningEnabled(routing.pipeline)) {
+        probe = await pinProbe(this.#deps, modelId, routing.pipeline, account.key, signal, routing.finalProvider);
+      } else {
+        /*
+         * 2026-11-06：规划器管线拒绝**任何**客户端 `providerOptions`（连 `{}` 都 403，
+         * 见 `upstream/capabilities.ts`）。这时不要再发钉住探针——它只会拿到同一条
+         * 403，而且旧的 `enforced` 会被「unknown 保留旧值」的规则留下来，界面继续
+         * 显示「可钉」。直接写成 `unsupported`：确定结论，覆盖旧值。
+         */
+        probe = { pinState: 'unsupported', providers: null, routedTo: null };
+      }
     }
 
     let endpoints: Array<{ slug: string; name?: string; endpoints?: number; context?: number; uptime?: number }> = [];
@@ -289,7 +300,7 @@ export class ProbeService {
     const pinDisabledReason =
       probe.pinState === 'ignored'
         ? buildIgnoredReason(routing.finalProvider, probe.routedTo)
-        : probe.pinState === 'enforced'
+        : probe.pinState === 'enforced' || probe.pinState === 'unsupported'
           ? null
           : (prev?.pinDisabledReason ?? null);
 
@@ -302,13 +313,14 @@ export class ProbeService {
     const rescueProvider =
       probe.pinState === 'enforced'
         ? (probe.routedTo ?? prev?.rescueProvider ?? null)
-        : probe.pinState === 'ignored'
+        : probe.pinState === 'ignored' || probe.pinState === 'unsupported'
           ? null
           : (prev?.rescueProvider ?? null);
 
     const meta: ModelMeta = {
       pipeline: routing.pipeline,
-      pinnable: routing.pipeline !== null,
+      // 2026-11-06：规划器钉住被上游关掉，`pinnable` 如实为 false（不再只表示「管道已知」）
+      pinnable: routing.pipeline !== null && pinningEnabled(routing.pipeline),
       pinState: routing.pipeline === null ? 'unknown' : pinState,
       pinProbeAt: probe.pinState !== 'unknown' ? Date.now() : (prev?.pinProbeAt ?? null),
       pinDisabledReason,
@@ -344,7 +356,7 @@ export class ProbeService {
         ok: false;
         reason: string;
         pinState: PinState;
-        code: 'validate.pinIgnored' | 'validate.pinUnverified' | 'validate.noAccount';
+        code: 'validate.pinIgnored' | 'validate.pinUnverified' | 'validate.pinningUnsupported' | 'validate.noAccount';
       }
     | {
         ok: true;
@@ -364,18 +376,29 @@ export class ProbeService {
     const meta = this.#deps.getMeta(account.name, modelId);
     const list = meta?.upstreams ?? [];
     const pipeline = meta?.pipeline;
-    const pinState: PinState = meta?.pinState ?? 'unknown';
+    /*
+     * 能力关闭时按 unsupported 处理，而不是相信 meta 里的旧值：
+     * 2.3.1 及以前探测出的 `enforced` 会在升级后保留下来，若不在这里覆盖，
+     * 「校验」仍会发请求——而且因为注入被开关跳过，每个渠道都会「假成功」。
+     */
+    const pinState: PinState = pipeline && !pinningEnabled(pipeline) ? 'unsupported' : (meta?.pinState ?? 'unknown');
 
     // 只有「明确确认钉住生效」才允许校验：ignored 时每个渠道都会假成功；
     // unknown（没探过 / 429 / 网络失败 / 管道未知）时注入位置都可能不对，
     // 结果同样不可信——宁可让用户先重新探测。
     if (pinState !== 'enforced') {
+      const unsupported = pinState === 'unsupported';
       return {
         ok: false,
         pinState,
-        code: pinState === 'ignored' ? 'validate.pinIgnored' : 'validate.pinUnverified',
-        reason:
-          pinState === 'ignored'
+        code: unsupported
+          ? 'validate.pinningUnsupported'
+          : pinState === 'ignored'
+            ? 'validate.pinIgnored'
+            : 'validate.pinUnverified',
+        reason: unsupported
+          ? 'Cline 已不允许客户端指定渠道（2026-11-06 起规划器管线拒绝任何 providerOptions），钉住与校验暂不可用。'
+          : pinState === 'ignored'
             ? (meta?.pinDisabledReason ??
               '网关忽略钉住参数（账号风控或策略变更）：每个渠道的请求都会“成功”，校验结果不可信。请先重新探测。')
             : '尚未确认钉住参数是否生效（没探测过，或探测时被限流/网络失败打断）。请先重新探测，再做校验。',

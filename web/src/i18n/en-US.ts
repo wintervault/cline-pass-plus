@@ -199,11 +199,20 @@ const enUS: Record<keyof typeof zhCN, string> = {
     'The gateway ignores pinning: with pinning disabled every channel "succeeds", so validation results cannot be trusted. Probe again first.',
   'models.action.validate.tip.unverified':
     'Pinning has not been verified yet — probe first so the gateway actually honours the provider list.',
+  'models.action.validate.tip.unsupported':
+    'The upstream no longer accepts client-specified channels; validation is unavailable',
   'models.pin.ignored.notice':
     'The gateway ignores pinning — using its default routing; ticks and ordering have no effect right now',
   'models.pin.ignored.routed': 'The probe was routed to {provider}.',
   'models.pin.ignored.tip':
     'Pinning, exclusions and ordering have no effect right now. Your ticks are kept and apply again once the gateway honours them; another account or a later probe may restore this.',
+  'models.pinUnavailable.chip': 'No longer supported',
+  'models.pinUnavailable.notice':
+    'Since 2026-11-06 Cline rejects client-supplied planner routing: pinning, exclusion and validation are unavailable for planner models. Direct (OpenRouter) models are unaffected. Saved settings are kept but are not sent upstream.',
+  'models.pinUnavailable.hint': 'Settings are kept; currently inactive',
+  'models.pinUnavailable.panel':
+    'These settings are kept but are not sent upstream — Cline no longer accepts client-specified planner routing. They come back automatically once a supported method is found.',
+  'models.meta.pin': 'Pinning',
   'models.meta.canonical': 'Backing model',
   'models.meta.lastHit': 'Default route',
   'models.meta.rescueHit': 'Hit when binding is forced',
@@ -459,6 +468,8 @@ const enUS: Record<keyof typeof zhCN, string> = {
     'This gateway has no channel list for the model yet; you can start from the channels this account probed',
   'playground.routing.emptyNoProbe':
     'No channels probed for this model yet — probe them on the Models page and the candidates will show up here',
+  'playground.pinUnavailable':
+    'Pinning is paused for this model: Cline rejects client-specified planner routing. Tests use the gateway default route; channel selection and routing settings are shown for reference only.',
   'playground.routing.useProbed': 'Use probed channels',
   'playground.note.useProbed': 'Added {count} probed channels',
   'playground.col.order': 'Order',
@@ -644,6 +655,9 @@ const enUS: Record<keyof typeof zhCN, string> = {
     'When you pin a channel, the gateway will not send requests to its private channel (openai-compatible-private) — they go only to the channels you picked. On by default.',
   'settings.routing.offHint':
     'Turning this off is not recommended: the gateway may bypass the channels you pinned and route to its private channel, so pinning may stop taking effect.',
+  'settings.routing.lockedHint': 'Unavailable while planner pinning is paused',
+  'settings.routing.pinUnavailable':
+    'Cline no longer accepts client-specified planner routing, so this switch has no effect. Direct (OpenRouter) pinning still works.',
   'settings.routing.note.on': '"Force channel binding" turned on',
   'settings.routing.note.off': '"Force channel binding" turned off',
   'settings.routing.invalid': 'This setting only accepts on or off',
@@ -688,6 +702,8 @@ const enUS: Record<keyof typeof zhCN, string> = {
     'The gateway ignores pinning parameters, so validation results would be misleading. Probe again first',
   'api.validate.pinUnverified':
     'Pinning has not been verified for this model yet, so validation results would be misleading. Probe again first',
+  'api.validate.pinningUnsupported':
+    'The upstream no longer accepts client-specified channels; pinning and validation are unavailable',
   'api.validate.noAccount': 'No upstream account is configured — add one under Accounts first',
   'api.gateway.notRunning': 'That gateway is not running — the console cannot move there',
 };

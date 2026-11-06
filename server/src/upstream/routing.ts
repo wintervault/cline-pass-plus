@@ -1,3 +1,4 @@
+import { openRouterPinningEnabled, PINNING, vercelPinningEnabled } from './capabilities.ts';
 import type { Pipeline } from './types.ts';
 
 export const SORT_KEYS = ['cost', 'ttft', 'tps'] as const;
@@ -188,10 +189,22 @@ export function privateRegionGuard(): Record<string, unknown> {
  * - direct（OpenRouter）：顶层 provider.{only,order,sort} 生效；providerOptions 被忽略。
  * - 管道未知：两种形式同时注入。
  *
+ * **2026-11-06 起 planner 分支被能力开关关掉**（`capabilities.ts`）：Cline 对任何
+ * `providerOptions` 都回 403，连空对象也拒绝。代码保留在这里，恢复时改开关即可。
+ * 未知管线只写顶层 `provider`——它不会触发 403，规划器会忽略它。
+ *
  * 纯函数：不读全局状态；请求体经 structuredClone 复制，不改入参。
  */
 export function injectPrefs(body: Record<string, unknown>, ctx: InjectContext, prefs: UpstreamPrefs): InjectResult {
   const result = structuredClone(body) as Record<string, unknown>;
+
+  /*
+   * Cline 现在对**所有**模型都拒绝客户端 `providerOptions`（实测连直连的 glm 模型、
+   * 连 `{}` 都回 403）。能力关闭期间统一剥掉，避免「自动路由」的请求也被打死；
+   * 直连的顶层 `provider` 由下面单独注入，不受影响。
+   * 上游恢复 planner 之后若直连仍拒绝，链路层的 fail-open 会兜底。
+   */
+  if (!PINNING.planner) delete result['providerOptions'];
 
   const exclude = prefs.excludeList.filter((u) => u !== prefs.upstream);
   const allowList = exclude.length ? ctx.knownUpstreams.filter((u) => !exclude.includes(u)) : null;
@@ -200,8 +213,8 @@ export function injectPrefs(body: Record<string, unknown>, ctx: InjectContext, p
   const needsPrefs = prefs.upstream !== null || prefs.sort !== null || (allowList !== null && allowList.length > 0);
   if (!needsPrefs) return { body: result, degraded };
 
-  const useVercel = ctx.pipeline === 'planner' || ctx.pipeline === null;
-  const useOpenRouter = ctx.pipeline === 'direct' || ctx.pipeline === null;
+  const useVercel = vercelPinningEnabled(ctx.pipeline);
+  const useOpenRouter = openRouterPinningEnabled(ctx.pipeline);
 
   /*
    * 私有渠道在不在允许集合里？

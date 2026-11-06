@@ -1,8 +1,20 @@
 import { Readable } from 'node:stream';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { RoutingTap } from '../src/proxy/stream.ts';
+import { PINNING } from '../src/upstream/capabilities.ts';
 import { chainStream, readRest } from './helpers/stream.ts';
+
+/*
+ * 流式与故障转移用例沿用「planner 钉住可用」的既有场景（测试里的默认 meta 是 planner）。
+ * 2026-11-06 起的默认状态（planner 钉住暂停）在 chain.test.ts 末尾单独覆盖。
+ */
+beforeEach(() => {
+  PINNING.planner = true;
+});
+afterEach(() => {
+  PINNING.planner = false;
+});
 
 function pump(tap: RoutingTap, chunks: (string | Buffer)[]): Promise<void> {
   return new Promise((resolve, reject) => {
